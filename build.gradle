@@ -15,9 +15,9 @@
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- * 
+ *
  * LinkedIn Update
- *  - Updated group and versioning 
+ *   - Updated version
  */
 
 buildscript {
@@ -50,7 +50,7 @@ if (JavaVersion.current() != JavaVersion.VERSION_1_8) {
 allprojects {
   group = "com.linkedin.iceberg"
   apply plugin: 'com.palantir.baseline-idea'
-  version = "0.0.1"
+  version = gitVersion()
   repositories {
     maven { url  "http://palantir.bintray.com/releases" }
     mavenCentral()
