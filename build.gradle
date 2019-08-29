@@ -17,7 +17,7 @@
  * under the License.
  *
  * LinkedIn Update
- *   - Updated version
+ *   - Updated group to not conflict with org.apache.iceberg
  */
 
 buildscript {
