@@ -10,6 +10,9 @@ out
 # web site build
 site/site
 
+# vscode
+.project
+
 __pycache__/
 *.py[cod]
 .eggs/

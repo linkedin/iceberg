@@ -19,6 +19,7 @@
 
 package org.apache.iceberg;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -190,6 +191,92 @@ class SchemaUpdate implements UpdateSchema {
     }
 
     return this;
+  }
+
+  @Override
+  public UpdateSchema updateSchema(Schema newSchema) {
+    TypeUtil.visit(newSchema, new ApplyUpdates(schema, this));
+    TypeUtil.visit(schema, new ApplyDeletes(newSchema, this));
+    return this;
+  }
+
+  private static final Joiner DOT = Joiner.on(".");
+
+  private static class ApplyUpdates extends TypeUtil.SchemaVisitor<Void> {
+    private final Schema schema;
+    private final UpdateSchema updateSchema;
+    private final Map<String, Integer> indexByName;
+
+    private ApplyUpdates(Schema schema, UpdateSchema updateSchema) {
+      this.schema = schema;
+      this.updateSchema = updateSchema;
+      this.indexByName = TypeUtil.indexByName(schema.asStruct());
+    }
+
+    @Override
+    public Void struct(Types.StructType struct, List<Void> fieldResults) {
+      for (Types.NestedField newField : struct.fields()) {
+        Types.NestedField field = schema.findField(newField.fieldId());
+        String parents = DOT.join(fieldNames());
+        if (field == null) {
+          String name = join(parents, newField.name());
+          // found new field
+          if (parents.isEmpty()) {
+            // top level field
+            updateSchema.addColumn(name, newField.type());
+          } else if (indexByName.containsKey(parents)) {
+            // parent struct present
+            updateSchema.addColumn(parents, newField.name(), newField.type());
+          }
+          // else parent struct not present, so we will
+          // backtrack until we find a parent or reach top level
+        } else {
+          // updates
+          String name = join(parents, field.name());
+          if (field.type().isPrimitiveType() && !field.type().equals(newField.type())) {
+            updateSchema.updateColumn(name, newField.type().asPrimitiveType());
+          }
+          if (newField.doc() != null && !newField.doc().equals(field.doc())) {
+            updateSchema.updateColumnDoc(name, newField.doc());
+          }
+          if (!field.name().equals(newField.name())) {
+            updateSchema.renameColumn(name, newField.name());
+          }
+        }
+      }
+      return null;
+    }
+  }
+
+  private static class ApplyDeletes extends TypeUtil.SchemaVisitor<Void> {
+    private Schema newSchema;
+    private UpdateSchema updateSchema;
+
+    private ApplyDeletes(Schema newSchema, UpdateSchema updateSchema) {
+      this.newSchema = newSchema;
+      this.updateSchema = updateSchema;
+    }
+
+    @Override
+    public Void struct(Types.StructType struct, List<Void> fieldResults) {
+      for (Types.NestedField field : struct.fields()) {
+        Types.NestedField newField = newSchema.findField(field.fieldId());
+        String parents = DOT.join(fieldNames());
+        String name = join(parents, field.name());
+        if (newField == null) {
+          // field was deleted
+          updateSchema.deleteColumn(name);
+        }
+      }
+      return null;
+    }
+  }
+
+  private static String join(String parent, String name) {
+    if (parent.isEmpty()) {
+      return name;
+    }
+    return DOT.join(parent, name);
   }
 
   /**

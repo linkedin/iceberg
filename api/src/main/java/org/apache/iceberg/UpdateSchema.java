@@ -196,4 +196,12 @@ public interface UpdateSchema extends PendingUpdate<Schema> {
    */
   UpdateSchema deleteColumn(String name);
 
+  /**
+   * Applies all the additions, updates [renames, type widening, field documentation] and deletes
+   * from the input schema
+   *
+   * @param newSchema - Input schema from which updates are applied
+   * @return this for method chaining
+   */
+  UpdateSchema updateSchema(Schema newSchema);
 }
