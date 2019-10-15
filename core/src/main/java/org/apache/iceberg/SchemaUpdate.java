@@ -196,7 +196,6 @@ class SchemaUpdate implements UpdateSchema {
   @Override
   public UpdateSchema updateSchema(Schema newSchema) {
     TypeUtil.visit(newSchema, new ApplyUpdates(schema, this));
-    TypeUtil.visit(schema, new ApplyDeletes(newSchema, this));
     return this;
   }
 
@@ -223,7 +222,7 @@ class SchemaUpdate implements UpdateSchema {
           // found new field
           if (parents.isEmpty()) {
             // top level field
-            updateSchema.addColumn(name, newField.type());
+            updateSchema.addColumn(null, name, newField.type());
           } else if (indexByName.containsKey(parents)) {
             // parent struct present
             updateSchema.addColumn(parents, newField.name(), newField.type());
@@ -234,38 +233,12 @@ class SchemaUpdate implements UpdateSchema {
           // updates
           String name = join(parents, field.name());
           if (field.type().isPrimitiveType() && !field.type().equals(newField.type())) {
+            Preconditions.checkState(newField.type().isPrimitiveType(), "%s is not a primitive type", field);
             updateSchema.updateColumn(name, newField.type().asPrimitiveType());
           }
           if (newField.doc() != null && !newField.doc().equals(field.doc())) {
             updateSchema.updateColumnDoc(name, newField.doc());
           }
-          if (!field.name().equals(newField.name())) {
-            updateSchema.renameColumn(name, newField.name());
-          }
-        }
-      }
-      return null;
-    }
-  }
-
-  private static class ApplyDeletes extends TypeUtil.SchemaVisitor<Void> {
-    private Schema newSchema;
-    private UpdateSchema updateSchema;
-
-    private ApplyDeletes(Schema newSchema, UpdateSchema updateSchema) {
-      this.newSchema = newSchema;
-      this.updateSchema = updateSchema;
-    }
-
-    @Override
-    public Void struct(Types.StructType struct, List<Void> fieldResults) {
-      for (Types.NestedField field : struct.fields()) {
-        Types.NestedField newField = newSchema.findField(field.fieldId());
-        String parents = DOT.join(fieldNames());
-        String name = join(parents, field.name());
-        if (newField == null) {
-          // field was deleted
-          updateSchema.deleteColumn(name);
         }
       }
       return null;

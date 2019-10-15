@@ -34,9 +34,9 @@ public class TestSchemaUpdates {
         NestedField.optional(2, "partition", Types.DoubleType.get()));
 
     Schema newSchema = new Schema(
-        // type promotion with documentation, with column rename
-        NestedField.required(1, "id_renamed", Types.LongType.get(), "type promoted"),
-        // partition column deleted
+        // type promotion with documentation
+        NestedField.required(1, "id", Types.LongType.get(), "type promoted"),
+        NestedField.optional(2, "partition", Types.DoubleType.get()),
         // struct is added, as an optional field
         NestedField.optional(3, "location", StructType.of(
             NestedField.required(4, "lat", Types.FloatType.get()))),
@@ -48,6 +48,8 @@ public class TestSchemaUpdates {
 
     // nested adds
     newSchema = new Schema(
+        NestedField.required(1, "id", Types.IntegerType.get()),
+        NestedField.optional(2, "partition", Types.DoubleType.get()),
         // struct is added, as an optional field
         NestedField.optional(3, "a", StructType.of(
             NestedField.required(4, "a_b", StructType.of(
@@ -65,6 +67,7 @@ public class TestSchemaUpdates {
 
     Schema newSchema = new Schema(
         // map addition
+        NestedField.required(1, "id", Types.LongType.get()),
         NestedField.optional(2, "location", Types.MapType.ofRequired(
             3, 4, Types.LongType.get(), StructType.of(
                 NestedField.required(5, "lat", Types.FloatType.get())))));
@@ -91,11 +94,8 @@ public class TestSchemaUpdates {
                 NestedField.required(4, "k1", Types.IntegerType.get())
             ),
             StructType.of(
-                // lat renamed
-                NestedField.required(5, "lat_renamed", Types.FloatType.get()),
-                // long deleted
-                // new optional field added
-                NestedField.optional(7, "lat_long", Types.DoubleType.get())
+                NestedField.required(5, "lat", Types.FloatType.get()),
+                NestedField.required(6, "long", Types.DoubleType.get())
             )
         )));
 
@@ -111,6 +111,7 @@ public class TestSchemaUpdates {
 
     Schema newSchema = new Schema(
         // optional list field added
+        NestedField.required(1, "id", Types.LongType.get()),
         NestedField.optional(2, "list", Types.ListType.ofRequired(
             3,
             StructType.of(
@@ -134,11 +135,8 @@ public class TestSchemaUpdates {
         NestedField.optional(2, "list", Types.ListType.ofRequired(
             3,
             StructType.of(
-                // renamed
-                NestedField.required(4, "lat_renamed", Types.FloatType.get()),
-                // long field s deleted
-                // optional field added
-                NestedField.optional(6, "lat_long", Types.FloatType.get())))));
+                NestedField.required(4, "lat", Types.DoubleType.get()),
+                NestedField.required(5, "long", Types.DoubleType.get())))));
 
     applied = new SchemaUpdate(schema, 5).updateSchema(newSchema).apply();
     Assert.assertEquals(newSchema.asStruct(), applied.asStruct());
