@@ -200,6 +200,14 @@ public class TypeUtil {
     public void afterField(Types.NestedField field) {
     }
 
+    public void beforeStructField(Types.NestedField field) {
+      beforeField(field);
+    }
+
+    public void afterStructField(Types.NestedField field) {
+      afterField(field);
+    }
+
     public T schema(Schema schema, T structResult) {
       return null;
     }
@@ -235,12 +243,12 @@ public class TypeUtil {
         Types.StructType struct = type.asNestedType().asStructType();
         List<T> results = Lists.newArrayListWithExpectedSize(struct.fields().size());
         for (Types.NestedField field : struct.fields()) {
-          visitor.beforeField(field);
+          visitor.beforeStructField(field);
           T result;
           try {
             result = visit(field.type(), visitor);
           } finally {
-            visitor.afterField(field);
+            visitor.afterStructField(field);
           }
           results.add(visitor.field(field, result));
         }

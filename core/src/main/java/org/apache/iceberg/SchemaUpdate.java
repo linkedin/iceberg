@@ -19,12 +19,14 @@
 
 package org.apache.iceberg;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -258,6 +260,78 @@ class SchemaUpdate implements UpdateSchema {
     }
 
     return this;
+  }
+
+  @Override
+  public UpdateSchema updateSchema(Schema newSchema) {
+    TypeUtil.visit(newSchema, new ApplyUpdates(schema, this));
+    return this;
+  }
+
+  private static final Joiner DOT = Joiner.on(".");
+
+  private static class ApplyUpdates extends TypeUtil.SchemaVisitor<Void> {
+    private final Schema schema;
+    private final UpdateSchema updateSchema;
+    private final Map<String, Integer> indexByName;
+    private final Deque<String> fieldNames = Lists.newLinkedList();
+
+    private ApplyUpdates(Schema schema, UpdateSchema updateSchema) {
+      this.schema = schema;
+      this.updateSchema = updateSchema;
+      this.indexByName = TypeUtil.indexByName(schema.asStruct());
+    }
+
+    @Override
+    public void beforeStructField(Types.NestedField field) {
+      super.beforeStructField(field);
+      fieldNames.push(field.name());
+    }
+
+    @Override
+    public void afterStructField(Types.NestedField field) {
+      super.afterStructField(field);
+      fieldNames.pop();
+    }
+
+    @Override
+    public Void struct(Types.StructType struct, List<Void> fieldResults) {
+      for (Types.NestedField newField : struct.fields()) {
+        Types.NestedField field = schema.findField(newField.fieldId());
+        String parents = DOT.join(fieldNames);
+        if (field == null) {
+          String name = join(parents, newField.name());
+          // found new field
+          if (parents.isEmpty()) {
+            // top level field
+            updateSchema.addColumn(null, name, newField.type());
+          } else if (indexByName.containsKey(parents)) {
+            // parent struct present
+            updateSchema.addColumn(parents, newField.name(), newField.type());
+          }
+          // else parent struct not present, so we will
+          // backtrack until we find a parent or reach top level
+        } else {
+          // updates
+          String name = join(parents, field.name());
+          if (field.type().isPrimitiveType() && !field.type().equals(newField.type())) {
+            Preconditions.checkState(newField.type().isPrimitiveType(), "%s is not a primitive type", field);
+            updateSchema.updateColumn(name, newField.type().asPrimitiveType());
+          }
+          if (newField.doc() != null && !newField.doc().equals(field.doc())) {
+            updateSchema.updateColumnDoc(name, newField.doc());
+          }
+        }
+      }
+      return null;
+    }
+  }
+
+  private static String join(String parent, String name) {
+    if (parent.isEmpty()) {
+      return name;
+    }
+    return DOT.join(parent, name);
   }
 
   /**
