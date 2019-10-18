@@ -21,6 +21,7 @@ package org.apache.iceberg.types;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
 import org.apache.iceberg.Schema;
@@ -28,9 +29,13 @@ import org.apache.iceberg.Schema;
 class ReassignIds extends TypeUtil.CustomOrderSchemaVisitor<Type> {
   private final Schema sourceSchema;
   private Type sourceType;
+  private int nextId;
+  private boolean newField;
 
   ReassignIds(Schema sourceSchema) {
     this.sourceSchema = sourceSchema;
+    nextId = Collections.max(TypeUtil.indexById(sourceSchema.asStruct()).keySet()) + 1;
+    newField = false;
   }
 
   @Override
@@ -49,6 +54,7 @@ class ReassignIds extends TypeUtil.CustomOrderSchemaVisitor<Type> {
     Preconditions.checkArgument(sourceType.isStructType(), "Not a struct: %s", sourceType);
 
     Types.StructType sourceStruct = sourceType.asStructType();
+
     List<Types.NestedField> fields = struct.fields();
     int length = fields.size();
 
@@ -56,15 +62,23 @@ class ReassignIds extends TypeUtil.CustomOrderSchemaVisitor<Type> {
     List<Types.NestedField> newFields = Lists.newArrayListWithExpectedSize(length);
     for (int i = 0; i < length; i += 1) {
       Types.NestedField field = fields.get(i);
-      int sourceFieldId = sourceStruct.field(field.name()).fieldId();
+      Types.NestedField sourceField = sourceStruct.field(field.name());
+      int fieldId = fieldId(sourceField);
       if (field.isRequired()) {
-        newFields.add(Types.NestedField.required(sourceFieldId, field.name(), types.get(i), field.doc()));
+        newFields.add(Types.NestedField.required(fieldId, field.name(), types.get(i), field.doc()));
       } else {
-        newFields.add(Types.NestedField.optional(sourceFieldId, field.name(), types.get(i), field.doc()));
+        newFields.add(Types.NestedField.optional(fieldId, field.name(), types.get(i), field.doc()));
       }
     }
 
     return Types.StructType.of(newFields);
+  }
+
+  private int fieldId(Types.NestedField sourceField) {
+    if (sourceField == null || newField) {
+      return allocateId();
+    }
+    return sourceField.fieldId();
   }
 
   @Override
@@ -73,15 +87,20 @@ class ReassignIds extends TypeUtil.CustomOrderSchemaVisitor<Type> {
 
     Types.StructType sourceStruct = sourceType.asStructType();
     Types.NestedField sourceField = sourceStruct.field(field.name());
+    boolean withinNewField = newField;
     if (sourceField == null) {
-      throw new IllegalArgumentException("Field " + field.name() + " not found in source schema");
+      sourceType = field.type();
+      newField = true;
+    } else {
+      sourceType = sourceField.type();
     }
-
-    this.sourceType = sourceField.type();
     try {
       return future.get();
     } finally {
       sourceType = sourceStruct;
+      if (!withinNewField) {
+        newField = false;
+      }
     }
   }
 
@@ -90,7 +109,7 @@ class ReassignIds extends TypeUtil.CustomOrderSchemaVisitor<Type> {
     Preconditions.checkArgument(sourceType.isListType(), "Not a list: %s", sourceType);
 
     Types.ListType sourceList = sourceType.asListType();
-    int sourceElementId = sourceList.elementId();
+    int sourceElementId = newField ? allocateId() : sourceList.elementId();
 
     this.sourceType = sourceList.elementType();
     try {
@@ -110,8 +129,8 @@ class ReassignIds extends TypeUtil.CustomOrderSchemaVisitor<Type> {
     Preconditions.checkArgument(sourceType.isMapType(), "Not a map: %s", sourceType);
 
     Types.MapType sourceMap = sourceType.asMapType();
-    int sourceKeyId = sourceMap.keyId();
-    int sourceValueId = sourceMap.valueId();
+    int sourceKeyId = newField ? allocateId() : sourceMap.keyId();
+    int sourceValueId = newField ? allocateId() : sourceMap.valueId();
 
     try {
       this.sourceType = sourceMap.keyType();
@@ -134,5 +153,11 @@ class ReassignIds extends TypeUtil.CustomOrderSchemaVisitor<Type> {
   @Override
   public Type primitive(Type.PrimitiveType primitive) {
     return primitive; // nothing to reassign
+  }
+
+  private int allocateId() {
+    int current = nextId;
+    nextId += 1;
+    return current;
   }
 }
