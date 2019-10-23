@@ -20,25 +20,12 @@
 
 package org.apache.iceberg.types;
 
-import org.apache.iceberg.Schema;
 import org.junit.Test;
 
 import static org.apache.iceberg.types.Types.NestedField.required;
 
 
 public class TestTypeUtil {
-
-  @Test(expected = IllegalArgumentException.class)
-  public void testReassignIdsIllegalArgumentException() {
-    Schema schema = new Schema(
-        required(1, "a", Types.IntegerType.get()),
-        required(2, "b", Types.IntegerType.get())
-    );
-    Schema sourceSchema = new Schema(
-        required(1, "a", Types.IntegerType.get())
-    );
-    TypeUtil.reassignIds(schema, sourceSchema);
-  }
 
   @Test(expected = RuntimeException.class)
   public void testValidateSchemaViaIndexByName() {
@@ -54,3 +41,4 @@ public class TestTypeUtil {
     TypeUtil.indexByName(Types.StructType.of(nestedType));
   }
 }
+
