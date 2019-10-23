@@ -200,6 +200,22 @@ public class TestAvroNameMapping extends TestAvroReadProjection {
     Assert.assertEquals("x is read as z", 1, ((List<Record>) projected.get("points")).get(0).get("z"));
   }
 
+  @Test
+  public void testInferredMapping() throws IOException {
+    Schema writeSchema = new Schema(
+        Types.NestedField.required(0, "id", Types.LongType.get()),
+        Types.NestedField.optional(1, "data", Types.StringType.get()));
+
+
+    Record record = new Record(AvroSchemaUtil.convert(writeSchema, "table"));
+    record.put("id", 34L);
+    record.put("data", "data");
+
+    Schema readSchema = writeSchema;
+    Record projected = writeAndRead(writeSchema, readSchema, record, null);
+    Assert.assertEquals(record, projected);
+  }
+
   @Override
   protected Record writeAndRead(String desc,
                                 Schema writeSchema,

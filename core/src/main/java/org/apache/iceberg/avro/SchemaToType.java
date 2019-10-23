@@ -44,7 +44,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
     if (schema.getObjectProp(AvroSchemaUtil.ELEMENT_ID_PROP) != null) {
       return AvroSchemaUtil.getElementId(schema);
     } else {
-      return allocateId();
+      return nextId();
     }
   }
 
@@ -52,7 +52,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
     if (schema.getObjectProp(AvroSchemaUtil.KEY_ID_PROP) != null) {
       return AvroSchemaUtil.getKeyId(schema);
     } else {
-      return allocateId();
+      return nextId();
     }
   }
 
@@ -60,7 +60,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
     if (schema.getObjectProp(AvroSchemaUtil.VALUE_ID_PROP) != null) {
       return AvroSchemaUtil.getValueId(schema);
     } else {
-      return allocateId();
+      return nextId();
     }
   }
 
@@ -68,11 +68,11 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
     if (field.getObjectProp(AvroSchemaUtil.FIELD_ID_PROP) != null) {
       return AvroSchemaUtil.getFieldId(field);
     } else {
-      return allocateId();
+      return nextId();
     }
   }
 
-  private int allocateId() {
+  protected int nextId() {
     int current = nextId;
     nextId += 1;
     return current;

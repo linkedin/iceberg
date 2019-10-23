@@ -80,6 +80,24 @@ public class AvroSchemaUtil {
     return AvroSchemaVisitor.visit(schema, new SchemaToType(schema));
   }
 
+  static boolean hasIds(Schema fileSchema) {
+    try {
+      // Try to convert the type to Iceberg. If an ID assignment is needed, return false.
+      AvroSchemaVisitor.visit(fileSchema, new SchemaToType(fileSchema) {
+        @Override
+        protected int nextId() {
+          throw new IllegalStateException("Needed to assign ID");
+        }
+      });
+      // no assignment was needed
+      return true;
+
+    } catch (IllegalStateException e) {
+      // at least one field was missing an id.
+      return false;
+    }
+  }
+
   public static Map<Type, Schema> convertTypes(Types.StructType type, String name) {
     TypeToSchema converter = new TypeToSchema(ImmutableMap.of(type, name));
     TypeUtil.visit(type, converter);
