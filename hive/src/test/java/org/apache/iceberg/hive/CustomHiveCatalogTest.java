@@ -97,8 +97,8 @@ public class CustomHiveCatalogTest extends HiveMetastoreTest {
     txn.updateProperties().set("testProp", "dummy").commit();
     txn.commitTransaction();
 
-    try{
-      Table hiveTable = metastoreClient.getTable(DB_NAME,TABLE_NAME);
+    try {
+      Table hiveTable = metastoreClient.getTable(DB_NAME, TABLE_NAME);
       Assert.assertEquals(2, hiveTable.getSd().getCols().size());
       Assert.assertFalse(hiveTable.getParameters().containsKey("testProp"));
       Assert.assertEquals("org.apache.hadoop.hive.ql.io.orc.OrcSerde",
@@ -112,7 +112,8 @@ public class CustomHiveCatalogTest extends HiveMetastoreTest {
     final long currentTimeMillis = System.currentTimeMillis();
 
     final StorageDescriptor storageDescriptor = new StorageDescriptor();
-    storageDescriptor.setCols(ImmutableList.of(new FieldSchema("id", "int", ""), new FieldSchema("data", "string", "")));
+    storageDescriptor.setCols(ImmutableList.of(new FieldSchema("id", "int", ""),
+        new FieldSchema("data", "string", "")));
     storageDescriptor.setLocation(tableLocation);
     storageDescriptor.setOutputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
     storageDescriptor.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat");
