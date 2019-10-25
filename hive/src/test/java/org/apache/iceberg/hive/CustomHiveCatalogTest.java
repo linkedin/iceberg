@@ -32,6 +32,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.types.Types;
+import org.apache.thrift.TException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -103,7 +104,7 @@ public class CustomHiveCatalogTest extends HiveMetastoreTest {
       Assert.assertFalse(hiveTable.getParameters().containsKey("testProp"));
       Assert.assertEquals("org.apache.hadoop.hive.ql.io.orc.OrcSerde",
           hiveTable.getSd().getSerdeInfo().getSerializationLib());
-    } catch (Exception e) {
+    } catch (TException e) {
       throw new RuntimeException(e);
     }
   }
