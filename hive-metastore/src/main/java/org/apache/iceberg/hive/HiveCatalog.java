@@ -106,6 +106,14 @@ public class HiveCatalog extends BaseMetastoreCatalog implements SupportsNamespa
     this.clients = new CachedClientPool(conf, properties);
   }
 
+  protected HiveClientPool clientPool() {
+    return clients;
+  }
+
+  protected Configuration conf() {
+    return conf;
+  }
+
   @Override
   public List<TableIdentifier> listTables(Namespace namespace) {
     Preconditions.checkArgument(isValidateNamespace(namespace),
