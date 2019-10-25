@@ -44,7 +44,7 @@ import org.junit.rules.TemporaryFolder;
 import static org.apache.iceberg.types.Types.NestedField.required;
 
 
-public class CustomHiveCatalogTest extends HiveMetastoreTest {
+public class TestCustomHiveCatalog extends HiveMetastoreTest {
 
   private static final String TABLE_NAME = "tbl";
   private static final TableIdentifier TABLE_IDENTIFIER = TableIdentifier.of(DB_NAME, TABLE_NAME);
@@ -76,7 +76,7 @@ public class CustomHiveCatalogTest extends HiveMetastoreTest {
   @Test
   public void shouldNotThrowErrorIfTableExists() {
     try {
-      metastoreClient.createTable(createHiveTable());
+      metastoreClient.createTable(hiveTable());
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -87,7 +87,7 @@ public class CustomHiveCatalogTest extends HiveMetastoreTest {
   @Test
   public void shouldNotOverrideExistingHiveMetadata() {
     try {
-      metastoreClient.createTable(createHiveTable());
+      metastoreClient.createTable(hiveTable());
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -109,7 +109,7 @@ public class CustomHiveCatalogTest extends HiveMetastoreTest {
     }
   }
 
-  private Table createHiveTable() {
+  private Table hiveTable() {
     final long currentTimeMillis = System.currentTimeMillis();
 
     final StorageDescriptor storageDescriptor = new StorageDescriptor();
