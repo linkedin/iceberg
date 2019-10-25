@@ -257,7 +257,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return newTable;
   }
 
-  private void setParameters(String newMetadataLocation, Table tbl, boolean hiveEngineEnabled) {
+  void setParameters(String newMetadataLocation, Table tbl, boolean hiveEngineEnabled) {
     Map<String, String> parameters = tbl.getParameters();
 
     if (parameters == null) {
@@ -282,7 +282,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     tbl.setParameters(parameters);
   }
 
-  private StorageDescriptor storageDescriptor(TableMetadata metadata, boolean hiveEngineEnabled) {
+  StorageDescriptor storageDescriptor(TableMetadata metadata, boolean hiveEngineEnabled) {
 
     final StorageDescriptor storageDescriptor = new StorageDescriptor();
     storageDescriptor.setCols(HiveSchemaUtil.convert(metadata.schema()));
@@ -301,7 +301,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return storageDescriptor;
   }
 
-  private long acquireLock() throws UnknownHostException, TException, InterruptedException {
+  long acquireLock() throws UnknownHostException, TException, InterruptedException {
     final LockComponent lockComponent = new LockComponent(LockType.EXCLUSIVE, LockLevel.TABLE, database);
     lockComponent.setTablename(tableName);
     final LockRequest lockRequest = new LockRequest(Lists.newArrayList(lockComponent),
@@ -377,7 +377,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     }
   }
 
-  private void unlock(Optional<Long> lockId) {
+  void unlock(Optional<Long> lockId) {
     if (lockId.isPresent()) {
       try {
         doUnlock(lockId.get());
