@@ -33,11 +33,22 @@ public final class HiveCatalogs {
       .removalListener((RemovalListener<String, HiveCatalog>) (uri, catalog, cause) -> catalog.close())
       .build();
 
+  private static final Cache<String, CustomHiveCatalog> CUSTOM_CATALOG_CACHE = Caffeine.newBuilder()
+      .expireAfterAccess(10, TimeUnit.MINUTES)
+      .removalListener((RemovalListener<String, HiveCatalog>) (uri, catalog, cause) -> catalog.close())
+      .build();
+
   private HiveCatalogs() {}
 
   public static HiveCatalog loadCatalog(Configuration conf) {
     // metastore URI can be null in local mode
     String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
     return CATALOG_CACHE.get(metastoreUri, uri -> new HiveCatalog(conf));
+  }
+
+  public static HiveCatalog loadCustomCatalog(Configuration conf) {
+    // metastore URI can be null in local mode
+    String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
+    return CUSTOM_CATALOG_CACHE.get(metastoreUri, uri -> new CustomHiveCatalog(conf));
   }
 }
