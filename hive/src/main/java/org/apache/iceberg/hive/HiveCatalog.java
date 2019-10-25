@@ -56,6 +56,14 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
     this.closed = false;
   }
 
+  protected HiveClientPool clientPool() {
+    return clients;
+  }
+
+  protected Configuration conf() {
+    return conf;
+  }
+
   @Override
   public List<TableIdentifier> listTables(Namespace namespace) {
     Preconditions.checkArgument(namespace.levels().length == 1,
