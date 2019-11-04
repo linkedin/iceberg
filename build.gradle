@@ -381,6 +381,63 @@ project(':iceberg-pig') {
   }
 }
 
+project(':iceberg-runtime') {
+  apply plugin: 'com.github.johnrengelman.shadow'
+
+  tasks.assemble.dependsOn tasks.shadowJar
+  tasks.install.dependsOn tasks.shadowJar
+  tasks.javadocJar.dependsOn tasks.shadowJar
+
+  configurations {
+    compileOnly {
+      // included in Spark
+      exclude group: 'org.slf4j'
+      exclude group: 'org.apache.commons'
+      exclude group: 'commons-pool'
+      exclude group: 'commons-codec'
+      exclude group: 'org.xerial.snappy'
+      exclude group: 'javax.xml.bind'
+    }
+  }
+
+  dependencies {
+    compileOnly project(':iceberg-core')
+    compileOnly project(':iceberg-orc')
+    compileOnly project(':iceberg-hive')
+  }
+
+  shadowJar {
+    // shade compileOnly dependencies to avoid including in transitive dependencies
+    configurations = [project.configurations.compileOnly]
+
+    zip64 true
+
+    // include the LICENSE and NOTICE files for the shaded Jar
+    from(projectDir) {
+      include 'LICENSE'
+      include 'NOTICE'
+    }
+
+    // Relocate dependencies to avoid conflicts
+    relocate 'com.google', 'org.apache.iceberg.shaded.com.google'
+    relocate 'com.fasterxml', 'org.apache.iceberg.shaded.com.fasterxml'
+    relocate 'com.github.benmanes', 'org.apache.iceberg.shaded.com.github.benmanes'
+    relocate 'org.checkerframework', 'org.apache.iceberg.shaded.org.checkerframework'
+    relocate 'org.apache.avro', 'org.apache.iceberg.shaded.org.apache.avro'
+    relocate 'avro.shaded', 'org.apache.iceberg.shaded.org.apache.avro.shaded'
+    relocate 'com.thoughtworks.paranamer', 'org.apache.iceberg.shaded.com.thoughtworks.paranamer'
+    relocate 'org.apache.parquet', 'org.apache.iceberg.shaded.org.apache.parquet'
+    relocate 'shaded.parquet', 'org.apache.iceberg.shaded.org.apache.parquet.shaded'
+    // relocate Avro's jackson dependency to share parquet-jackson locations
+    relocate 'org.codehaus.jackson', 'org.apache.iceberg.shaded.org.apache.parquet.shaded.org.codehaus.jackson'
+    relocate 'org.apache.orc', 'org.apache.iceberg.shaded.org.apache.orc'
+    relocate 'io.airlift', 'org.apache.iceberg.shaded.io.airlift'
+
+    archiveName = "iceberg-runtime-${version}.${extension}"
+  }
+}
+
+
 // the runtime jar is a self-contained artifact for testing in a notebook
 project(':iceberg-spark-runtime') {
   apply plugin: 'com.github.johnrengelman.shadow'
