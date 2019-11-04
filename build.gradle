@@ -299,9 +299,15 @@ project(':iceberg-runtime') {
   }
 
   dependencies {
+    compileOnly project(':iceberg-api')
     compileOnly project(':iceberg-core')
     compileOnly project(':iceberg-orc')
     compileOnly project(':iceberg-hive')
+
+    compileOnly project(path: ':iceberg-api', configuration: 'testArtifacts')
+    compileOnly project(path: ':iceberg-core', configuration: 'testArtifacts')
+    compileOnly project(path: ':iceberg-orc', configuration: 'testArtifacts')
+    compileOnly project(path: ':iceberg-hive', configuration: 'testArtifacts')
   }
 
   shadowJar {
