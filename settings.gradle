@@ -32,6 +32,7 @@ include 'spark'
 include 'spark3'
 include 'spark3-runtime'
 include 'pig'
+include 'runtime'
 include 'hive'
 
 project(':api').name = 'iceberg-api'
@@ -48,6 +49,7 @@ project(':spark').name = 'iceberg-spark'
 project(':spark3').name = 'iceberg-spark3'
 project(':spark3-runtime').name = 'iceberg-spark3-runtime'
 project(':pig').name = 'iceberg-pig'
+project(':runtime').name = 'iceberg-runtime'
 project(':hive').name = 'iceberg-hive'
 
 if (JavaVersion.current() == JavaVersion.VERSION_1_8) {
