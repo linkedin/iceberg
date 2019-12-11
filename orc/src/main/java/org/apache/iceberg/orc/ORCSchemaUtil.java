@@ -250,7 +250,12 @@ public final class ORCSchemaUtil {
    */
   public static TypeDescription buildOrcProjection(Schema schema,
                                                    TypeDescription originalOrcSchema) {
-    final Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
+    Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
+    if (icebergToOrc.isEmpty()) {
+      // if no field ids are present in original schema then build mapping from expected schema
+      // this should ideally be handled at a higher layer with NameMapping
+      icebergToOrc = icebergToOrcMapping("root", convert(schema));
+    }
     return buildOrcProjection(Integer.MIN_VALUE, schema.asStruct(), true, icebergToOrc);
   }
 
