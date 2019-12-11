@@ -212,6 +212,26 @@ public final class ORCSchemaUtil {
   }
 
   /**
+   * Remove attributes from a given {@link TypeDescription}
+   * @param schema the {@link TypeDescription} to remove attributes from
+   * @return number of attributes removed
+   */
+  public static int clearAttributes(TypeDescription schema) {
+    int result = 0;
+    for (String attribute : schema.getAttributeNames()) {
+      schema.removeAttribute(attribute);
+      result += 1;
+    }
+    List<TypeDescription> children = schema.getChildren();
+    if (children != null) {
+      for (TypeDescription child : children) {
+        result += clearAttributes(child);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Converts an Iceberg schema to a corresponding ORC schema within the context of an existing
    * ORC file schema.
    * This method also handles schema evolution from the original ORC file schema
@@ -238,8 +258,19 @@ public final class ORCSchemaUtil {
    */
   public static TypeDescription buildOrcProjection(Schema schema,
                                                    TypeDescription originalOrcSchema) {
-    final Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
-    return buildOrcProjection(Integer.MIN_VALUE, schema.asStruct(), true, icebergToOrc);
+    Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
+    if (icebergToOrc.isEmpty()) {
+      // if no field ids are present in original schema then build mapping from expected schema
+      // this should ideally be handled at a higher layer with NameMapping
+      icebergToOrc = icebergToOrcMapping("root", convert(schema));
+      // Workaround till ORC-556 is released, if file does not have any ids, we assume it is a legacy file
+      // so we clear all IDs before passing the schema to ORC so that TypeDescription.equals can match
+      TypeDescription projectedSchema = buildOrcProjection(Integer.MIN_VALUE, schema.asStruct(), true, icebergToOrc);
+      clearAttributes(projectedSchema);
+      return projectedSchema;
+    } else {
+      return buildOrcProjection(Integer.MIN_VALUE, schema.asStruct(), true, icebergToOrc);
+    }
   }
 
   private static TypeDescription buildOrcProjection(Integer fieldId, Type type, boolean isRequired,
