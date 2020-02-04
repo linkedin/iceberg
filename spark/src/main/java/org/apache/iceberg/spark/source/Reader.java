@@ -100,6 +100,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.Option;
 import scala.collection.JavaConverters;
 
 class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushDownRequiredColumns,
@@ -115,6 +116,9 @@ class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushD
   private final Long splitSize;
   private final Integer splitLookback;
   private final Long splitOpenFileCost;
+  private final boolean incrementalScan;
+  private long fromSnapshotId;
+  private long toSnapshotId;
   private final Broadcast<FileIO> io;
   private final Broadcast<EncryptionManager> encryptionManager;
   private final boolean caseSensitive;
@@ -138,6 +142,20 @@ class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushD
           "Cannot scan using both snapshot-id and as-of-timestamp to select the table snapshot");
     }
 
+    this.incrementalScan = options.getBoolean("incremental-scan", false);
+    if (incrementalScan && snapshotId != null) {
+      throw new IllegalArgumentException(
+          "Cannot scan using both snapshot-id and incremental-scan to read from a table");
+    }
+    if (incrementalScan && asOfTimestamp != null) {
+      throw new IllegalArgumentException(
+          "Cannot scan using both as-of-timestamp and incremental-scan to read from a table");
+    }
+    if (incrementalScan) {
+      this.fromSnapshotId = options.getLong("from-snapshot-id", -1L);
+      this.toSnapshotId = options.getLong("to-snapshot-id", -1L);
+    }
+
     // look for split behavior overrides in options
     this.splitSize = options.get("split-size").map(Long::parseLong).orElse(null);
     this.splitLookback = options.get("lookback").map(Integer::parseInt).orElse(null);
@@ -147,7 +165,7 @@ class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushD
       String scheme = "no_exist";
       try {
         FileSystem fs = new Path(table.location()).getFileSystem(
-            SparkSession.active().sparkContext().hadoopConfiguration());
+            activeSparkSession().sparkContext().hadoopConfiguration());
         scheme = fs.getScheme().toLowerCase(Locale.ENGLISH);
       } catch (IOException ioe) {
         LOG.warn("Failed to get Hadoop Filesystem", ioe);
@@ -291,6 +309,14 @@ class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushD
         }
       }
 
+      if (incrementalScan) {
+        if (toSnapshotId < 0) {
+          scan = scan.appendsAfter(fromSnapshotId);
+        } else {
+          scan = scan.appendsBetween(fromSnapshotId, toSnapshotId);
+        }
+      }
+
       try (CloseableIterable<CombinedScanTask> tasksIterable = scan.planTasks()) {
         this.tasks = Lists.newArrayList(tasksIterable);
       }  catch (IOException e) {
@@ -364,7 +390,7 @@ class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushD
         return new String[0];
       }
 
-      Configuration conf = SparkSession.active().sparkContext().hadoopConfiguration();
+      Configuration conf = activeSparkSession().sparkContext().hadoopConfiguration();
       Set<String> locations = Sets.newHashSet();
       for (FileScanTask f : task.files()) {
         Path path = new Path(f.file().path().toString());
@@ -379,6 +405,20 @@ class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushD
       }
 
       return locations.toArray(new String[0]);
+    }
+  }
+
+  private static SparkSession activeSparkSession() {
+    final Option<SparkSession> activeSession = SparkSession.getActiveSession();
+    if (activeSession.isDefined()) {
+      return activeSession.get();
+    } else {
+      final Option<SparkSession> defaultSession = SparkSession.getDefaultSession();
+      if (defaultSession.isDefined()) {
+        return defaultSession.get();
+      } else {
+        throw new IllegalStateException("No active spark session found");
+      }
     }
   }
 
