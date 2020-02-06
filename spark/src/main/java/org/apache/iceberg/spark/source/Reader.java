@@ -64,6 +64,7 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.Option;
 
 class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushDownRequiredColumns,
     SupportsReportStatistics {
@@ -125,7 +126,7 @@ class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushD
     if (io.getValue() instanceof HadoopFileIO) {
       String scheme = "no_exist";
       try {
-        Configuration conf = new Configuration(SparkSession.active().sparkContext().hadoopConfiguration());
+        Configuration conf = new Configuration(activeSparkSession().sparkContext().hadoopConfiguration());
         // merge hadoop config set on table
         mergeIcebergHadoopConfs(conf, table.properties());
         // merge hadoop config passed as options and overwrite the one on table
@@ -370,8 +371,22 @@ class Reader implements DataSourceReader, SupportsPushDownFilters, SupportsPushD
         return new String[0];
       }
 
-      Configuration conf = SparkSession.active().sparkContext().hadoopConfiguration();
+      Configuration conf = activeSparkSession().sparkContext().hadoopConfiguration();
       return Util.blockLocations(task, conf);
+    }
+  }
+
+  private static SparkSession activeSparkSession() {
+    final Option<SparkSession> activeSession = SparkSession.getActiveSession();
+    if (activeSession.isDefined()) {
+      return activeSession.get();
+    } else {
+      final Option<SparkSession> defaultSession = SparkSession.getDefaultSession();
+      if (defaultSession.isDefined()) {
+        return defaultSession.get();
+      } else {
+        throw new IllegalStateException("No active spark session found");
+      }
     }
   }
 
