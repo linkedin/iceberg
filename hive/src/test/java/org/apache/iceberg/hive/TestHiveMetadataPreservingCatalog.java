@@ -44,7 +44,7 @@ import org.junit.rules.TemporaryFolder;
 import static org.apache.iceberg.types.Types.NestedField.required;
 
 
-public class TestCustomHiveCatalog extends HiveMetastoreTest {
+public class TestHiveMetadataPreservingCatalog extends HiveMetastoreTest {
 
   private static final String TABLE_NAME = "tbl";
   private static final TableIdentifier TABLE_IDENTIFIER = TableIdentifier.of(DB_NAME, TABLE_NAME);
@@ -60,7 +60,7 @@ public class TestCustomHiveCatalog extends HiveMetastoreTest {
 
   @BeforeClass
   public static void setCustomHiveCatalog() {
-    catalog = new CustomHiveCatalog(hiveConf);
+    catalog = new HiveMetadataPreservingCatalog(hiveConf);
   }
 
   @Before

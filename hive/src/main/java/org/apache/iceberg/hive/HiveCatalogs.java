@@ -33,7 +33,7 @@ public final class HiveCatalogs {
       .removalListener((RemovalListener<String, HiveCatalog>) (uri, catalog, cause) -> catalog.close())
       .build();
 
-  private static final Cache<String, CustomHiveCatalog> CUSTOM_CATALOG_CACHE = Caffeine.newBuilder()
+  private static final Cache<String, HiveMetadataPreservingCatalog> HIVE_METADATA_PRESERVING_CATALOG_CACHE = Caffeine.newBuilder()
       .expireAfterAccess(10, TimeUnit.MINUTES)
       .removalListener((RemovalListener<String, HiveCatalog>) (uri, catalog, cause) -> catalog.close())
       .build();
@@ -46,9 +46,17 @@ public final class HiveCatalogs {
     return CATALOG_CACHE.get(metastoreUri, uri -> new HiveCatalog(conf));
   }
 
+  /**
+   * Use {@link #loadHiveMetadataPreservingCatalog(Configuration)} instead
+   */
+  @Deprecated
   public static HiveCatalog loadCustomCatalog(Configuration conf) {
+    return loadHiveMetadataPreservingCatalog(conf);
+  }
+
+  public static HiveCatalog loadHiveMetadataPreservingCatalog(Configuration conf) {
     // metastore URI can be null in local mode
     String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
-    return CUSTOM_CATALOG_CACHE.get(metastoreUri, uri -> new CustomHiveCatalog(conf));
+    return HIVE_METADATA_PRESERVING_CATALOG_CACHE.get(metastoreUri, uri -> new HiveMetadataPreservingCatalog(conf));
   }
 }
