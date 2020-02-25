@@ -44,8 +44,8 @@ import org.slf4j.LoggerFactory;
 public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
   private static final Logger LOG = LoggerFactory.getLogger(HiveCatalog.class);
 
-  protected final HiveClientPool clients;
-  protected final Configuration conf;
+  private final HiveClientPool clients;
+  private final Configuration conf;
   private final StackTraceElement[] createStack;
   private boolean closed;
 
@@ -54,6 +54,14 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
     this.conf = conf;
     this.createStack = Thread.currentThread().getStackTrace();
     this.closed = false;
+  }
+
+  protected HiveClientPool clientPool() {
+    return clients;
+  }
+
+  protected Configuration conf() {
+    return conf;
   }
 
   @Override
