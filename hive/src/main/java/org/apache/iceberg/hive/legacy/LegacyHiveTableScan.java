@@ -1,0 +1,116 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.iceberg.hive.legacy;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
+import java.util.Collection;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.iceberg.BaseFileScanTask;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DataTableScan;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.Metrics;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.PartitionSpecParser;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.SchemaParser;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.StructLike;
+import org.apache.iceberg.Table;
+import org.apache.iceberg.TableOperations;
+import org.apache.iceberg.TableScan;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.ResidualEvaluator;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.util.ParallelIterable;
+import org.apache.iceberg.util.ThreadPools;
+
+
+/**
+ * A {@link DataTableScan} which uses Hive table and partition metadata to read tables.
+ * This scan does not provide any time travel, snapshot isolation, incremental computation benefits.
+ */
+public class LegacyHiveTableScan extends DataTableScan {
+
+  protected LegacyHiveTableScan(TableOperations ops, Table table) {
+    super(ops, table);
+  }
+
+  protected LegacyHiveTableScan(TableOperations ops, Table table, Long snapshotId, Schema schema, Expression rowFilter,
+      boolean caseSensitive, boolean colStats, Collection<String> selectedColumns,
+      ImmutableMap<String, String> options) {
+    super(ops, table, snapshotId, schema, rowFilter, caseSensitive, colStats, selectedColumns, options);
+  }
+
+  @Override
+  @SuppressWarnings("checkstyle:HiddenField")
+  protected TableScan newRefinedScan(TableOperations ops, Table table, Long snapshotId, Schema schema,
+      Expression rowFilter, boolean caseSensitive, boolean colStats, Collection<String> selectedColumns,
+      ImmutableMap<String, String> options) {
+    return new LegacyHiveTableScan(ops, table, snapshotId, schema, rowFilter, caseSensitive, colStats, selectedColumns,
+        options);
+  }
+
+  @Override
+  public CloseableIterable<FileScanTask> planFiles(TableOperations ops, Snapshot snapshot, Expression rowFilter,
+      boolean caseSensitive, boolean colStats) {
+    PartitionSpec spec = ops.current().spec();
+    String schemaString = SchemaParser.toJson(spec.schema());
+    String specString = PartitionSpecParser.toJson(spec);
+    // TODO: Consider returning the whole rowFilter as residual since we many not be able to guarantee that all
+    // predicates for the partition columns are supported by Hive's listPartitionsByFilter
+    ResidualEvaluator residuals = ResidualEvaluator.of(spec, rowFilter, caseSensitive);
+
+    LegacyHiveTableOperations hiveOps = (LegacyHiveTableOperations) ops;
+    final Iterable<DirectoryInfo> matchingDirectories;
+    if (ops.current().spec().fields().isEmpty()) {
+      matchingDirectories = ImmutableList.of(hiveOps.getDirectoryInfo());
+    } else {
+      matchingDirectories = hiveOps.getDirectoryInfosByFilter(rowFilter);
+    }
+
+    Iterable<Iterable<FileScanTask>> readers = Iterables.transform(matchingDirectories, directory -> {
+      return Iterables.transform(FileSystemUtils.listFiles(directory.location()),
+          file -> new BaseFileScanTask(createDataFile(file, spec, directory.partitionData(), directory.format()),
+              schemaString, specString, residuals));
+    });
+
+    return new ParallelIterable<>(readers, ThreadPools.getWorkerPool());
+  }
+
+  private static DataFile createDataFile(FileStatus fileStatus, PartitionSpec partitionSpec, StructLike partitionData,
+      FileFormat format) {
+    DataFiles.Builder builder = DataFiles.builder(partitionSpec)
+        .withPath(fileStatus.getPath().toString())
+        .withFormat(format)
+        .withFileSizeInBytes(fileStatus.getLen())
+        .withMetrics(new Metrics(10000L, null, null, null, null, null));
+
+    if (partitionSpec.fields().isEmpty()) {
+      return builder.build();
+    } else {
+      return builder.withPartition(partitionData).build();
+    }
+  }
+}

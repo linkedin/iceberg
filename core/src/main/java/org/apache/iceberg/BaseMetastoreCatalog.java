@@ -177,7 +177,7 @@ public abstract class BaseMetastoreCatalog implements Catalog {
     }
   }
 
-  private boolean isValidMetadataIdentifier(TableIdentifier identifier) {
+  protected boolean isValidMetadataIdentifier(TableIdentifier identifier) {
     return MetadataTableType.from(identifier.name()) != null &&
         isValidIdentifier(TableIdentifier.of(identifier.namespace().levels()));
   }
@@ -275,7 +275,7 @@ public abstract class BaseMetastoreCatalog implements Catalog {
         });
   }
 
-  private static String fullTableName(String catalogName, TableIdentifier identifier) {
+  protected static String fullTableName(String catalogName, TableIdentifier identifier) {
     StringBuilder sb = new StringBuilder();
 
     if (catalogName.contains("/") || catalogName.contains(":")) {

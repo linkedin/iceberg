@@ -25,6 +25,7 @@ import com.github.benmanes.caffeine.cache.RemovalListener;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.iceberg.hive.legacy.HiveCatalogWithLegacyReadFallback;
 
 public final class HiveCatalogs {
 
@@ -39,12 +40,24 @@ public final class HiveCatalogs {
           .removalListener((RemovalListener<String, HiveCatalog>) (uri, catalog, cause) -> catalog.close())
           .build();
 
+  private static final Cache<String, HiveCatalog> CATALOG_WITH_LEGACY_READ_FALLBACK_CACHE = Caffeine.newBuilder()
+      .expireAfterAccess(10, TimeUnit.MINUTES)
+      .removalListener((RemovalListener<String, HiveCatalog>) (uri, catalog, cause) -> catalog.close())
+      .build();
+
   private HiveCatalogs() {}
 
   public static HiveCatalog loadCatalog(Configuration conf) {
     // metastore URI can be null in local mode
     String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
     return CATALOG_CACHE.get(metastoreUri, uri -> new HiveCatalog(conf));
+  }
+
+  public static HiveCatalog loadCatalogWithLegacyReadFallback(Configuration conf) {
+    // metastore URI can be null in local mode
+    String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
+    return CATALOG_WITH_LEGACY_READ_FALLBACK_CACHE.get(metastoreUri,
+        uri -> new HiveCatalogWithLegacyReadFallback(conf));
   }
 
   /**
