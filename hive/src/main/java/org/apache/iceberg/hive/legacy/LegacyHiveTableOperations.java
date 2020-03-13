@@ -109,13 +109,14 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     if (current().spec().fields().isEmpty()) {
       matchingDirectories = ImmutableList.of(getDirectoryInfo());
     } else {
-      matchingDirectories = getDirectoryInfosByFilter(expression);
+      matchingDirectories = getDirectoryInfosByFilter(expression, current().spec());
     }
 
-    Iterable<Iterable<DataFile>> filesPerDirectory = Iterables.transform(matchingDirectories, directory -> {
-      return Iterables.transform(FileSystemUtils.listFiles(directory.location(), conf),
-          file -> createDataFile(file, current().spec(), directory.partitionData(), directory.format()));
-    });
+    Iterable<Iterable<DataFile>> filesPerDirectory = Iterables.transform(
+        matchingDirectories,
+        directory -> Iterables.transform(
+            FileSystemUtils.listFiles(directory.location(), conf),
+            file -> createDataFile(file, current().spec(), directory.partitionData(), directory.format())));
 
     // Note that we return an Iterable of Iterables here so that the TableScan can process iterables of individual
     // directories in parallel hence resulting in a parallel file listing
@@ -139,7 +140,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     }
   }
 
-  private List<DirectoryInfo> getDirectoryInfosByFilter(Expression expression) {
+  private List<DirectoryInfo> getDirectoryInfosByFilter(Expression expression, PartitionSpec spec) {
     Preconditions.checkArgument(!current().spec().fields().isEmpty(),
         "getDirectoryInfosByFilter only allowed for partitioned tables");
     try {
@@ -167,7 +168,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
             client -> client.listPartitionsByFilter(databaseName, tableName, partitionFilterString, (short) -1));
       }
 
-      return LegacyHiveTableUtils.toDirectoryInfos(partitions);
+      return LegacyHiveTableUtils.toDirectoryInfos(partitions, spec);
     } catch (TException e) {
       String errMsg = String.format("Failed to get partition info for %s.%s + expression %s from metastore",
           databaseName, tableName, expression);
