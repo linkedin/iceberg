@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.iceberg.exceptions.RuntimeIOException;
 
 
 class FileSystemUtils {
@@ -44,7 +45,7 @@ class FileSystemUtils {
       FileSystem fs = directoryPath.getFileSystem(new Configuration());
       files = fs.listStatus(directoryPath, HiddenPathFilter.INSTANCE);
     } catch (IOException e) {
-      throw new RuntimeException("Error listing files for directory: " + directory, e);
+      throw new RuntimeIOException(e, "Error listing files for directory: " + directory);
     }
     return Arrays.asList(files);
   }

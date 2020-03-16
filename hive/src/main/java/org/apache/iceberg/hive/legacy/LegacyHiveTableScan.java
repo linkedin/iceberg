@@ -73,21 +73,20 @@ public class LegacyHiveTableScan extends DataTableScan {
   }
 
   @Override
-  public CloseableIterable<FileScanTask> planFiles(TableOperations ops, Snapshot snapshot, Expression rowFilter,
-      boolean caseSensitive, boolean colStats) {
-    PartitionSpec spec = ops.current().spec();
+  public CloseableIterable<FileScanTask> planFiles() {
+    LegacyHiveTableOperations hiveOps = (LegacyHiveTableOperations) tableOps();
+    PartitionSpec spec = hiveOps.current().spec();
     String schemaString = SchemaParser.toJson(spec.schema());
     String specString = PartitionSpecParser.toJson(spec);
-    // TODO: Consider returning the whole rowFilter as residual since we many not be able to guarantee that all
+    // TODO: Consider returning the whole filter() as residual since we many not be able to guarantee that all
     // predicates for the partition columns are supported by Hive's listPartitionsByFilter
-    ResidualEvaluator residuals = ResidualEvaluator.of(spec, rowFilter, caseSensitive);
+    ResidualEvaluator residuals = ResidualEvaluator.of(spec, filter(), isCaseSensitive());
 
-    LegacyHiveTableOperations hiveOps = (LegacyHiveTableOperations) ops;
-    final Iterable<DirectoryInfo> matchingDirectories;
-    if (ops.current().spec().fields().isEmpty()) {
+    Iterable<DirectoryInfo> matchingDirectories;
+    if (hiveOps.current().spec().fields().isEmpty()) {
       matchingDirectories = ImmutableList.of(hiveOps.getDirectoryInfo());
     } else {
-      matchingDirectories = hiveOps.getDirectoryInfosByFilter(rowFilter);
+      matchingDirectories = hiveOps.getDirectoryInfosByFilter(filter());
     }
 
     Iterable<Iterable<FileScanTask>> readers = Iterables.transform(matchingDirectories, directory -> {
@@ -97,6 +96,12 @@ public class LegacyHiveTableScan extends DataTableScan {
     });
 
     return new ParallelIterable<>(readers, ThreadPools.getWorkerPool());
+  }
+
+  @Override
+  public CloseableIterable<FileScanTask> planFiles(TableOperations ops, Snapshot snapshot,
+      Expression rowFilter, boolean caseSensitive, boolean colStats) {
+    throw new IllegalStateException("Control flow should never reach here");
   }
 
   private static DataFile createDataFile(FileStatus fileStatus, PartitionSpec partitionSpec, StructLike partitionData,

@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * A {@link HiveCatalog} which uses falls back to using Hive metadata to read tables when Iceberg metadata is not
+ * A {@link HiveCatalog} which falls back to using Hive metadata to read tables when Iceberg metadata is not
  * available. If the table is read through Hive metadata, features like time travel, snapshot isolation and incremental
  * computation are not supported along with any WRITE operations to either the data or metadata.
  */
@@ -48,7 +48,7 @@ public class HiveCatalogWithLegacyReadFallback extends HiveCatalog {
     // Try to load the table using Iceberg metadata first. If it fails, use Hive metadata
     try {
       return super.loadTable(identifier);
-    } catch (NoSuchTableException e) {
+    } catch (NoSuchTableException | IllegalArgumentException e) {
       TableOperations ops = legacyTableOps(identifier);
       if (ops.current() == null) {
         if (isValidMetadataIdentifier(identifier)) {
@@ -57,9 +57,9 @@ public class HiveCatalogWithLegacyReadFallback extends HiveCatalog {
         }
         throw new NoSuchTableException("Table does not exist: %s", identifier);
       } else {
-        LOG.info(
+        LOG.warn(
             "Iceberg metadata does not exist for {}; Falling back to Hive metadata. Time travel, snapshot isolation," +
-                " incremental computation features will not be available", identifier);
+                " and incremental computation features will not be available", identifier);
         return new LegacyHiveTable(ops, fullTableName(name(), identifier));
       }
     }

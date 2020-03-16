@@ -27,9 +27,9 @@ import org.apache.iceberg.StructLike;
  * Metadata for a data directory referenced by either a Hive table or a partition
  */
 class DirectoryInfo {
-  private String location;
-  private FileFormat format;
-  private StructLike partitionData;
+  private final String location;
+  private final FileFormat format;
+  private final StructLike partitionData;
 
   DirectoryInfo(String location, FileFormat format, StructLike partitionData) {
     this.location = location;

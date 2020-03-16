@@ -54,8 +54,7 @@ class LegacyHiveTableUtils {
       // TODO: Add support for tables without avro.schema.literal
       throw new UnsupportedOperationException("Reading tables without avro.schema.literal not implemented yet");
     } else {
-      schema = new Schema(
-          AvroSchemaUtil.convert(new org.apache.avro.Schema.Parser().parse(schemaStr)).asStructType().fields());
+      schema = AvroSchemaUtil.toIceberg(new org.apache.avro.Schema.Parser().parse(schemaStr));
     }
 
     List<String> partCols = table.getPartitionKeys().stream().map(FieldSchema::getName).collect(Collectors.toList());
