@@ -66,19 +66,19 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
       new FieldSchema("intCol", "int", ""));
   private static final List<FieldSchema> PARTITION_COLUMNS = ImmutableList.of(
       new FieldSchema("pcol", "string", ""));
-  private static HiveCatalog readFallbackCatalog;
+  private static HiveCatalog legacyCatalog;
   private static Path dbPath;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    readFallbackCatalog = new HiveCatalogWithLegacyReadFallback(HiveMetastoreTest.hiveConf);
+    legacyCatalog = new LegacyHiveCatalog(HiveMetastoreTest.hiveConf);
     dbPath = Paths.get(URI.create(metastoreClient.getDatabase(DB_NAME).getLocationUri()));
   }
 
   @AfterClass
   public static void afterClass() {
-    readFallbackCatalog.close();
-    TestLegacyHiveTableScan.readFallbackCatalog = null;
+    legacyCatalog.close();
+    TestLegacyHiveTableScan.legacyCatalog = null;
   }
 
   @Test
@@ -234,7 +234,7 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
 
   private Map<String, FileFormat> hiveScan(Table table, Expression filter) {
     Path tableLocation = location(table);
-    CloseableIterable<FileScanTask> fileScanTasks = readFallbackCatalog
+    CloseableIterable<FileScanTask> fileScanTasks = legacyCatalog
         .loadTable(TableIdentifier.of(table.getDbName(), table.getTableName()))
         .newScan().filter(filter).planFiles();
     return StreamSupport.stream(fileScanTasks.spliterator(), false).collect(Collectors.toMap(

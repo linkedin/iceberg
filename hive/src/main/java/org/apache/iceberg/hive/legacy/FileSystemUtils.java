@@ -37,12 +37,12 @@ class FileSystemUtils {
   /**
    * Lists all non-hidden files for the given directory
    */
-  static List<FileStatus> listFiles(String directory) {
+  static List<FileStatus> listFiles(String directory, Configuration conf) {
 
     final Path directoryPath = new Path(directory);
     final FileStatus[] files;
     try {
-      FileSystem fs = directoryPath.getFileSystem(new Configuration());
+      FileSystem fs = directoryPath.getFileSystem(conf);
       files = fs.listStatus(directoryPath, HiddenPathFilter.INSTANCE);
     } catch (IOException e) {
       throw new RuntimeIOException(e, "Error listing files for directory: " + directory);

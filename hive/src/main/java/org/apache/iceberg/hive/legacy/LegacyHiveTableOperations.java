@@ -21,14 +21,21 @@ package org.apache.iceberg.hive.legacy;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.iceberg.BaseMetastoreTableOperations;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
@@ -90,7 +97,32 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     setShouldRefresh(false);
   }
 
-  DirectoryInfo getDirectoryInfo() {
+  /**
+   * Returns an {@link Iterable} of {@link Iterable}s of {@link DataFile}s which belong to the current table and
+   * match the partition predicates from the given expression.
+   *
+   * Each element in the outer {@link Iterable} maps to an {@link Iterable} of {@link DataFile}s originating from the
+   * same directory
+   */
+  Iterable<Iterable<DataFile>> getFilesByFilter(Expression expression) {
+    Iterable<DirectoryInfo> matchingDirectories;
+    if (current().spec().fields().isEmpty()) {
+      matchingDirectories = ImmutableList.of(getDirectoryInfo());
+    } else {
+      matchingDirectories = getDirectoryInfosByFilter(expression);
+    }
+
+    Iterable<Iterable<DataFile>> filesPerDirectory = Iterables.transform(matchingDirectories, directory -> {
+      return Iterables.transform(FileSystemUtils.listFiles(directory.location(), conf),
+          file -> createDataFile(file, current().spec(), directory.partitionData(), directory.format()));
+    });
+
+    // Note that we return an Iterable of Iterables here so that the TableScan can process iterables of individual
+    // directories in parallel hence resulting in a parallel file listing
+    return filesPerDirectory;
+  }
+
+  private DirectoryInfo getDirectoryInfo() {
     Preconditions.checkArgument(current().spec().fields().isEmpty(),
         "getDirectoryInfo only allowed for unpartitioned tables");
     try {
@@ -107,7 +139,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     }
   }
 
-  List<DirectoryInfo> getDirectoryInfosByFilter(Expression expression) {
+  private List<DirectoryInfo> getDirectoryInfosByFilter(Expression expression) {
     Preconditions.checkArgument(!current().spec().fields().isEmpty(),
         "getDirectoryInfosByFilter only allowed for partitioned tables");
     try {
@@ -143,6 +175,21 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException("Interrupted in call to getPartitionsByFilter", e);
+    }
+  }
+
+  private static DataFile createDataFile(FileStatus fileStatus, PartitionSpec partitionSpec, StructLike partitionData,
+      FileFormat format) {
+    DataFiles.Builder builder = DataFiles.builder(partitionSpec)
+        .withPath(fileStatus.getPath().toString())
+        .withFormat(format)
+        .withFileSizeInBytes(fileStatus.getLen())
+        .withMetrics(new Metrics(10000L, null, null, null, null, null));
+
+    if (partitionSpec.fields().isEmpty()) {
+      return builder.build();
+    } else {
+      return builder.withPartition(partitionData).build();
     }
   }
 

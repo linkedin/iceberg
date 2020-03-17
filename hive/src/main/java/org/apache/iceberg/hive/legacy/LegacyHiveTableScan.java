@@ -19,24 +19,17 @@
 
 package org.apache.iceberg.hive.legacy;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import java.util.Collection;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.iceberg.BaseFileScanTask;
-import org.apache.iceberg.DataFile;
-import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DataTableScan;
-import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.Snapshot;
-import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
@@ -82,40 +75,15 @@ public class LegacyHiveTableScan extends DataTableScan {
     // predicates for the partition columns are supported by Hive's listPartitionsByFilter
     ResidualEvaluator residuals = ResidualEvaluator.of(spec, filter(), isCaseSensitive());
 
-    Iterable<DirectoryInfo> matchingDirectories;
-    if (hiveOps.current().spec().fields().isEmpty()) {
-      matchingDirectories = ImmutableList.of(hiveOps.getDirectoryInfo());
-    } else {
-      matchingDirectories = hiveOps.getDirectoryInfosByFilter(filter());
-    }
+    Iterable<Iterable<FileScanTask>> tasks = Iterables.transform(hiveOps.getFilesByFilter(filter()), fileIterable ->
+        Iterables.transform(fileIterable, file -> new BaseFileScanTask(file, schemaString, specString, residuals)));
 
-    Iterable<Iterable<FileScanTask>> readers = Iterables.transform(matchingDirectories, directory -> {
-      return Iterables.transform(FileSystemUtils.listFiles(directory.location()),
-          file -> new BaseFileScanTask(createDataFile(file, spec, directory.partitionData(), directory.format()),
-              schemaString, specString, residuals));
-    });
-
-    return new ParallelIterable<>(readers, ThreadPools.getWorkerPool());
+    return new ParallelIterable<>(tasks, ThreadPools.getWorkerPool());
   }
 
   @Override
   public CloseableIterable<FileScanTask> planFiles(TableOperations ops, Snapshot snapshot,
       Expression rowFilter, boolean caseSensitive, boolean colStats) {
     throw new IllegalStateException("Control flow should never reach here");
-  }
-
-  private static DataFile createDataFile(FileStatus fileStatus, PartitionSpec partitionSpec, StructLike partitionData,
-      FileFormat format) {
-    DataFiles.Builder builder = DataFiles.builder(partitionSpec)
-        .withPath(fileStatus.getPath().toString())
-        .withFormat(format)
-        .withFileSizeInBytes(fileStatus.getLen())
-        .withMetrics(new Metrics(10000L, null, null, null, null, null));
-
-    if (partitionSpec.fields().isEmpty()) {
-      return builder.build();
-    } else {
-      return builder.withPartition(partitionData).build();
-    }
   }
 }
