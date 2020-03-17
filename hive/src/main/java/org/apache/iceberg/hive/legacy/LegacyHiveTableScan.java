@@ -71,8 +71,6 @@ public class LegacyHiveTableScan extends DataTableScan {
     PartitionSpec spec = hiveOps.current().spec();
     String schemaString = SchemaParser.toJson(spec.schema());
     String specString = PartitionSpecParser.toJson(spec);
-    // TODO: Consider returning the whole filter() as residual since we many not be able to guarantee that all
-    // predicates for the partition columns are supported by Hive's listPartitionsByFilter
     ResidualEvaluator residuals = ResidualEvaluator.of(spec, filter(), isCaseSensitive());
 
     Iterable<Iterable<FileScanTask>> tasks = Iterables.transform(hiveOps.getFilesByFilter(filter()), fileIterable ->

@@ -144,8 +144,12 @@ class HiveExpressions {
    * 2. Removes IS NULL and IS NOT NULL predicates (Replaced with FALSE and TRUE respectively as partition column values
    *    are always non null for Hive)
    * 3. Expands IN and NOT IN operators into ORs of EQUAL operations and ANDs of NOT EQUAL operations respectively
-   * 4. Removes any children TRUE and FALSE expressions (Note that the rewritten expression still can be TRUE and FALSE
-   *    at the root and will have to be handled appropriately by the caller)
+   * 4. Removes any children TRUE and FALSE expressions. The checks to remove these are happening inside
+   *    {@link Expressions#and(Expression, Expression)} and {@link Expressions#or(Expression, Expression)}
+   *    (Note that the rewritten expression still can be TRUE and FALSE at the root and will have to be handled
+   *    appropriately by the caller)
+   *
+   * For examples take a look at the tests in {@code TestHiveExpressions}
    */
   private static class RewriteUnsupportedOperators extends ExpressionVisitors.ExpressionVisitor<Expression> {
 
