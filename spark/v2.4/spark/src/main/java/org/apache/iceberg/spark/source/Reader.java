@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -44,6 +45,7 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hadoop.Util;
+import org.apache.iceberg.hive.legacy.LegacyHiveTable;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
@@ -329,6 +331,11 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
   @Override
   public Statistics estimateStatistics() {
+    if (table instanceof LegacyHiveTable) {
+      // We currently don't have reliable stats for Hive tables
+      return EMPTY_STATS;
+    }
+
     // its a fresh table, no data
     if (table.currentSnapshot() == null) {
       return new Stats(0L, 0L);
@@ -354,6 +361,18 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
     long sizeInBytes = SparkSchemaUtil.estimateSize(lazyType(), numRows);
     return new Stats(sizeInBytes, numRows);
   }
+
+  private static final Statistics EMPTY_STATS = new Statistics() {
+    @Override
+    public OptionalLong sizeInBytes() {
+      return OptionalLong.empty();
+    }
+
+    @Override
+    public OptionalLong numRows() {
+      return OptionalLong.empty();
+    }
+  };
 
   @Override
   public boolean enableBatchRead() {

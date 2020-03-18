@@ -23,6 +23,7 @@ import java.io.Serializable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileFormat;
@@ -35,6 +36,9 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.Util;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.apache.iceberg.hive.legacy.LegacyHiveTable;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.spark.Spark3Util;
 import org.apache.iceberg.spark.SparkReadConf;
 import org.apache.iceberg.spark.SparkSchemaUtil;
@@ -203,6 +207,11 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
 
   @Override
   public Statistics estimateStatistics() {
+    if (table instanceof LegacyHiveTable) {
+      // We currently don't have reliable stats for Hive tables
+      return EMPTY_STATS;
+    }
+
     // its a fresh table, no data
     if (table.currentSnapshot() == null) {
       return new Stats(0L, 0L);
@@ -231,6 +240,18 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
     long sizeInBytes = SparkSchemaUtil.estimateSize(readSchema(), numRows);
     return new Stats(sizeInBytes, numRows);
   }
+
+  private static final Statistics EMPTY_STATS = new Statistics() {
+    @Override
+    public OptionalLong sizeInBytes() {
+      return OptionalLong.empty();
+    }
+
+    @Override
+    public OptionalLong numRows() {
+      return OptionalLong.empty();
+    }
+  };
 
   @Override
   public String description() {
