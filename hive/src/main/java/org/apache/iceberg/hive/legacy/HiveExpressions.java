@@ -50,11 +50,7 @@ class HiveExpressions {
     try {
       Expression partitionPredicatesOnly = ExpressionVisitors.visit(expr,
           new RemoveNonPartitionPredicates(partitionColumnNames));
-      if (partitionPredicatesOnly == null) {
-        return Expressions.alwaysTrue();
-      } else {
-        return ExpressionVisitors.visit(partitionPredicatesOnly, new RewriteUnsupportedOperators());
-      }
+      return ExpressionVisitors.visit(partitionPredicatesOnly, new RewriteUnsupportedOperators());
     } catch (Exception e) {
       throw new RuntimeException("Error while processing expression: " + expr, e);
     }
@@ -62,8 +58,11 @@ class HiveExpressions {
 
   /**
    * Converts an {@link Expression} into a filter string which can be passed to the Hive metastore
-   * @param expr The {@link Expression} to be converted into a filter string. This expression must fit the restrictions
-   *             on Hive metastore partition filters. For more details, see {@link RewriteUnsupportedOperators}
+   *
+   * It is expected that caller handles TRUE and FALSE expressions before calling this method. The given
+   * {@link Expressions} must also be passed through {@link #simplifyPartitionFilter(Expression, Set)} first to
+   * remove any unsupported predicates.
+   * @param expr The {@link Expression} to be converted into a filter string
    * @return a filter string equivalent to the given {@link Expression} which can be passed to the Hive metastore
    */
   static String toPartitionFilterString(Expression expr) {
@@ -94,32 +93,17 @@ class HiveExpressions {
 
     @Override
     public Expression not(Expression result) {
-      return (result == null) ? null : Expressions.not(result);
+      return Expressions.not(result);
     }
 
     @Override
     public Expression and(Expression leftResult, Expression rightResult) {
-      if (leftResult == null && rightResult == null) {
-        return null;
-      } else if (leftResult == null) {
-        return rightResult;
-      } else if (rightResult == null) {
-        return leftResult;
-      } else {
-        return Expressions.and(leftResult, rightResult);
-      }
+      return Expressions.and(leftResult, rightResult);
     }
 
     @Override
     public Expression or(Expression leftResult, Expression rightResult) {
-      if (leftResult == null && rightResult == null) {
-        return null;
-      } else if (leftResult == null || rightResult == null) {
-        throw new IllegalStateException(
-            "A filter on a partition column was ORed with a filter on a non-partition column which is not supported");
-      } else {
-        return Expressions.or(leftResult, rightResult);
-      }
+      return Expressions.or(leftResult, rightResult);
     }
 
     @Override
@@ -129,7 +113,8 @@ class HiveExpressions {
 
     @Override
     public <T> Expression predicate(UnboundPredicate<T> pred) {
-      return (partitionColumnNamesLowerCase.contains(pred.ref().name().toLowerCase())) ? pred : null;
+      return (partitionColumnNamesLowerCase.contains(pred.ref().name().toLowerCase())) ? pred
+          : Expressions.alwaysTrue();
     }
   }
 

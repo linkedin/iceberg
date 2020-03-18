@@ -151,15 +151,15 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
           .collect(Collectors.toSet());
       Expression simplified = HiveExpressions.simplifyPartitionFilter(expression, partitionColumnNames);
       LOG.info("Simplified expression for {}.{} to {}", databaseName, tableName, simplified);
+
       final List<Partition> partitions;
-      // If simplifyPartitionFilter returns TRUE, there are no filters on partition columns or the filter expression is
-      // going to match all partitions
-      if (simplified.equals(Expressions.alwaysTrue())) {
-        partitions = metaClients.run(client -> client.listPartitionsByFilter(
-            databaseName, tableName, null, (short) -1));
-      } else if (simplified.equals(Expressions.alwaysFalse())) {
+      if (simplified.equals(Expressions.alwaysFalse())) {
         // If simplifyPartitionFilter returns FALSE, no partitions are going to match the filter expression
         partitions = ImmutableList.of();
+      } else if (simplified.equals(Expressions.alwaysTrue())) {
+        // If simplifyPartitionFilter returns TRUE, all partitions are going to match the filter expression
+        partitions = metaClients.run(client -> client.listPartitionsByFilter(
+            databaseName, tableName, null, (short) -1));
       } else {
         String partitionFilterString = HiveExpressions.toPartitionFilterString(simplified);
         LOG.info("Listing partitions for {}.{} with filter string: {}", databaseName, tableName, partitionFilterString);
