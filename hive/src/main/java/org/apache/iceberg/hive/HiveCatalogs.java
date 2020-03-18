@@ -25,6 +25,7 @@ import com.github.benmanes.caffeine.cache.RemovalListener;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.iceberg.hive.legacy.LegacyHiveCatalog;
 
 public final class HiveCatalogs {
 
@@ -39,12 +40,23 @@ public final class HiveCatalogs {
           .removalListener((RemovalListener<String, HiveCatalog>) (uri, catalog, cause) -> catalog.close())
           .build();
 
+  private static final Cache<String, HiveCatalog> LEGACY_CATALOG_CACHE = Caffeine.newBuilder()
+      .expireAfterAccess(10, TimeUnit.MINUTES)
+      .removalListener((RemovalListener<String, HiveCatalog>) (uri, catalog, cause) -> catalog.close())
+      .build();
+
   private HiveCatalogs() {}
 
   public static HiveCatalog loadCatalog(Configuration conf) {
     // metastore URI can be null in local mode
     String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
     return CATALOG_CACHE.get(metastoreUri, uri -> new HiveCatalog(conf));
+  }
+
+  public static HiveCatalog loadLegacyCatalog(Configuration conf) {
+    // metastore URI can be null in local mode
+    String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
+    return LEGACY_CATALOG_CACHE.get(metastoreUri, uri -> new LegacyHiveCatalog(conf));
   }
 
   /**
