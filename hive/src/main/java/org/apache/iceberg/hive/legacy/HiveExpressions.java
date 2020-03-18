@@ -53,11 +53,7 @@ class HiveExpressions {
       if (partitionPredicatesOnly == null) {
         return Expressions.alwaysTrue();
       } else {
-        Expression rewritten = ExpressionVisitors.visit(partitionPredicatesOnly, new RewriteUnsupportedOperators());
-        // During rewrite of IN, NOTIN, NULL, and NOT NULL expressions we introduce additional NOT, TRUE, and FALSE
-        // expressions; so we call RewriteUnsupportedOperators again to remove them
-        rewritten = ExpressionVisitors.visit(rewritten, new RewriteUnsupportedOperators());
-        return rewritten;
+        return ExpressionVisitors.visit(partitionPredicatesOnly, new RewriteUnsupportedOperators());
       }
     } catch (Exception e) {
       throw new RuntimeException("Error while processing expression: " + expr, e);
@@ -139,11 +135,20 @@ class HiveExpressions {
 
   /**
    * Rewrites the {@link Expression} so that it fits the restrictions of the expression that can be passed
-   * to the Hive metastore. It performs the following changes:
-   * 1. Rewrites NOT operators by inverting binary operators, negating unary literals and De Morgan's laws
+   * to the Hive metastore.
+   *
+   * This visitor assumes that all predicates are on partition columns. Predicates on non-partition columns should be
+   * removed using {@link RemoveNonPartitionPredicates} before calling this visitor. It performs the following changes:
+   * 1. Rewrites NOT operators by inverting binary operators, negating unary literals and using De Morgan's laws
+   *    e.g. NOT(value > 0 AND TRUE) => value <= 0 OR FALSE
+   *         NOT(value < 0 OR value > 10) => value >= 0 AND value <= 10
    * 2. Removes IS NULL and IS NOT NULL predicates (Replaced with FALSE and TRUE respectively as partition column values
    *    are always non null for Hive)
+   *    e.g. partitionColumn IS NULL => FALSE
+   *         partitionColumn IS NOT NULL => TRUE
    * 3. Expands IN and NOT IN operators into ORs of EQUAL operations and ANDs of NOT EQUAL operations respectively
+   *    e.g. value IN (1, 2, 3) => value = 1 OR value = 2 OR value = 3
+   *         value NOT IN (1, 2, 3) => value != 1 AND value != 2 AND value != 3
    * 4. Removes any children TRUE and FALSE expressions. The checks to remove these are happening inside
    *    {@link Expressions#and(Expression, Expression)} and {@link Expressions#or(Expression, Expression)}
    *    (Note that the rewritten expression still can be TRUE and FALSE at the root and will have to be handled
@@ -186,6 +191,14 @@ class HiveExpressions {
       return in;
     }
 
+    <T> Expression notIn(UnboundTerm<T> term, List<Literal<T>> literals) {
+      Expression notIn = alwaysTrue();
+      for (Literal<T> literal : literals) {
+        notIn = Expressions.and(notIn, Expressions.notEqual(term, literal.value()));
+      }
+      return notIn;
+    }
+
     @Override
     public <T> Expression predicate(BoundPredicate<T> pred) {
       throw new IllegalStateException("Bound predicate not expected: " + pred.getClass().getName());
@@ -208,7 +221,7 @@ class HiveExpressions {
         case IN:
           return in(pred.term(), pred.literals());
         case NOT_IN:
-          return Expressions.not(in(pred.term(), pred.literals()));
+          return notIn(pred.term(), pred.literals());
         case STARTS_WITH:
           throw new UnsupportedOperationException("STARTS_WITH predicate not supported in partition filter expression");
         default:
