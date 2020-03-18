@@ -223,7 +223,8 @@ class HiveExpressions {
         case NOT_IN:
           return notIn(pred.term(), pred.literals());
         case STARTS_WITH:
-          throw new UnsupportedOperationException("STARTS_WITH predicate not supported in partition filter expression");
+          throw new UnsupportedOperationException("STARTS_WITH predicate not supported in partition filter " +
+              "expression. Please use a combination of greater than AND less than predicates instead.");
         default:
           throw new IllegalStateException("Unexpected predicate: " + pred.op());
       }
