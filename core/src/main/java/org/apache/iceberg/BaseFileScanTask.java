@@ -29,7 +29,7 @@ import java.util.NoSuchElementException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 
-class BaseFileScanTask implements FileScanTask {
+public class BaseFileScanTask implements FileScanTask {
   private final DataFile file;
   private final String schemaString;
   private final String specString;
@@ -37,7 +37,7 @@ class BaseFileScanTask implements FileScanTask {
 
   private transient PartitionSpec spec = null;
 
-  BaseFileScanTask(DataFile file, String schemaString, String specString, ResidualEvaluator residuals) {
+  public BaseFileScanTask(DataFile file, String schemaString, String specString, ResidualEvaluator residuals) {
     this.file = file;
     this.schemaString = schemaString;
     this.specString = specString;
