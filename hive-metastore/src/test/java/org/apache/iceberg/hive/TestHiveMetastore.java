@@ -210,7 +210,7 @@ public class TestHiveMetastore {
   private void initConf(HiveConf conf, int port) {
     conf.set(HiveConf.ConfVars.METASTOREURIS.varname, "thrift://localhost:" + port);
     conf.set(HiveConf.ConfVars.METASTOREWAREHOUSE.varname, "file:" + hiveLocalDir.getAbsolutePath());
-    conf.set(HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname, "false");
+    conf.set(HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname, "true");
     conf.set(HiveConf.ConfVars.METASTORE_DISALLOW_INCOMPATIBLE_COL_TYPE_CHANGES.varname, "false");
     conf.set("iceberg.hive.client-pool-size", "2");
   }
