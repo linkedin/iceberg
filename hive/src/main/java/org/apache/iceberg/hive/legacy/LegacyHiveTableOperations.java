@@ -109,7 +109,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     if (current().spec().fields().isEmpty()) {
       matchingDirectories = ImmutableList.of(getDirectoryInfo());
     } else {
-      matchingDirectories = getDirectoryInfosByFilter(expression, current().spec());
+      matchingDirectories = getDirectoryInfosByFilter(expression);
     }
 
     Iterable<Iterable<DataFile>> filesPerDirectory = Iterables.transform(
@@ -140,7 +140,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     }
   }
 
-  private List<DirectoryInfo> getDirectoryInfosByFilter(Expression expression, PartitionSpec spec) {
+  private List<DirectoryInfo> getDirectoryInfosByFilter(Expression expression) {
     Preconditions.checkArgument(!current().spec().fields().isEmpty(),
         "getDirectoryInfosByFilter only allowed for partitioned tables");
     try {
@@ -168,7 +168,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
             client -> client.listPartitionsByFilter(databaseName, tableName, partitionFilterString, (short) -1));
       }
 
-      return LegacyHiveTableUtils.toDirectoryInfos(partitions, spec);
+      return LegacyHiveTableUtils.toDirectoryInfos(partitions, current().spec());
     } catch (TException e) {
       String errMsg = String.format("Failed to get partition info for %s.%s + expression %s from metastore",
           databaseName, tableName, expression);

@@ -20,7 +20,6 @@
 package org.apache.iceberg.hive.legacy;
 
 import com.google.common.collect.Lists;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +36,6 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
-import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,18 +66,7 @@ class LegacyHiveTableUtils {
 
     Schema partitionSchema = partitionSchema(table.getPartitionKeys());
     Types.StructType partitionStructType = partitionSchema.asStruct();
-    final Integer maxId = Collections.max(TypeUtil.indexById(dataStructType).keySet());
-    final Type partitionType = TypeUtil.assignFreshIds(partitionStructType, new TypeUtil.NextID() {
-      private int id = maxId;
-
-      @Override
-      public int get() {
-        id += 1;
-        return id;
-      }
-    });
-
-    fields.addAll(partitionType.asStructType().fields());
+    fields.addAll(partitionStructType.fields());
     return new Schema(fields);
   }
 
@@ -95,7 +82,7 @@ class LegacyHiveTableUtils {
 
   private static Type icebergType(String hiveTypeString) {
     PrimitiveTypeInfo primitiveTypeInfo = TypeInfoFactory.getPrimitiveTypeInfo(hiveTypeString);
-    return new HiveTypeToIcebergType().primitive(primitiveTypeInfo);
+    return HiveTypeUtil.visit(primitiveTypeInfo, new HiveTypeToIcebergType());
   }
 
   static Map<String, String> getTableProperties(org.apache.hadoop.hive.metastore.api.Table table) {

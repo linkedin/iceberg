@@ -62,7 +62,6 @@ import static org.apache.iceberg.FileFormat.ORC;
 
 
 public class TestLegacyHiveTableScan extends HiveMetastoreTest {
-
   private static final List<FieldSchema> DATA_COLUMNS = ImmutableList.of(
       new FieldSchema("strCol", "string", ""),
       new FieldSchema("intCol", "int", ""));
@@ -119,7 +118,12 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
     filesMatch(
         ImmutableMap.of("pcol=ds/pIntCol=1/A", AVRO, "pcol=ds/pIntCol=2/B", AVRO),
         hiveScan(table, Expressions.equal("pcol", "ds")));
+  }
 
+  @Test
+  public void testHiveScanNonStringPartitionQuery() throws Exception {
+    String tableName = "multi_partition_with_filter_on_non_string_partition_cols";
+    Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
     AssertHelpers.assertThrows(
         "Filtering on non string partition is not supported by ORM layer and we can enable direct sql only on mysql",
         RuntimeException.class, "Failed to get partition info",
