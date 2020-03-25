@@ -61,6 +61,7 @@ public class HiveTypeToIcebergType extends HiveTypeUtil.HiveSchemaVisitor<Type> 
         return Types.DoubleType.get();
       case BOOLEAN:
         return Types.BooleanType.get();
+      case BYTE:
       case SHORT:
       case INT:
         return Types.IntegerType.get();
@@ -79,7 +80,6 @@ public class HiveTypeToIcebergType extends HiveTypeUtil.HiveSchemaVisitor<Type> 
         return Types.TimestampType.withoutZone();
       case DATE:
         return Types.DateType.get();
-      case BYTE:
       default:
         throw new UnsupportedOperationException("Unsupported primitive type " + primitive);
     }

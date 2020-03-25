@@ -51,32 +51,35 @@ class LegacyHiveTableUtils {
   static Schema getSchema(org.apache.hadoop.hive.metastore.api.Table table) {
     Map<String, String> props = getTableProperties(table);
     String schemaStr = props.get("avro.schema.literal");
-    Schema schema;
     if (schemaStr == null) {
       LOG.warn("Table {}.{} does not have an avro.schema.literal set; using Hive schema instead. The schema will not" +
                    " have case sensitivity and nullability information", table.getDbName(), table.getTableName());
       // TODO: Add support for tables without avro.schema.literal
       throw new UnsupportedOperationException("Reading tables without avro.schema.literal not implemented yet");
-    } else {
-      schema = AvroSchemaUtil.toIceberg(new org.apache.avro.Schema.Parser().parse(schemaStr));
     }
 
+    Schema schema = AvroSchemaUtil.toIceberg(new org.apache.avro.Schema.Parser().parse(schemaStr));
     Types.StructType dataStructType = schema.asStruct();
     List<Types.NestedField> fields = Lists.newArrayList(dataStructType.fields());
 
-    Schema partitionSchema = partitionSchema(table.getPartitionKeys());
+    Schema partitionSchema = partitionSchema(table.getPartitionKeys(), schema);
     Types.StructType partitionStructType = partitionSchema.asStruct();
     fields.addAll(partitionStructType.fields());
     return new Schema(fields);
   }
 
-  private static Schema partitionSchema(List<FieldSchema> partitionKeys) {
+  private static Schema partitionSchema(List<FieldSchema> partitionKeys, Schema dataSchema) {
     AtomicInteger fieldId = new AtomicInteger(10000);
-    List<Types.NestedField> partitionFields = partitionKeys
-        .stream()
-        .map(f -> Types.NestedField.optional(
-            fieldId.incrementAndGet(), f.getName(), icebergType(f.getType()), f.getComment()))
-        .collect(Collectors.toList());
+    List<Types.NestedField> partitionFields = Lists.newArrayList();
+    partitionKeys.forEach(f -> {
+      Types.NestedField field = dataSchema.findField(f.getName());
+      if (field != null) {
+        throw new IllegalStateException(String.format("Partition field %s also present in data", field.name()));
+      }
+      partitionFields.add(
+          Types.NestedField.optional(
+              fieldId.incrementAndGet(), f.getName(), icebergType(f.getType()), f.getComment()));
+    });
     return new Schema(partitionFields);
   }
 
