@@ -21,6 +21,7 @@ package org.apache.iceberg.hive.legacy;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -42,6 +43,7 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe;
 import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
+import org.apache.iceberg.AssertHelpers;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -60,12 +62,13 @@ import static org.apache.iceberg.FileFormat.ORC;
 
 
 public class TestLegacyHiveTableScan extends HiveMetastoreTest {
-
   private static final List<FieldSchema> DATA_COLUMNS = ImmutableList.of(
       new FieldSchema("strCol", "string", ""),
       new FieldSchema("intCol", "int", ""));
   private static final List<FieldSchema> PARTITION_COLUMNS = ImmutableList.of(
-      new FieldSchema("pcol", "string", ""));
+      new FieldSchema("pcol", "string", ""),
+      new FieldSchema("pIntCol", "int", ""));
+
   private static HiveCatalog legacyCatalog;
   private static Path dbPath;
 
@@ -93,44 +96,58 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
   public void testHiveScanSinglePartition() throws Exception {
     String tableName = "single_partition";
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
-    addPartition(table, ImmutableList.of("1"), AVRO, "A", "B");
-    filesMatch(ImmutableMap.of("pcol=1/A", AVRO, "pcol=1/B", AVRO), hiveScan(table));
+    addPartition(table, ImmutableList.of("ds", 1), AVRO, "A", "B");
+    filesMatch(ImmutableMap.of("pcol=ds/pIntCol=1/B", AVRO, "pcol=ds/pIntCol=1/A", AVRO), hiveScan(table));
   }
 
   @Test
   public void testHiveScanMultiPartition() throws Exception {
     String tableName = "multi_partition";
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
-    addPartition(table, ImmutableList.of("1"), AVRO, "A");
-    addPartition(table, ImmutableList.of("2"), AVRO, "B");
-    filesMatch(ImmutableMap.of("pcol=1/A", AVRO, "pcol=2/B", AVRO), hiveScan(table));
+    addPartition(table, ImmutableList.of("ds", 1), AVRO, "A");
+    addPartition(table, ImmutableList.of("ds", 2), AVRO, "B");
+    filesMatch(ImmutableMap.of("pcol=ds/pIntCol=2/B", AVRO, "pcol=ds/pIntCol=1/A", AVRO), hiveScan(table));
   }
 
   @Test
   public void testHiveScanMultiPartitionWithFilter() throws Exception {
     String tableName = "multi_partition_with_filter";
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
-    addPartition(table, ImmutableList.of("1"), AVRO, "A");
-    addPartition(table, ImmutableList.of("2"), AVRO, "B");
-    filesMatch(ImmutableMap.of("pcol=2/B", AVRO), hiveScan(table, Expressions.equal("pcol", "2")));
+    addPartition(table, ImmutableList.of("ds", 1), AVRO, "A");
+    addPartition(table, ImmutableList.of("ds", 2), AVRO, "B");
+    filesMatch(
+        ImmutableMap.of("pcol=ds/pIntCol=1/A", AVRO, "pcol=ds/pIntCol=2/B", AVRO),
+        hiveScan(table, Expressions.equal("pcol", "ds")));
+  }
+
+  @Test
+  public void testHiveScanNonStringPartitionQuery() throws Exception {
+    String tableName = "multi_partition_with_filter_on_non_string_partition_cols";
+    Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
+    AssertHelpers.assertThrows(
+        "Filtering on non string partition is not supported by ORM layer and we can enable direct sql only on mysql",
+        RuntimeException.class, "Failed to get partition info",
+        () -> hiveScan(table, Expressions.and(Expressions.equal("pcol", "ds"), Expressions.equal("pIntCol", "1"))));
   }
 
   @Test
   public void testHiveScanMultiPartitionWithNonPartitionFilter() throws Exception {
     String tableName = "multi_partition_with_non_partition_filter";
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
-    addPartition(table, ImmutableList.of("1"), AVRO, "A");
-    addPartition(table, ImmutableList.of("2"), AVRO, "B");
-    filesMatch(ImmutableMap.of("pcol=1/A", AVRO, "pcol=2/B", AVRO), hiveScan(table, Expressions.equal("intCol", 1)));
+    addPartition(table, ImmutableList.of("ds", 1), AVRO, "A");
+    addPartition(table, ImmutableList.of("ds", 2), AVRO, "B");
+    filesMatch(
+        ImmutableMap.of("pcol=ds/pIntCol=1/A", AVRO, "pcol=ds/pIntCol=2/B", AVRO),
+        hiveScan(table, Expressions.equal("intCol", 1)));
   }
 
   @Test
   public void testHiveScanHybridTable() throws Exception {
     String tableName = "hybrid_table";
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
-    addPartition(table, ImmutableList.of("1"), AVRO, "A");
-    addPartition(table, ImmutableList.of("2"), ORC, "B");
-    filesMatch(ImmutableMap.of("pcol=1/A", AVRO, "pcol=2/B", ORC), hiveScan(table));
+    addPartition(table, ImmutableList.of("ds", 1), AVRO, "A");
+    addPartition(table, ImmutableList.of("ds", 2), ORC, "B");
+    filesMatch(ImmutableMap.of("pcol=ds/pIntCol=1/A", AVRO, "pcol=ds/pIntCol=2/B", ORC), hiveScan(table));
   }
 
   private static Table createTable(String tableName, List<FieldSchema> columns, List<FieldSchema> partitionColumns)
@@ -191,7 +208,7 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
     return Paths.get(table.getSd().getLocation());
   }
 
-  private static Path location(Table table, List<String> partitionValues) {
+  private static Path location(Table table, List<Object> partitionValues) {
     Path partitionLocation = location(table);
     for (int i = 0; i < table.getPartitionKeysSize(); i++) {
       partitionLocation = partitionLocation.resolve(
@@ -208,13 +225,13 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
     }
   }
 
-  private void addPartition(Table table, List<String> partitionValues, FileFormat format, String... fileNames)
+  private void addPartition(Table table, List<Object> partitionValues, FileFormat format, String... fileNames)
       throws Exception {
     Path partitionLocation = location(table, partitionValues);
     Files.createDirectories(partitionLocation);
     long currentTimeMillis = System.currentTimeMillis();
     metastoreClient.add_partition(new Partition(
-        partitionValues,
+        Lists.transform(partitionValues, Object::toString),
         table.getDbName(),
         table.getTableName(),
         (int) currentTimeMillis / 1000,
@@ -237,9 +254,11 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
     CloseableIterable<FileScanTask> fileScanTasks = legacyCatalog
         .loadTable(TableIdentifier.of(table.getDbName(), table.getTableName()))
         .newScan().filter(filter).planFiles();
-    return StreamSupport.stream(fileScanTasks.spliterator(), false).collect(Collectors.toMap(
-        f -> tableLocation.relativize(Paths.get(URI.create(f.file().path().toString()))).toString().split("\\.")[0],
-        f -> f.file().format()));
+    return StreamSupport
+        .stream(fileScanTasks.spliterator(), false)
+        .collect(Collectors.toMap(
+            f -> tableLocation.relativize(Paths.get(URI.create(f.file().path().toString()))).toString().split("\\.")[0],
+            f -> f.file().format()));
   }
 
   private static void filesMatch(Map<String, FileFormat> expected, Map<String, FileFormat> actual) {
