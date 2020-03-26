@@ -73,8 +73,12 @@ public class LegacyHiveTableScan extends DataTableScan {
     String specString = PartitionSpecParser.toJson(spec);
     ResidualEvaluator residuals = ResidualEvaluator.of(spec, filter(), isCaseSensitive());
 
-    Iterable<Iterable<FileScanTask>> tasks = Iterables.transform(hiveOps.getFilesByFilter(filter()), fileIterable ->
-        Iterables.transform(fileIterable, file -> new BaseFileScanTask(file, schemaString, specString, residuals)));
+    Iterable<Iterable<FileScanTask>> tasks = Iterables.transform(
+        hiveOps.getFilesByFilter(filter()),
+        fileIterable ->
+            Iterables.transform(
+                fileIterable,
+                file -> new BaseFileScanTask(file, schemaString, specString, residuals)));
 
     return new ParallelIterable<>(tasks, ThreadPools.getWorkerPool());
   }
