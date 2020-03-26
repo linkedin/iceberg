@@ -19,8 +19,7 @@
 
 package org.apache.iceberg.hive.legacy;
 
-import com.google.common.base.Preconditions;
-import java.util.ArrayList;
+import com.google.common.collect.Lists;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,11 +27,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Partition;
+import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.avro.AvroSchemaUtil;
+import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,41 +43,49 @@ import org.slf4j.LoggerFactory;
 
 class LegacyHiveTableUtils {
 
-  private LegacyHiveTableUtils() {}
+  private LegacyHiveTableUtils() {
+  }
 
   private static final Logger LOG = LoggerFactory.getLogger(LegacyHiveTableUtils.class);
 
   static Schema getSchema(org.apache.hadoop.hive.metastore.api.Table table) {
     Map<String, String> props = getTableProperties(table);
     String schemaStr = props.get("avro.schema.literal");
-    Schema schema;
     if (schemaStr == null) {
       LOG.warn("Table {}.{} does not have an avro.schema.literal set; using Hive schema instead. The schema will not" +
-          " have case sensitivity and nullability information", table.getDbName(), table.getTableName());
+                   " have case sensitivity and nullability information", table.getDbName(), table.getTableName());
       // TODO: Add support for tables without avro.schema.literal
       throw new UnsupportedOperationException("Reading tables without avro.schema.literal not implemented yet");
-    } else {
-      schema = AvroSchemaUtil.toIceberg(new org.apache.avro.Schema.Parser().parse(schemaStr));
     }
 
-    List<String> partCols = table.getPartitionKeys().stream().map(FieldSchema::getName).collect(Collectors.toList());
-    return addPartitionColumnsIfRequired(schema, partCols);
+    Schema schema = AvroSchemaUtil.toIceberg(new org.apache.avro.Schema.Parser().parse(schemaStr));
+    Types.StructType dataStructType = schema.asStruct();
+    List<Types.NestedField> fields = Lists.newArrayList(dataStructType.fields());
+
+    Schema partitionSchema = partitionSchema(table.getPartitionKeys(), schema);
+    Types.StructType partitionStructType = partitionSchema.asStruct();
+    fields.addAll(partitionStructType.fields());
+    return new Schema(fields);
   }
 
-  private static Schema addPartitionColumnsIfRequired(Schema schema, List<String> partitionColumns) {
-    List<Types.NestedField> fields = new ArrayList<>(schema.columns());
+  private static Schema partitionSchema(List<FieldSchema> partitionKeys, Schema dataSchema) {
     AtomicInteger fieldId = new AtomicInteger(10000);
-    partitionColumns.stream().forEachOrdered(column -> {
-      Types.NestedField field = schema.findField(column);
-      if (field == null) {
-        // TODO: Support partition fields with non-string types
-        fields.add(Types.NestedField.required(fieldId.incrementAndGet(), column, Types.StringType.get()));
-      } else {
-        Preconditions.checkArgument(field.type().equals(Types.StringType.get()),
-            "Tables with non-string partition columns not supported yet");
+    List<Types.NestedField> partitionFields = Lists.newArrayList();
+    partitionKeys.forEach(f -> {
+      Types.NestedField field = dataSchema.findField(f.getName());
+      if (field != null) {
+        throw new IllegalStateException(String.format("Partition field %s also present in data", field.name()));
       }
+      partitionFields.add(
+          Types.NestedField.optional(
+              fieldId.incrementAndGet(), f.getName(), icebergType(f.getType()), f.getComment()));
     });
-    return new Schema(fields);
+    return new Schema(partitionFields);
+  }
+
+  private static Type icebergType(String hiveTypeString) {
+    PrimitiveTypeInfo primitiveTypeInfo = TypeInfoFactory.getPrimitiveTypeInfo(hiveTypeString);
+    return HiveTypeUtil.visit(primitiveTypeInfo, new HiveTypeToIcebergType());
   }
 
   static Map<String, String> getTableProperties(org.apache.hadoop.hive.metastore.api.Table table) {
@@ -87,32 +98,28 @@ class LegacyHiveTableUtils {
 
   static PartitionSpec getPartitionSpec(org.apache.hadoop.hive.metastore.api.Table table, Schema schema) {
     PartitionSpec.Builder builder = PartitionSpec.builderFor(schema);
-
-    table.getPartitionKeys().forEach(fieldSchema -> {
-      // TODO: Support partition fields with non-string types
-      Preconditions.checkArgument(fieldSchema.getType().equals("string"),
-          "Tables with non-string partition columns not supported yet");
-      builder.identity(fieldSchema.getName());
-    });
-
+    table.getPartitionKeys().forEach(fieldSchema -> builder.identity(fieldSchema.getName()));
     return builder.build();
   }
 
   static DirectoryInfo toDirectoryInfo(org.apache.hadoop.hive.metastore.api.Table table) {
     return new DirectoryInfo(table.getSd().getLocation(),
-        serdeToFileFormat(table.getSd().getSerdeInfo().getSerializationLib()), null);
+                             serdeToFileFormat(table.getSd().getSerdeInfo().getSerializationLib()), null);
   }
 
-  static List<DirectoryInfo> toDirectoryInfos(List<Partition> partitions) {
-    return partitions.stream().map(p -> {
-      return new DirectoryInfo(p.getSd().getLocation(),
-          serdeToFileFormat(p.getSd().getSerdeInfo().getSerializationLib()), buildPartitionStructLike(p.getValues()));
-    }).collect(Collectors.toList());
+  static List<DirectoryInfo> toDirectoryInfos(List<Partition> partitions, PartitionSpec spec) {
+    return partitions.stream().map(
+        p -> new DirectoryInfo(
+            p.getSd().getLocation(),
+            serdeToFileFormat(
+                p.getSd().getSerdeInfo().getSerializationLib()),
+            buildPartitionStructLike(p.getValues(), spec))
+    ).collect(Collectors.toList());
   }
 
-  private static StructLike buildPartitionStructLike(List<String> partitionValues) {
+  private static StructLike buildPartitionStructLike(List<String> partitionValues, PartitionSpec spec) {
+    List<Types.NestedField> fields = spec.partitionType().fields();
     return new StructLike() {
-
       @Override
       public int size() {
         return partitionValues.size();
@@ -120,7 +127,10 @@ class LegacyHiveTableUtils {
 
       @Override
       public <T> T get(int pos, Class<T> javaClass) {
-        return javaClass.cast(partitionValues.get(pos));
+        final Object partitionValue = Conversions.fromPartitionString(
+            fields.get(pos).type(),
+            partitionValues.get(pos));
+        return javaClass.cast(partitionValue);
       }
 
       @Override
