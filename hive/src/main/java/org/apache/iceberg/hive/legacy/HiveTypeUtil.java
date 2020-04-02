@@ -26,9 +26,15 @@ import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.iceberg.types.Type;
+
 
 public class HiveTypeUtil {
   private HiveTypeUtil() {
+  }
+
+  public static Type convert(TypeInfo typeInfo) {
+    return HiveTypeUtil.visit(typeInfo, new HiveTypeToIcebergType());
   }
 
   public static <T> T visit(TypeInfo typeInfo, HiveSchemaVisitor<T> visitor) {
