@@ -19,6 +19,7 @@
 
 package org.apache.iceberg.hive.legacy;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import java.util.HashMap;
 import java.util.List;
@@ -28,7 +29,9 @@ import java.util.stream.Collectors;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -51,14 +54,17 @@ class LegacyHiveTableUtils {
   static Schema getSchema(org.apache.hadoop.hive.metastore.api.Table table) {
     Map<String, String> props = getTableProperties(table);
     String schemaStr = props.get("avro.schema.literal");
-    if (schemaStr == null) {
-      LOG.warn("Table {}.{} does not have an avro.schema.literal set; using Hive schema instead. The schema will not" +
-                   " have case sensitivity and nullability information", table.getDbName(), table.getTableName());
-      // TODO: Add support for tables without avro.schema.literal
-      throw new UnsupportedOperationException("Reading tables without avro.schema.literal not implemented yet");
+    Schema schema;
+    if (schemaStr != null) {
+      schema = AvroSchemaUtil.toIceberg(new org.apache.avro.Schema.Parser().parse(schemaStr));
+    } else {
+      //TODO: Do we need to support column and column.types properties for ORC tables?
+      LOG.warn("Table {}.{} does not have an avro.schema.literal set; using Hive schema instead. " +
+                   "The schema will not have case sensitivity and nullability information",
+               table.getDbName(), table.getTableName());
+      Type icebergType = HiveTypeUtil.convert(parseTypeInfo(table.getSd().getCols()));
+      schema = new Schema(icebergType.asNestedType().asStructType().fields());
     }
-
-    Schema schema = AvroSchemaUtil.toIceberg(new org.apache.avro.Schema.Parser().parse(schemaStr));
     Types.StructType dataStructType = schema.asStruct();
     List<Types.NestedField> fields = Lists.newArrayList(dataStructType.fields());
 
@@ -66,6 +72,19 @@ class LegacyHiveTableUtils {
     Types.StructType partitionStructType = partitionSchema.asStruct();
     fields.addAll(partitionStructType.fields());
     return new Schema(fields);
+  }
+
+  private static TypeInfo parseTypeInfo(List<FieldSchema> cols) {
+    Preconditions.checkArgument(cols != null && cols.size() > 0, "No Hive schema present");
+    List<String> fieldNames = cols
+        .stream()
+        .map(FieldSchema::getName)
+        .collect(Collectors.toList());
+    List<TypeInfo> fieldTypeInfos = cols
+        .stream()
+        .map(f -> TypeInfoUtils.getTypeInfoFromTypeString(f.getType()))
+        .collect(Collectors.toList());
+    return TypeInfoFactory.getStructTypeInfo(fieldNames, fieldTypeInfos);
   }
 
   private static Schema partitionSchema(List<FieldSchema> partitionKeys, Schema dataSchema) {
@@ -78,14 +97,14 @@ class LegacyHiveTableUtils {
       }
       partitionFields.add(
           Types.NestedField.optional(
-              fieldId.incrementAndGet(), f.getName(), icebergType(f.getType()), f.getComment()));
+              fieldId.incrementAndGet(), f.getName(), primitiveIcebergType(f.getType()), f.getComment()));
     });
     return new Schema(partitionFields);
   }
 
-  private static Type icebergType(String hiveTypeString) {
+  private static Type primitiveIcebergType(String hiveTypeString) {
     PrimitiveTypeInfo primitiveTypeInfo = TypeInfoFactory.getPrimitiveTypeInfo(hiveTypeString);
-    return HiveTypeUtil.visit(primitiveTypeInfo, new HiveTypeToIcebergType());
+    return HiveTypeUtil.convert(primitiveTypeInfo);
   }
 
   static Map<String, String> getTableProperties(org.apache.hadoop.hive.metastore.api.Table table) {

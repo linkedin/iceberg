@@ -110,6 +110,15 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
   }
 
   @Test
+  public void testHiveScanNoAvroSchema() throws Exception {
+    String tableName = "hive_scan_no_avro_schema";
+    Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS, ORC);
+    addPartition(table, ImmutableList.of("ds", 1), ORC, "A");
+    addPartition(table, ImmutableList.of("ds", 2), ORC, "B");
+    filesMatch(ImmutableMap.of("pcol=ds/pIntCol=2/B", ORC, "pcol=ds/pIntCol=1/A", ORC), hiveScan(table));
+  }
+
+  @Test
   public void testHiveScanMultiPartitionWithFilter() throws Exception {
     String tableName = "multi_partition_with_filter";
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
@@ -152,6 +161,12 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
 
   private static Table createTable(String tableName, List<FieldSchema> columns, List<FieldSchema> partitionColumns)
       throws Exception {
+    return createTable(tableName, columns, partitionColumns, AVRO);
+  }
+
+  private static Table createTable(
+      String tableName, List<FieldSchema> columns, List<FieldSchema> partitionColumns, FileFormat format)
+      throws Exception {
     long currentTimeMillis = System.currentTimeMillis();
     Path tableLocation = dbPath.resolve(tableName);
     Files.createDirectories(tableLocation);
@@ -161,7 +176,7 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
         (int) currentTimeMillis / 1000,
         (int) currentTimeMillis / 1000,
         Integer.MAX_VALUE,
-        storageDescriptor(columns, tableLocation.toString(), AVRO),
+        storageDescriptor(columns, tableLocation.toString(), format),
         partitionColumns,
         new HashMap<>(),
         null,
@@ -182,6 +197,8 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
         storageDescriptor.setOutputFormat("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat");
         storageDescriptor.setInputFormat("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat");
         serDeInfo.setSerializationLib("org.apache.hadoop.hive.serde2.avro.AvroSerDe");
+        storageDescriptor.setParameters(ImmutableMap.of(
+            AvroSerdeUtils.AvroTableProperties.SCHEMA_LITERAL.getPropName(), schemaLiteral(columns)));
         break;
       case ORC:
         storageDescriptor.setOutputFormat("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat");
@@ -192,8 +209,6 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
         throw new UnsupportedOperationException("Unsupported file format: " + format);
     }
     storageDescriptor.setSerdeInfo(serDeInfo);
-    storageDescriptor.setParameters(ImmutableMap.of(
-        AvroSerdeUtils.AvroTableProperties.SCHEMA_LITERAL.getPropName(), schemaLiteral(columns)));
     return storageDescriptor;
   }
 
