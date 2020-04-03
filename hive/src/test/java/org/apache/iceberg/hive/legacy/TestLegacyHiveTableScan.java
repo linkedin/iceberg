@@ -30,7 +30,6 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import org.apache.hadoop.hive.metastore.TableType;
@@ -39,19 +38,18 @@ import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.serde2.avro.AvroSerDe;
 import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.iceberg.AssertHelpers;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveMetastoreTest;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.types.Type;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -213,10 +211,8 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
   }
 
   private static String schemaLiteral(List<FieldSchema> columns) {
-    List<String> columnNames = columns.stream().map(FieldSchema::getName).collect(Collectors.toList());
-    List<TypeInfo> columnTypes = columns.stream().map(c -> TypeInfoUtils.getTypeInfoFromTypeString(c.getType()))
-        .collect(Collectors.toList());
-    return AvroSerDe.getSchemaFromCols(new Properties(), columnNames, columnTypes, null).toString();
+    Type icebergType = HiveTypeUtil.convert(LegacyHiveTableUtils.structTypeInfoFromCols(columns));
+    return AvroSchemaUtil.convert(icebergType).toString();
   }
 
   private static Path location(Table table) {
