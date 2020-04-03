@@ -62,7 +62,7 @@ class LegacyHiveTableUtils {
       LOG.warn("Table {}.{} does not have an avro.schema.literal set; using Hive schema instead. " +
                    "The schema will not have case sensitivity and nullability information",
                table.getDbName(), table.getTableName());
-      Type icebergType = HiveTypeUtil.convert(parseTypeInfo(table.getSd().getCols()));
+      Type icebergType = HiveTypeUtil.convert(structTypeInfoFromCols(table.getSd().getCols()));
       schema = new Schema(icebergType.asNestedType().asStructType().fields());
     }
     Types.StructType dataStructType = schema.asStruct();
@@ -74,7 +74,7 @@ class LegacyHiveTableUtils {
     return new Schema(fields);
   }
 
-  private static TypeInfo parseTypeInfo(List<FieldSchema> cols) {
+  static TypeInfo structTypeInfoFromCols(List<FieldSchema> cols) {
     Preconditions.checkArgument(cols != null && cols.size() > 0, "No Hive schema present");
     List<String> fieldNames = cols
         .stream()
