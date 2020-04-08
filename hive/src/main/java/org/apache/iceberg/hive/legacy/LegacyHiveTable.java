@@ -56,7 +56,7 @@ public class LegacyHiveTable implements Table, HasTableOperations {
   private final TableOperations ops;
   private final String name;
 
-  LegacyHiveTable(TableOperations ops, String name) {
+  protected LegacyHiveTable(TableOperations ops, String name) {
     this.ops = ops;
     this.name = name;
   }
