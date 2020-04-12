@@ -39,6 +39,10 @@ public interface FileScanTask extends ScanTask {
    */
   PartitionSpec spec();
 
+  default RowFilter createRowFilter(FileFormat format) {
+    return RowFilter.DEFAULT;
+  }
+
   /**
    * The starting position of this scan range in the file.
    *

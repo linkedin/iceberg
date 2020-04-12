@@ -28,6 +28,7 @@ import java.util.Set;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataTask;
+import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -186,6 +187,7 @@ class RowDataReader extends BaseDataReader<InternalRow> {
       Schema readSchema) {
     return ORC.read(location)
         .project(readSchema)
+        .rowFilter(task.createRowFilter(FileFormat.ORC))
         .split(task.start(), task.length())
         .createReaderFunc(SparkOrcReader::new)
         .caseSensitive(caseSensitive)

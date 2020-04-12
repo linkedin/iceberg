@@ -181,6 +181,11 @@ public class BaseFileScanTask implements FileScanTask {
     }
 
     @Override
+    public RowFilter createRowFilter(FileFormat format) {
+      return this.fileScanTask.createRowFilter(format);
+    }
+
+    @Override
     public DataFile file() {
       return fileScanTask.file();
     }

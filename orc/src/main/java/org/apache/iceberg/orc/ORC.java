@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.function.Function;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.iceberg.RowFilter;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.hadoop.HadoopInputFile;
@@ -122,7 +123,7 @@ public class ORC {
     private org.apache.iceberg.Schema schema = null;
     private Long start = null;
     private Long length = null;
-
+    private OrcRowFilter rowFilter = OrcRowFilter.DEFAULT;
     private Function<TypeDescription, OrcValueReader<?>> readerFunc;
 
     private ReadBuilder(InputFile file) {
@@ -163,6 +164,11 @@ public class ORC {
       return this;
     }
 
+    public ReadBuilder rowFilter(RowFilter filter) {
+      this.rowFilter = (OrcRowFilter) filter;
+      return this;
+    }
+
     public ReadBuilder createReaderFunc(Function<TypeDescription, OrcValueReader<?>> readerFunction) {
       this.readerFunc = readerFunction;
       return this;
@@ -170,7 +176,7 @@ public class ORC {
 
     public <D> CloseableIterable<D> build() {
       Preconditions.checkNotNull(schema, "Schema is required");
-      return new OrcIterable<>(file, conf, schema, start, length, readerFunc);
+      return new OrcIterable<>(file, conf, schema, start, length, readerFunc, rowFilter);
     }
   }
 

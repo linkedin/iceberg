@@ -41,17 +41,19 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
   private final InputFile file;
   private final Long start;
   private final Long length;
+  private final OrcRowFilter rowFilter;
   private final Function<TypeDescription, OrcValueReader<?>> readerFunction;
 
   OrcIterable(InputFile file, Configuration config, Schema schema,
               Long start, Long length,
-              Function<TypeDescription, OrcValueReader<?>> readerFunction) {
+              Function<TypeDescription, OrcValueReader<?>> readerFunction, OrcRowFilter rowFilter) {
     this.schema = schema;
     this.readerFunction = readerFunction;
     this.file = file;
     this.start = start;
     this.length = length;
     this.config = config;
+    this.rowFilter = rowFilter;
   }
 
   @SuppressWarnings("unchecked")
@@ -59,11 +61,11 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
   public Iterator<T> iterator() {
     Reader orcFileReader = ORC.newFileReader(file, config);
     addCloseable(orcFileReader);
+    addCloseable(rowFilter);
     TypeDescription readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, orcFileReader.getSchema());
-
-    return new OrcIterator(
-        newOrcIterator(file, readOrcSchema, start, length, orcFileReader),
-        readerFunction.apply(readOrcSchema));
+    TypeDescription rowFilterSchema = rowFilter.expandSchema(readOrcSchema);
+    return new OrcIterator(newOrcIterator(file, rowFilterSchema, start, length, orcFileReader),
+        readerFunction.apply(readOrcSchema), rowFilter);
   }
 
   private static VectorizedRowBatchIterator newOrcIterator(InputFile file,
@@ -87,31 +89,49 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
 
     private int nextRow;
     private VectorizedRowBatch current;
-
     private final VectorizedRowBatchIterator batchIter;
     private final OrcValueReader<T> reader;
+    private T rowObj = null;
+    private OrcRowFilter rowFilter;
+    private OrcRow orcRow;
 
-    OrcIterator(VectorizedRowBatchIterator batchIter, OrcValueReader<T> reader) {
+    OrcIterator(VectorizedRowBatchIterator batchIter, OrcValueReader<T> reader, OrcRowFilter rowFilter) {
       this.batchIter = batchIter;
       this.reader = reader;
-      current = null;
-      nextRow = 0;
+      this.current = null;
+      this.nextRow = 0;
+      this.rowFilter = rowFilter;
+      this.orcRow = new OrcRow();
     }
 
     @Override
     public boolean hasNext() {
-      return (current != null && nextRow < current.size) || batchIter.hasNext();
+      while (rowObj == null) {
+        if (current == null || nextRow >= current.size) {
+          if (!batchIter.hasNext()) {
+            break;
+          }
+          current = batchIter.next();
+          nextRow = 0;
+        }
+
+        // read opal specific columns
+        orcRow.batch = current;
+        orcRow.row = nextRow;
+        if (rowFilter.accept(orcRow)) {
+          rowObj = this.reader.read(current, nextRow);
+        }
+        nextRow++;
+      }
+      return rowObj != null;
     }
 
     @Override
     public T next() {
-      if (current == null || nextRow >= current.size) {
-        current = batchIter.next();
-        nextRow = 0;
-      }
-
-      return this.reader.read(current, nextRow++);
+      hasNext();
+      T tmp = rowObj;
+      rowObj = null;
+      return tmp;
     }
   }
-
 }
