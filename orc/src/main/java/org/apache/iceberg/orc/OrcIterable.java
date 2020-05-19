@@ -19,8 +19,10 @@
 
 package org.apache.iceberg.orc;
 
+import com.google.common.collect.Sets;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.function.Function;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Schema;
@@ -28,6 +30,7 @@ import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.io.CloseableGroup;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.types.TypeUtil;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
@@ -42,16 +45,17 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
   private final Long start;
   private final Long length;
   private final Function<TypeDescription, OrcValueReader<?>> readerFunction;
+  private final OrcRowFilter rowFilter;
 
-  OrcIterable(InputFile file, Configuration config, Schema schema,
-              Long start, Long length,
-              Function<TypeDescription, OrcValueReader<?>> readerFunction) {
+  OrcIterable(InputFile file, Configuration config, Schema schema, Long start, Long length,
+      Function<TypeDescription, OrcValueReader<?>> readerFunction, OrcRowFilter rowFilter) {
     this.schema = schema;
     this.readerFunction = readerFunction;
     this.file = file;
     this.start = start;
     this.length = length;
     this.config = config;
+    this.rowFilter = rowFilter;
   }
 
   @SuppressWarnings("unchecked")
@@ -60,10 +64,25 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     Reader orcFileReader = ORC.newFileReader(file, config);
     addCloseable(orcFileReader);
     TypeDescription readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, orcFileReader.getSchema());
+    if (rowFilter == null) {
+      return new OrcIterator(
+          newOrcIterator(file, readOrcSchema, start, length, orcFileReader),
+          readerFunction.apply(readOrcSchema), null, null);
+    } else {
+      Set<Integer> filterColumnIds = TypeUtil.getProjectedIds(rowFilter.requiredSchema());
+      Set<Integer> filterColumnIdsNotInReadSchema = Sets.difference(filterColumnIds, TypeUtil.getProjectedIds(schema));
+      Schema extraFilterColumns = TypeUtil.select(rowFilter.requiredSchema(), filterColumnIdsNotInReadSchema);
+      Schema finalReadSchema = TypeUtil.join(schema, extraFilterColumns);
 
-    return new OrcIterator(
-        newOrcIterator(file, readOrcSchema, start, length, orcFileReader),
-        readerFunction.apply(readOrcSchema));
+      TypeDescription finalReadOrcSchema = ORCSchemaUtil.buildOrcProjection(finalReadSchema, orcFileReader.getSchema());
+      TypeDescription rowFilterOrcSchema = ORCSchemaUtil.buildOrcProjection(rowFilter.requiredSchema(),
+          orcFileReader.getSchema());
+      RowFilterValueReader filterReader = new RowFilterValueReader(finalReadOrcSchema, rowFilterOrcSchema);
+
+      return new OrcIterator(
+          newOrcIterator(file, finalReadOrcSchema, start, length, orcFileReader),
+          readerFunction.apply(readOrcSchema), rowFilter, filterReader);
+    }
   }
 
   private static VectorizedRowBatchIterator newOrcIterator(InputFile file,
@@ -85,32 +104,62 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
 
   private static class OrcIterator<T> implements Iterator<T> {
 
-    private int nextRow;
-    private VectorizedRowBatch current;
+    private int currentRow;
+    private VectorizedRowBatch currentBatch;
+    private boolean advanced = false;
 
     private final VectorizedRowBatchIterator batchIter;
     private final OrcValueReader<T> reader;
+    private final OrcRowFilter filter;
+    private final RowFilterValueReader filterReader;
 
-    OrcIterator(VectorizedRowBatchIterator batchIter, OrcValueReader<T> reader) {
+    OrcIterator(VectorizedRowBatchIterator batchIter, OrcValueReader<T> reader, OrcRowFilter filter,
+        RowFilterValueReader filterReader) {
       this.batchIter = batchIter;
       this.reader = reader;
-      current = null;
-      nextRow = 0;
+      this.filter = filter;
+      this.filterReader = filterReader;
+      currentBatch = null;
+      currentRow = 0;
+    }
+
+    private void advance() {
+      if (!advanced) {
+        while (true) {
+          currentRow++;
+          // if batch has been consumed, move to next batch
+          if (currentBatch == null || currentRow >= currentBatch.size) {
+            if (batchIter.hasNext()) {
+              currentBatch = batchIter.next();
+              currentRow = 0;
+            } else {
+              // no more batches left to process
+              currentBatch = null;
+              currentRow = -1;
+              break;
+            }
+          }
+          if (filter == null || filter.shouldKeep(filterReader.read(currentBatch, currentRow))) {
+            // we have found our row
+            break;
+          }
+        }
+        advanced = true;
+      }
     }
 
     @Override
     public boolean hasNext() {
-      return (current != null && nextRow < current.size) || batchIter.hasNext();
+      advance();
+      return currentBatch != null;
     }
 
     @Override
     public T next() {
-      if (current == null || nextRow >= current.size) {
-        current = batchIter.next();
-        nextRow = 0;
-      }
-
-      return this.reader.read(current, nextRow++);
+      advance();
+      // mark current row as used
+      advanced = false;
+      return this.reader.read(currentBatch, currentRow);
     }
   }
 

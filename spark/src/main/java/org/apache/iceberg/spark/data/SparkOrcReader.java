@@ -76,7 +76,7 @@ public class SparkOrcReader implements OrcValueReader<InternalRow> {
   public InternalRow read(VectorizedRowBatch batch, int row) {
     rowWriter.reset();
     rowWriter.zeroOutNullBytes();
-    for (int c = 0; c < batch.cols.length; ++c) {
+    for (int c = 0; c < converters.length; ++c) {
       converters[c].convert(rowWriter, c, batch.cols[c], row);
     }
     return rowWriter.getRow();

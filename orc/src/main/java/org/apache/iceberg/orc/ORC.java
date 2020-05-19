@@ -122,6 +122,7 @@ public class ORC {
     private org.apache.iceberg.Schema schema = null;
     private Long start = null;
     private Long length = null;
+    private OrcRowFilter rowFilter = null;
 
     private Function<TypeDescription, OrcValueReader<?>> readerFunc;
 
@@ -168,9 +169,14 @@ public class ORC {
       return this;
     }
 
+    public ReadBuilder rowFilter(OrcRowFilter newRowFilter) {
+      this.rowFilter = newRowFilter;
+      return this;
+    }
+
     public <D> CloseableIterable<D> build() {
       Preconditions.checkNotNull(schema, "Schema is required");
-      return new OrcIterable<>(file, conf, schema, start, length, readerFunc);
+      return new OrcIterable<>(file, conf, schema, start, length, readerFunc, rowFilter);
     }
   }
 

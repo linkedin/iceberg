@@ -89,7 +89,7 @@ public class GenericOrcReader implements OrcValueReader<Record> {
   @Override
   public Record read(VectorizedRowBatch batch, int row) {
     Record rowRecord = GenericRecord.create(schema);
-    for (int c = 0; c < batch.cols.length; ++c) {
+    for (int c = 0; c < converters.length; ++c) {
       rowRecord.set(c, converters[c].convert(batch.cols[c], row));
     }
     return rowRecord;
