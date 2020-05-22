@@ -42,6 +42,7 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.mapping.NameMapping;
 import org.apache.iceberg.mapping.NameMappingParser;
+import org.apache.iceberg.orc.OrcRowFilterUtils;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.Spark3Util;
 import org.apache.iceberg.spark.SparkSchemaUtil;
@@ -164,6 +165,12 @@ class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
                 .allMatch(fileScanTask -> fileScanTask.file().format().equals(
                     FileFormat.ORC)));
 
+    boolean hasNoRowFilters =
+        tasks().stream()
+            .allMatch(combinedScanTask -> !combinedScanTask.isDataTask() && combinedScanTask.files()
+                .stream()
+                .allMatch(fileScanTask -> OrcRowFilterUtils.rowFilterFromTask(fileScanTask) == null));
+
     boolean atLeastOneColumn = expectedSchema.columns().size() > 0;
 
     boolean hasNoIdentityProjections = tasks().stream()
@@ -173,7 +180,7 @@ class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
 
     boolean onlyPrimitives = expectedSchema.columns().stream().allMatch(c -> c.type().isPrimitiveType());
 
-    boolean readUsingBatch = batchReadsEnabled && (allOrcFileScanTasks ||
+    boolean readUsingBatch = batchReadsEnabled && ((allOrcFileScanTasks && hasNoRowFilters) ||
         (allParquetFileScanTasks && atLeastOneColumn && hasNoIdentityProjections && onlyPrimitives));
 
     return new ReaderFactory(readUsingBatch ? batchSize : 0);
