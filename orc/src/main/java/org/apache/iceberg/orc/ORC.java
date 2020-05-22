@@ -125,6 +125,7 @@ public class ORC {
     private Long length = null;
     private Expression filter = null;
     private boolean caseSensitive = true;
+    private OrcRowFilter rowFilter = null;
 
     private Function<TypeDescription, OrcRowReader<?>> readerFunc;
 
@@ -177,9 +178,14 @@ public class ORC {
       return this;
     }
 
+    public ReadBuilder rowFilter(OrcRowFilter newRowFilter) {
+      this.rowFilter = newRowFilter;
+      return this;
+    }
+
     public <D> CloseableIterable<D> build() {
       Preconditions.checkNotNull(schema, "Schema is required");
-      return new OrcIterable<>(file, conf, schema, start, length, readerFunc, caseSensitive, filter);
+      return new OrcIterable<>(file, conf, schema, start, length, readerFunc, caseSensitive, filter, rowFilter);
     }
   }
 
