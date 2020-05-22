@@ -26,9 +26,11 @@ import java.util.Map;
 import java.util.Set;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.util.Utf8;
+import org.apache.iceberg.BaseFileScanTask;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataTask;
+import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -40,6 +42,8 @@ import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.orc.ORC;
+import org.apache.iceberg.orc.OrcRowFilter;
+import org.apache.iceberg.orc.OrcRowFilterableFileScanTask;
 import org.apache.iceberg.parquet.Parquet;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
@@ -165,12 +169,18 @@ class RowDataReader extends BaseDataReader<InternalRow> {
       FileScanTask task,
       Schema readSchema,
       Map<Integer, ?> idToConstant) {
+    OrcRowFilter orcRowFilter = getOrcRowFilter(task);
+    if (orcRowFilter != null) {
+      validateRowFilterRequirements(task, orcRowFilter);
+    }
+
     return ORC.read(location)
         .project(readSchema)
         .split(task.start(), task.length())
         .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema, idToConstant))
         .filter(task.residual())
         .caseSensitive(caseSensitive)
+        .rowFilter(orcRowFilter)
         .build();
   }
 
@@ -230,5 +240,30 @@ class RowDataReader extends BaseDataReader<InternalRow> {
       default:
     }
     return value;
+  }
+
+  private OrcRowFilter getOrcRowFilter(FileScanTask task) {
+    FileScanTask fileScanTask;
+    if (task instanceof BaseFileScanTask.SplitScanTask) {
+      fileScanTask = ((BaseFileScanTask.SplitScanTask) task).underlyingFileScanTask();
+    } else {
+      fileScanTask = task;
+    }
+    if (fileScanTask instanceof OrcRowFilterableFileScanTask) {
+      return ((OrcRowFilterableFileScanTask) fileScanTask).orcRowFilter();
+    }
+    return null;
+  }
+
+  private void validateRowFilterRequirements(FileScanTask task, OrcRowFilter filter) {
+    Preconditions.checkArgument(task.file().format() == FileFormat.ORC, "Row filter can only be applied to ORC files");
+    Preconditions.checkArgument(task.spec().fields().size() == 0,
+        "Row filter can only be applied to unpartitioned tables");
+    for (Types.NestedField column : filter.requiredSchema().columns()) {
+      Preconditions.checkArgument(tableSchema.findField(column.name()) != null,
+          "Row filter can only be applied to top level fields. %s is not a top level field", column.name());
+      Preconditions.checkArgument(column.type().isPrimitiveType(),
+          "Row filter can only be applied to primitive fields. %s is of type %s", column.name(), column.type());
+    }
   }
 }

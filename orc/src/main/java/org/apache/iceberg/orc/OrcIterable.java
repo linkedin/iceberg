@@ -19,8 +19,10 @@
 
 package org.apache.iceberg.orc;
 
+import com.google.common.collect.Sets;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.function.Function;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Schema;
@@ -32,6 +34,7 @@ import org.apache.iceberg.io.CloseableGroup;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.types.TypeUtil;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
@@ -49,10 +52,12 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
   private final Function<TypeDescription, OrcRowReader<?>> readerFunction;
   private final Expression filter;
   private final boolean caseSensitive;
+  private final OrcRowFilter rowFilter;
 
   OrcIterable(InputFile file, Configuration config, Schema schema,
               Long start, Long length,
-              Function<TypeDescription, OrcRowReader<?>> readerFunction, boolean caseSensitive, Expression filter) {
+              Function<TypeDescription, OrcRowReader<?>> readerFunction, boolean caseSensitive, Expression filter,
+              OrcRowFilter rowFilter) {
     this.schema = schema;
     this.readerFunction = readerFunction;
     this.file = file;
@@ -61,6 +66,7 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     this.config = config;
     this.caseSensitive = caseSensitive;
     this.filter = (filter == Expressions.alwaysTrue()) ? null : filter;
+    this.rowFilter = rowFilter;
   }
 
   @SuppressWarnings("unchecked")
@@ -75,9 +81,28 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
       Expression boundFilter = Binder.bind(schema.asStruct(), filter, caseSensitive);
       sarg = ExpressionToSearchArgument.convert(boundFilter, readOrcSchema);
     }
-    Iterator<T> iterator = new OrcIterator(
-        newOrcIterator(file, readOrcSchema, start, length, orcFileReader, sarg),
-        readerFunction.apply(readOrcSchema));
+
+    Iterator<T> iterator;
+    if (rowFilter == null) {
+      iterator = new OrcIterator(
+          newOrcIterator(file, readOrcSchema, start, length, orcFileReader, sarg),
+          readerFunction.apply(readOrcSchema), null, null);
+    } else {
+      Set<Integer> filterColumnIds = TypeUtil.getProjectedIds(rowFilter.requiredSchema());
+      Set<Integer> filterColumnIdsNotInReadSchema = Sets.difference(filterColumnIds, TypeUtil.getProjectedIds(schema));
+      Schema extraFilterColumns = TypeUtil.select(rowFilter.requiredSchema(), filterColumnIdsNotInReadSchema);
+      Schema finalReadSchema = TypeUtil.join(schema, extraFilterColumns);
+
+      TypeDescription finalReadOrcSchema = ORCSchemaUtil.buildOrcProjection(finalReadSchema, orcFileReader.getSchema());
+      TypeDescription rowFilterOrcSchema = ORCSchemaUtil.buildOrcProjection(rowFilter.requiredSchema(),
+          orcFileReader.getSchema());
+      RowFilterValueReader filterReader = new RowFilterValueReader(finalReadOrcSchema, rowFilterOrcSchema);
+
+      iterator = new OrcIterator(
+          newOrcIterator(file, finalReadOrcSchema, start, length, orcFileReader, sarg),
+          readerFunction.apply(readOrcSchema), rowFilter, filterReader);
+    }
+
     return CloseableIterator.withClose(iterator);
   }
 
@@ -101,32 +126,62 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
 
   private static class OrcIterator<T> implements Iterator<T> {
 
-    private int nextRow;
-    private VectorizedRowBatch current;
+    private int currentRow;
+    private VectorizedRowBatch currentBatch;
+    private boolean advanced = false;
 
     private final VectorizedRowBatchIterator batchIter;
     private final OrcRowReader<T> reader;
+    private final OrcRowFilter filter;
+    private final RowFilterValueReader filterReader;
 
-    OrcIterator(VectorizedRowBatchIterator batchIter, OrcRowReader<T> reader) {
+    OrcIterator(VectorizedRowBatchIterator batchIter, OrcRowReader<T> reader, OrcRowFilter filter,
+        RowFilterValueReader filterReader) {
       this.batchIter = batchIter;
       this.reader = reader;
-      current = null;
-      nextRow = 0;
+      this.filter = filter;
+      this.filterReader = filterReader;
+      currentBatch = null;
+      currentRow = 0;
+    }
+
+    private void advance() {
+      if (!advanced) {
+        while (true) {
+          currentRow++;
+          // if batch has been consumed, move to next batch
+          if (currentBatch == null || currentRow >= currentBatch.size) {
+            if (batchIter.hasNext()) {
+              currentBatch = batchIter.next();
+              currentRow = 0;
+            } else {
+              // no more batches left to process
+              currentBatch = null;
+              currentRow = -1;
+              break;
+            }
+          }
+          if (filter == null || filter.shouldKeep(filterReader.read(currentBatch, currentRow))) {
+            // we have found our row
+            break;
+          }
+        }
+        advanced = true;
+      }
     }
 
     @Override
     public boolean hasNext() {
-      return (current != null && nextRow < current.size) || batchIter.hasNext();
+      advance();
+      return currentBatch != null;
     }
 
     @Override
     public T next() {
-      if (current == null || nextRow >= current.size) {
-        current = batchIter.next();
-        nextRow = 0;
-      }
-
-      return this.reader.read(current, nextRow++);
+      advance();
+      // mark current row as used
+      advanced = false;
+      return this.reader.read(currentBatch, currentRow);
     }
   }
 
