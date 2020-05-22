@@ -232,5 +232,9 @@ public class BaseFileScanTask implements FileScanTask {
       SplitScanTask that = (SplitScanTask) other;
       return new SplitScanTask(offset, len + that.length(), fileScanTask);
     }
+
+    public FileScanTask underlyingFileScanTask() {
+      return fileScanTask;
+    }
   }
 }
