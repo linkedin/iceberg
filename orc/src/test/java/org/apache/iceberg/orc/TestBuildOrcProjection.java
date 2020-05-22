@@ -25,6 +25,7 @@ import org.apache.orc.TypeDescription;
 import org.junit.Test;
 
 import static org.apache.iceberg.types.Types.NestedField.optional;
+import static org.apache.iceberg.types.Types.NestedField.required;
 import static org.junit.Assert.assertEquals;
 
 /**
@@ -127,4 +128,26 @@ public class TestBuildOrcProjection {
     assertEquals(TypeDescription.Category.STRING, nestedCol.findSubtype("b").getCategory());
   }
 
+  @Test
+  public void testEvolutionNestedField() {
+    Schema baseSchema = new Schema(
+        required(1, "int", Types.IntegerType.get())
+    );
+
+    Schema evolvedSchema = new Schema(
+        required(1, "int", Types.IntegerType.get()),
+        optional(2, "struct", Types.StructType.of(
+            required(3, "long", Types.LongType.get())
+        ))
+    );
+
+    TypeDescription newOrcSchema = ORCSchemaUtil.buildOrcProjection(evolvedSchema, ORCSchemaUtil.convert(baseSchema));
+    assertEquals(2, newOrcSchema.getChildren().size());
+    assertEquals(TypeDescription.Category.INT, newOrcSchema.findSubtype("int").getCategory());
+    assertEquals(1, newOrcSchema.findSubtype("int").getId());
+    assertEquals(TypeDescription.Category.STRUCT, newOrcSchema.findSubtype("struct_r2").getCategory());
+    TypeDescription nestedCol = newOrcSchema.findSubtype("struct_r2");
+    assertEquals(3, nestedCol.findSubtype("long_r3").getId());
+    assertEquals(TypeDescription.Category.LONG, nestedCol.findSubtype("long_r3").getCategory());
+  }
 }

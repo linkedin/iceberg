@@ -331,11 +331,14 @@ public final class ORCSchemaUtil {
             orcType = originalType.clone();
           }
         } else {
-          if (isRequired) {
-            throw new IllegalArgumentException(
-                String.format("Field %d of type %s is required and was not found.", fieldId, type.toString()));
-          }
-
+          // HACK: Disable the isRequired check to work around https://github.com/apache/incubator-iceberg/issues/961
+          // What we lose is a check; the file may not have the required column and so theoretically we may get null
+          // values for that column instead of failing. In reality though, if backward compatibility rules are followed,
+          // a new required field should never be added.
+          // if (isRequired) {
+          //   throw new IllegalArgumentException(
+          //       String.format("Field %d of type %s is required and was not found.", fieldId, type.toString()));
+          // }
           orcType = convert(fieldId, type, false);
         }
     }
