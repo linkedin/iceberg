@@ -382,7 +382,7 @@ public final class ORCSchemaUtil {
     }
   }
 
-  private static Optional<Integer> icebergID(TypeDescription orcType) {
+  static Optional<Integer> icebergID(TypeDescription orcType) {
     return Optional.ofNullable(orcType.getAttributeValue(ICEBERG_ID_ATTRIBUTE))
         .map(Integer::parseInt);
   }
