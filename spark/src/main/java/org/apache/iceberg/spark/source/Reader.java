@@ -44,6 +44,7 @@ import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hadoop.Util;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.mapping.NameMapping;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
@@ -71,6 +72,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scala.Option;
 
+
+import static org.apache.iceberg.TableProperties.DEFAULT_NAME_MAPPING;
 
 class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPushDownFilters,
     SupportsPushDownRequiredColumns, SupportsReportStatistics {
@@ -204,12 +207,13 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
     Preconditions.checkState(batchSize > 0, "Invalid batch size");
     String tableSchemaString = SchemaParser.toJson(table.schema());
     String expectedSchemaString = SchemaParser.toJson(lazySchema());
+    String nameMappingString = table.properties().get(DEFAULT_NAME_MAPPING);
 
     List<InputPartition<ColumnarBatch>> readTasks = Lists.newArrayList();
     for (CombinedScanTask task : tasks()) {
       readTasks.add(new ReadTask<>(
-          task, tableSchemaString, expectedSchemaString, io, encryptionManager, caseSensitive, localityPreferred,
-          new BatchReaderFactory(batchSize)));
+          task, tableSchemaString, expectedSchemaString, nameMappingString, io, encryptionManager, caseSensitive,
+          localityPreferred, new BatchReaderFactory(batchSize)));
     }
     LOG.info("Batching input partitions with {} tasks.", readTasks.size());
 
@@ -223,12 +227,13 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
   public List<InputPartition<InternalRow>> planInputPartitions() {
     String tableSchemaString = SchemaParser.toJson(table.schema());
     String expectedSchemaString = SchemaParser.toJson(lazySchema());
+    String nameMappingString = table.properties().get(DEFAULT_NAME_MAPPING);
 
     List<InputPartition<InternalRow>> readTasks = Lists.newArrayList();
     for (CombinedScanTask task : tasks()) {
       readTasks.add(new ReadTask<>(
-          task, tableSchemaString, expectedSchemaString, io, encryptionManager, caseSensitive, localityPreferred,
-          InternalRowReaderFactory.INSTANCE));
+          task, tableSchemaString, expectedSchemaString, nameMappingString, io, encryptionManager, caseSensitive,
+          localityPreferred, InternalRowReaderFactory.INSTANCE));
     }
 
     return readTasks;
@@ -384,6 +389,7 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
     private final CombinedScanTask task;
     private final String tableSchemaString;
     private final String expectedSchemaString;
+    private final String nameMappingString;
     private final Broadcast<FileIO> io;
     private final Broadcast<EncryptionManager> encryptionManager;
     private final boolean caseSensitive;
@@ -392,10 +398,11 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
     private transient Schema tableSchema = null;
     private transient Schema expectedSchema = null;
+    private transient NameMapping nameMapping = null;
     private transient String[] preferredLocations;
 
     private ReadTask(CombinedScanTask task, String tableSchemaString, String expectedSchemaString,
-                     Broadcast<FileIO> io, Broadcast<EncryptionManager> encryptionManager,
+                     String nameMappingString, Broadcast<FileIO> io, Broadcast<EncryptionManager> encryptionManager,
                      boolean caseSensitive, boolean localityPreferred, ReaderFactory<T> readerFactory) {
       this.task = task;
       this.tableSchemaString = tableSchemaString;
@@ -406,11 +413,12 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
       this.localityPreferred = localityPreferred;
       this.preferredLocations = getPreferredLocations();
       this.readerFactory = readerFactory;
+      this.nameMappingString = nameMappingString;
     }
 
     @Override
     public InputPartitionReader<T> createPartitionReader() {
-      return readerFactory.create(task, lazyTableSchema(), lazyExpectedSchema(), io.value(),
+      return readerFactory.create(task, lazyTableSchema(), lazyExpectedSchema(), nameMappingString, io.value(),
           encryptionManager.value(), caseSensitive);
     }
 
@@ -444,7 +452,8 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
   }
 
   private interface ReaderFactory<T> extends Serializable {
-    InputPartitionReader<T> create(CombinedScanTask task, Schema tableSchema, Schema expectedSchema, FileIO io,
+    InputPartitionReader<T> create(CombinedScanTask task, Schema tableSchema, Schema expectedSchema,
+                                   String nameMapping, FileIO io,
                                    EncryptionManager encryptionManager, boolean caseSensitive);
   }
 
@@ -456,9 +465,9 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
     @Override
     public InputPartitionReader<InternalRow> create(CombinedScanTask task, Schema tableSchema, Schema expectedSchema,
-                                                    FileIO io, EncryptionManager encryptionManager,
-                                                    boolean caseSensitive) {
-      return new RowDataReader(task, tableSchema, expectedSchema, io, encryptionManager, caseSensitive);
+                                                    String nameMapping, FileIO io,
+                                                    EncryptionManager encryptionManager, boolean caseSensitive) {
+      return new RowDataReader(task, tableSchema, expectedSchema, nameMapping, io, encryptionManager, caseSensitive);
     }
   }
 
@@ -471,9 +480,9 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
     @Override
     public InputPartitionReader<ColumnarBatch> create(CombinedScanTask task, Schema tableSchema, Schema expectedSchema,
-                                                    FileIO io, EncryptionManager encryptionManager,
-                                                    boolean caseSensitive) {
-      return new BatchDataReader(task, expectedSchema, io, encryptionManager, caseSensitive, batchSize);
+                                                      String nameMapping, FileIO io,
+                                                      EncryptionManager encryptionManager, boolean caseSensitive) {
+      return new BatchDataReader(task, expectedSchema, nameMapping, io, encryptionManager, caseSensitive, batchSize);
     }
   }
 
