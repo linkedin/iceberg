@@ -48,9 +48,23 @@ allprojects {
   group = "org.apache.iceberg"
   version = getProjectVersion()
   repositories {
-    maven { url  "http://palantir.bintray.com/releases" }
-    mavenCentral()
-    mavenLocal()
+    mavenLocal() {
+      content {
+        includeGroup("org.apache.hive")
+      }
+    }
+
+    maven {
+      url  "http://palantir.bintray.com/releases"
+      content {
+        excludeGroup("org.apache.hive")
+      }
+    }
+    mavenCentral() {
+      content {
+        excludeGroup("org.apache.hive")
+      }
+    }
   }
 }
 
@@ -231,6 +245,9 @@ project(':iceberg-hive') {
       exclude group: 'com.tdunning', module: 'json'
       exclude group: 'javax.transaction', module: 'transaction-api'
       exclude group: 'com.zaxxer', module: 'HikariCP'
+      exclude group: 'org.pentaho'
+      //exclude group: 'org.apache.calcite'
+      exclude group: 'org.apache.calcite.avatica'
     }
 
     // By default, hive-exec is a fat/uber jar and it exports a guava library
@@ -247,6 +264,9 @@ project(':iceberg-hive') {
       exclude group: 'org.apache.calcite'
       exclude group: 'org.apache.calcite.avatica'
       exclude group: 'com.google.code.findbugs', module: 'jsr305'
+      exclude group: 'org.pentaho'
+      //exclude group: 'org.apache.calcite'
+      exclude group: 'org.apache.calcite.avatica'
     }
 
     testCompile("org.apache.hive:hive-metastore") {
@@ -263,6 +283,9 @@ project(':iceberg-hive') {
       exclude group: 'com.tdunning', module: 'json'
       exclude group: 'javax.transaction', module: 'transaction-api'
       exclude group: 'com.zaxxer', module: 'HikariCP'
+      exclude group: 'org.pentaho'
+      //exclude group: 'org.apache.calcite'
+      exclude group: 'org.apache.calcite.avatica'
     }
 
     compileOnly("org.apache.hadoop:hadoop-client") {
@@ -271,6 +294,12 @@ project(':iceberg-hive') {
     }
 
     testCompile project(path: ':iceberg-api', configuration: 'testArtifacts')
+    testCompile ("com.klarna:hiverunner") {
+      exclude group: 'org.apache.avro', module: 'avro'
+      exclude group: 'org.pentaho'
+      exclude group: 'org.apache.calcite.avatica'
+      exclude group: 'junit'
+    }
   }
 }
 
