@@ -64,6 +64,10 @@ class RowFilterValueReader implements OrcRowReader<Object[]> {
     return rowFields;
   }
 
+  @Override
+  public void setBatchContext(long batchOffsetInFile) {
+  }
+
   interface Converter<T> {
     default T convert(ColumnVector vector, int row) {
       int rowIndex = vector.isRepeating ? 0 : row;

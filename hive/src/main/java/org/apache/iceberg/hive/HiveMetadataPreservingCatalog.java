@@ -40,6 +40,7 @@ public class HiveMetadataPreservingCatalog extends HiveCatalog {
   public TableOperations newTableOps(TableIdentifier tableIdentifier) {
     String dbName = tableIdentifier.namespace().level(0);
     String tableName = tableIdentifier.name();
-    return new HiveMetadataPreservingTableOperations(conf(), clientPool(), dbName, tableName);
+    return new HiveMetadataPreservingTableOperations(
+        conf(), clientPool(), this.getClass().getSimpleName(), dbName, tableName);
   }
 }

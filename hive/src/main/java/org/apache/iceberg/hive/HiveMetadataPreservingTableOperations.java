@@ -62,9 +62,9 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
           String.class, String.class, Table.class, EnvironmentContext.class)
       .build();
 
-  protected HiveMetadataPreservingTableOperations(Configuration conf, HiveClientPool metaClients, String database,
-      String table) {
-    super(conf, metaClients, database, table);
+  protected HiveMetadataPreservingTableOperations(Configuration conf, HiveClientPool metaClients, String catalog,
+      String database, String table) {
+    super(conf, metaClients, catalog, database, table);
     this.metaClients = metaClients;
     this.database = database;
     this.tableName = table;
