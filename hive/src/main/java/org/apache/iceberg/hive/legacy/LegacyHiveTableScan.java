@@ -32,12 +32,16 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.TableScanContext;
+import org.apache.iceberg.events.Listeners;
+import org.apache.iceberg.events.ScanEvent;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
 import org.apache.iceberg.util.ParallelIterable;
 import org.apache.iceberg.util.ThreadPools;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -45,6 +49,7 @@ import org.apache.iceberg.util.ThreadPools;
  * This scan does not provide any time travel, snapshot isolation, incremental computation benefits.
  */
 public class LegacyHiveTableScan extends DataTableScan {
+  private static final Logger LOG = LoggerFactory.getLogger(LegacyHiveTableScan.class);
 
   protected LegacyHiveTableScan(TableOperations ops, Table table) {
     super(ops, table);
@@ -62,6 +67,11 @@ public class LegacyHiveTableScan extends DataTableScan {
 
   @Override
   public CloseableIterable<FileScanTask> planFiles() {
+    LOG.info("Scanning table {} with filter {}", table().toString(), filter());
+
+    Listeners.notifyAll(
+        new ScanEvent(table().toString(), -1, filter(), schema()));
+
     LegacyHiveTableOperations hiveOps = (LegacyHiveTableOperations) tableOps();
     PartitionSpec spec = hiveOps.current().spec();
     String schemaString = SchemaParser.toJson(spec.schema());
