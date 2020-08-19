@@ -135,7 +135,7 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
     if (io.getValue() instanceof HadoopFileIO) {
       String scheme = "no_exist";
       try {
-        Configuration conf = new Configuration(activeSparkSession().sparkContext().hadoopConfiguration());
+        Configuration conf = new Configuration(activeSparkSession().sessionState().newHadoopConf());
         // merge hadoop config set on table
         mergeIcebergHadoopConfs(conf, table.properties());
         // merge hadoop config passed as options and overwrite the one on table
