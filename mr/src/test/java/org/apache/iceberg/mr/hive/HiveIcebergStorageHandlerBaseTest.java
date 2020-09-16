@@ -121,6 +121,12 @@ public abstract class HiveIcebergStorageHandlerBaseTest {
   }
 
   @Test
+  public void testScanEmptyTableScan() throws IOException {
+    createTable("customers", CUSTOMER_SCHEMA, CUSTOMER_RECORDS);
+    List<Object[]> rows = shell.executeStatement("SELECT * FROM default.customers where customer_id=123L");
+    Assert.assertEquals(0, rows.size());
+  }
+  @Test
   public void testScanTable() throws IOException {
     createTable("customers", CUSTOMER_SCHEMA, CUSTOMER_RECORDS);
 

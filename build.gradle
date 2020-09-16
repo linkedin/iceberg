@@ -364,6 +364,19 @@ project(':iceberg-hive-metastore') {
 }
 
 project(':iceberg-mr') {
+
+
+  repositories {
+    ivy {
+      url 'http://artifactory.corp.linkedin.com:8081/artifactory/release'
+      layout 'pattern', {
+        ivy '[organisation]/[module]/[revision]/[module]-[revision].ivy'
+        artifact '[organisation]/[module]/[revision]/[artifact]-[revision](-[classifier]).[ext]'
+        m2compatible = true
+      }
+    }
+  }
+
   configurations {
     testCompile {
       exclude group: 'org.apache.parquet', module: 'parquet-hadoop-bundle'
@@ -381,8 +394,7 @@ project(':iceberg-mr') {
     compileOnly("org.apache.hadoop:hadoop-client") {
       exclude group: 'org.apache.avro', module: 'avro'
     }
-
-    compileOnly("org.apache.hive:hive-exec::core") {
+    compileOnly(group: 'com.linkedin.hive', name: 'hive-exec', version: '1.1.0.200', classifier: 'core') {
       exclude group: 'com.google.code.findbugs', module: 'jsr305'
       exclude group: 'com.google.guava'
       exclude group: 'com.google.protobuf', module: 'protobuf-java'
@@ -393,8 +405,18 @@ project(':iceberg-mr') {
       exclude group: 'org.pentaho' // missing dependency
       exclude group: 'org.slf4j', module: 'slf4j-log4j12'
     }
-    compileOnly("org.apache.hive:hive-metastore")
-    compileOnly("org.apache.hive:hive-serde")
+    compileOnly(group: 'com.linkedin.hive', name: 'hive-service', version: '1.1.0.200') {
+      exclude group: 'com.google.code.findbugs', module: 'jsr305'
+      exclude group: 'com.google.guava'
+      exclude group: 'com.google.protobuf', module: 'protobuf-java'
+      exclude group: 'org.apache.avro'
+      exclude group: 'org.apache.calcite.avatica'
+      exclude group: 'org.apache.hive', module: 'hive-llap-tez'
+      exclude group: 'org.apache.logging.log4j'
+      exclude group: 'org.pentaho' // missing dependency
+      exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+      exclude group: 'com.linkedin.hive', module: 'hive-exec'
+    }
 
     testCompile project(path: ':iceberg-data', configuration: 'testArtifacts')
     testCompile project(path: ':iceberg-api', configuration: 'testArtifacts')
@@ -403,14 +425,18 @@ project(':iceberg-mr') {
 
     testCompile("org.apache.avro:avro:1.9.2")
     testCompile("org.apache.calcite:calcite-core")
-    testCompile("com.esotericsoftware:kryo-shaded:4.0.2")
+    testCompile("com.esotericsoftware.kryo:kryo:2.22")
     testCompile("com.fasterxml.jackson.core:jackson-annotations:2.6.5")
-    testCompile("com.klarna:hiverunner:5.2.1") {
+    testCompile("com.klarna:hiverunner:3.2.1") {
       exclude group: 'javax.jms', module: 'jms'
       exclude group: 'org.apache.hive', module: 'hive-exec'
       exclude group: 'org.codehaus.jettison', module: 'jettison'
       exclude group: 'org.apache.calcite.avatica'
+      exclude group: 'org.apache.hive', module: 'hive-metastore'
+      exclude group: 'org.apache.hive', module: 'hive-serde'
+
     }
+    testCompile("org.apache.commons:commons-lang3:3.1")
   }
 }
 
@@ -424,7 +450,7 @@ project(':iceberg-hive-runtime') {
       exclude group: 'com.github.stephenc.findbugs'
       exclude group: 'commons-pool'
       exclude group: 'javax.annotation'
-      exclude group: 'javax.xml.bind'      
+      exclude group: 'javax.xml.bind'
       exclude group: 'org.apache.commons'
       exclude group: 'org.slf4j'
       exclude group: 'org.xerial.snappy'
@@ -434,7 +460,7 @@ project(':iceberg-hive-runtime') {
   dependencies {
     compile project(':iceberg-mr')
   }
-  
+
   shadowJar {
     configurations = [project.configurations.compile]
 
@@ -448,7 +474,7 @@ project(':iceberg-hive-runtime') {
 
     // Relocate dependencies to avoid conflicts
     relocate 'org.apache.avro', 'org.apache.iceberg.shaded.org.apache.avro'
-    relocate 'org.apache.parquet', 'org.apache.iceberg.shaded.org.apache.parquet'  
+    relocate 'org.apache.parquet', 'org.apache.iceberg.shaded.org.apache.parquet'
     relocate 'com.google', 'org.apache.iceberg.shaded.com.google'
     relocate 'com.fasterxml', 'org.apache.iceberg.shaded.com.fasterxml'
     relocate 'com.github.benmanes', 'org.apache.iceberg.shaded.com.github.benmanes'

@@ -24,25 +24,18 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.io.sarg.ExpressionTree;
 import org.apache.hadoop.hive.ql.io.sarg.PredicateLeaf;
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
-import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
+import org.apache.hadoop.hive.serde2.io.DateWritable;
 import org.apache.iceberg.common.DynClasses;
 import org.apache.iceberg.common.DynFields;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.util.DateTimeUtil;
 
-import static org.apache.iceberg.expressions.Expressions.and;
-import static org.apache.iceberg.expressions.Expressions.equal;
-import static org.apache.iceberg.expressions.Expressions.greaterThanOrEqual;
-import static org.apache.iceberg.expressions.Expressions.in;
-import static org.apache.iceberg.expressions.Expressions.isNull;
-import static org.apache.iceberg.expressions.Expressions.lessThan;
-import static org.apache.iceberg.expressions.Expressions.lessThanOrEqual;
-import static org.apache.iceberg.expressions.Expressions.not;
-import static org.apache.iceberg.expressions.Expressions.or;
+import static org.apache.iceberg.expressions.Expressions.*;
 
 
 public class HiveIcebergFilterFactory {
@@ -139,7 +132,7 @@ public class HiveIcebergFilterFactory {
       case TIMESTAMP:
         return microsFromTimestamp((Timestamp) LITERAL_FIELD.get(leaf));
       case DECIMAL:
-        return hiveDecimalToBigDecimal((HiveDecimalWritable) LITERAL_FIELD.get(leaf));
+        return hiveDecimalToBigDecimal((HiveDecimal) LITERAL_FIELD.get(leaf));
 
       default:
         throw new UnsupportedOperationException("Unknown type: " + leaf.getType());
@@ -158,7 +151,7 @@ public class HiveIcebergFilterFactory {
                 .collect(Collectors.toList());
       case DECIMAL:
         return LITERAL_LIST_FIELD.get(leaf).stream()
-                .map(value -> hiveDecimalToBigDecimal((HiveDecimalWritable) value))
+                .map(value -> hiveDecimalToBigDecimal((HiveDecimal) value))
                 .collect(Collectors.toList());
       case TIMESTAMP:
         return LITERAL_LIST_FIELD.get(leaf).stream()
@@ -169,15 +162,27 @@ public class HiveIcebergFilterFactory {
     }
   }
 
-  private static BigDecimal hiveDecimalToBigDecimal(HiveDecimalWritable hiveDecimalWritable) {
-    return hiveDecimalWritable.getHiveDecimal().bigDecimalValue().setScale(hiveDecimalWritable.scale());
+  private static BigDecimal hiveDecimalToBigDecimal(HiveDecimal literal) {
+    return literal.bigDecimalValue();
+    //return hiveDecimalWritable.getHiveDecimal().bigDecimalValue().setScale(hiveDecimalWritable.getScale());
   }
 
   private static int daysFromDate(Date date) {
     return DateTimeUtil.daysFromDate(date.toLocalDate());
   }
 
-  private static int daysFromTimestamp(Timestamp timestamp) {
+  private static int daysFromTimestamp(Object literal) {
+    Timestamp timestamp;
+    if (literal instanceof DateWritable) {
+      Date date = ((DateWritable)literal).get();
+      timestamp = new Timestamp(date.getTime());
+    } else if(literal instanceof Date) {
+      timestamp = new Timestamp(((Date)literal).getTime());
+    } else if(literal instanceof Timestamp) {
+      timestamp = (Timestamp)literal;
+    } else {
+      throw new UnsupportedOperationException("Unknown object for DATE: " + literal.getClass().getSimpleName());
+    }
     return DateTimeUtil.daysFromInstant(timestamp.toInstant());
   }
 
