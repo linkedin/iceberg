@@ -95,7 +95,11 @@ public class HiveIcebergStorageHandler implements HiveStoragePredicateHandler, H
 
   @Override
   public void configureJobConf(TableDesc tableDesc, JobConf jobConf) {
-
+    HiveIcebergConfigUtil.copySchemaToConf(
+        () -> Catalogs.loadTable(conf, tableDesc.getProperties()).schema(),
+        jobConf,
+        tableDesc.getProperties()
+    );
   }
 
   @Override
