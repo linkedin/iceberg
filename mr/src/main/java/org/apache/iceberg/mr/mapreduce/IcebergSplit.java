@@ -40,6 +40,7 @@ public class IcebergSplit extends InputSplit implements org.apache.hadoop.mapred
 
   private transient String[] locations;
   private transient Configuration conf;
+  private transient String schemaStr;
 
   // public no-argument constructor for deserialization
   public IcebergSplit() {}
@@ -47,10 +48,15 @@ public class IcebergSplit extends InputSplit implements org.apache.hadoop.mapred
   IcebergSplit(Configuration conf, CombinedScanTask task) {
     this.task = task;
     this.conf = conf;
+    this.schemaStr = conf.get(InputFormatConfig.TABLE_SCHEMA);
   }
 
   public CombinedScanTask task() {
     return task;
+  }
+
+  public String schemaStr() {
+    return schemaStr;
   }
 
   @Override
@@ -78,6 +84,9 @@ public class IcebergSplit extends InputSplit implements org.apache.hadoop.mapred
     byte[] data = SerializationUtil.serializeToBytes(this.task);
     out.writeInt(data.length);
     out.write(data);
+    byte[] schemaStrBytes = SerializationUtil.serializeToBytes(this.schemaStr);
+    out.writeInt(schemaStrBytes.length);
+    out.write(schemaStrBytes);
   }
 
   @Override
@@ -85,5 +94,8 @@ public class IcebergSplit extends InputSplit implements org.apache.hadoop.mapred
     byte[] data = new byte[in.readInt()];
     in.readFully(data);
     this.task = SerializationUtil.deserializeFromBytes(data);
+    byte[] schemaStrBytes = new byte[in.readInt()];
+    in.readFully(schemaStrBytes);
+    this.schemaStr = SerializationUtil.deserializeFromBytes(schemaStrBytes);
   }
 }
