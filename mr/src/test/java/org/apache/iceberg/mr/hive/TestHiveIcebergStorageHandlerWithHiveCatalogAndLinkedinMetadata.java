@@ -37,7 +37,7 @@ public class TestHiveIcebergStorageHandlerWithHiveCatalogAndLinkedinMetadata ext
 
   private HiveCatalog _hiveCatalog;
   private TemporaryFolder _temporaryFolder;
-  private final FileFormat _fileFormat = FileFormat.PARQUET;
+  private final FileFormat _fileFormat = FileFormat.AVRO;
 
   @Override
   public TestTables testTables(Configuration conf, TemporaryFolder temp) {
@@ -51,10 +51,20 @@ public class TestHiveIcebergStorageHandlerWithHiveCatalogAndLinkedinMetadata ext
     // This code is derived from TestTables. There was no easy way to alter table location without changing
     // bunch of interfaces. With this code the same outcome is achieved.
     TableIdentifier tableIdentifier = TableIdentifier.parse("default." + tableName);
+    PartitionSpec partitionSpec = PartitionSpec.unpartitioned();
+    if (tableName.equals("customers")) {
+      partitionSpec = PartitionSpec.builderFor(schema)
+          .identity("customer_id")
+          .build();
+    } else if (tableName.equals("orders")) {
+      partitionSpec = PartitionSpec.builderFor(schema)
+          .identity("order_id")
+          .build();
+    }
     Table table = _hiveCatalog.createTable(
         tableIdentifier,
         schema,
-        PartitionSpec.unpartitioned(),
+        partitionSpec,
         getLocationWithoutURI(tableIdentifier),
         ImmutableMap.of(TableProperties.DEFAULT_FILE_FORMAT, _fileFormat.name()));
 

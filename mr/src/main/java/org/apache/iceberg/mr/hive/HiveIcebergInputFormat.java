@@ -24,20 +24,29 @@ import java.util.Arrays;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
+import org.apache.hadoop.hive.ql.io.IOConstants;
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.RecordReader;
+import org.apache.hadoop.mapred.Reporter;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.common.DynMethods;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.mr.InputFormatConfig;
 import org.apache.iceberg.mr.SerializationUtil;
+import org.apache.iceberg.mr.mapred.Container;
 import org.apache.iceberg.mr.mapred.MapredIcebergInputFormat;
 import org.apache.iceberg.mr.mapreduce.IcebergSplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.iceberg.mr.hive.HiveIcebergSerDe.*;
+
 
 public class HiveIcebergInputFormat extends MapredIcebergInputFormat<Record>
                                     implements CombineHiveInputFormat.AvoidSplitCombination {
@@ -77,6 +86,18 @@ public class HiveIcebergInputFormat extends MapredIcebergInputFormat<Record>
     return Arrays.stream(super.getSplits(job, numSplits))
                  .map(split -> new HiveIcebergSplit((IcebergSplit) split, location))
                  .toArray(InputSplit[]::new);
+  }
+
+  @Override
+  public RecordReader<Void, Container<Record>> getRecordReader(InputSplit split, JobConf job, Reporter reporter)
+      throws IOException {
+    if (job.get(IOConstants.SCHEMA_EVOLUTION_COLUMNS) != null) {
+      String tableColumns = job.get(IOConstants.SCHEMA_EVOLUTION_COLUMNS);
+      String tableColumnTypes = job.get(IOConstants.SCHEMA_EVOLUTION_COLUMNS_TYPES);
+      Schema readSchema = getSchemaFromTypeString(tableColumns, tableColumnTypes);
+      job.set(InputFormatConfig.READ_SCHEMA, SchemaParser.toJson(readSchema));
+    }
+    return super.getRecordReader(split, job, reporter);
   }
 
   @Override
