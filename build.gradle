@@ -765,7 +765,7 @@ project(':iceberg-runtime') {
   dependencies {
     compile project(':iceberg-core')
     compile project(':iceberg-orc')
-    compile project(':iceberg-hive')
+    compile project(':iceberg-hive-metastore')
   }
 
   shadowJar {
