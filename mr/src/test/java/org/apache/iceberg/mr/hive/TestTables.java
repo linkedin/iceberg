@@ -22,6 +22,8 @@ package org.apache.iceberg.mr.hive;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +40,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.hadoop.HadoopCatalog;
 import org.apache.iceberg.hadoop.HadoopTables;
+import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveCatalogs;
 import org.apache.iceberg.hive.MetastoreUtil;
 import org.apache.iceberg.mr.InputFormatConfig;
@@ -342,6 +345,44 @@ abstract class TestTables {
     }
   }
 
+  static class HiveTestTablesUnqualifiedURI extends TestTables {
+
+    private static class HiveCatalogUnqualifiedURI extends HiveCatalog {
+
+      HiveCatalogUnqualifiedURI(Configuration conf) {
+        super(conf);
+      }
+
+      @Override
+      protected String defaultWarehouseLocation(TableIdentifier tableIdentifier) {
+        try {
+          return new URI(super.defaultWarehouseLocation(tableIdentifier)).getPath();
+        } catch (URISyntaxException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+
+    HiveTestTablesUnqualifiedURI(Configuration conf, TemporaryFolder temp) {
+      super(new HiveCatalogUnqualifiedURI(conf), temp);
+    }
+
+    @Override
+    public Map<String, String> properties() {
+      return ImmutableMap.of(InputFormatConfig.CATALOG, "hive");
+    }
+
+    @Override
+    public String locationForCreateTableSQL(TableIdentifier identifier) {
+      return "";
+    }
+
+    @Override
+    public String createHiveTableSQL(TableIdentifier identifier) {
+      return null;
+    }
+  }
+
   private static String tablePath(TableIdentifier identifier) {
     return "/" + Joiner.on("/").join(identifier.namespace().levels()) + "/" + identifier.name();
   }
@@ -365,6 +406,11 @@ abstract class TestTables {
     HIVE_CATALOG {
       public TestTables instance(Configuration conf, TemporaryFolder temporaryFolder) {
         return new HiveTestTables(conf, temporaryFolder);
+      }
+    },
+    HIVE_CATALOG_UNQUALIFIED_URI {
+      public TestTables instance(Configuration conf, TemporaryFolder temporaryFolder) {
+        return new HiveTestTablesUnqualifiedURI(conf, temporaryFolder);
       }
     };
 

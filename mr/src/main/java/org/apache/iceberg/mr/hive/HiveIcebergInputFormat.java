@@ -60,6 +60,7 @@ public class HiveIcebergInputFormat extends MapredIcebergInputFormat<Record>
           Configuration.class, ExprNodeGenericFuncDesc.class)
       .orNoop()
       .buildStatic();
+  static final String SPLIT_LOCATION = "iceberg.hive.split.location";
 
   @Override
   public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
@@ -79,7 +80,7 @@ public class HiveIcebergInputFormat extends MapredIcebergInputFormat<Record>
     String[] selectedColumns = ColumnProjectionUtils.getReadColumnNames(job);
     job.setStrings(InputFormatConfig.SELECTED_COLUMNS, selectedColumns);
 
-    String location = job.get(InputFormatConfig.TABLE_LOCATION);
+    String location = job.get(SPLIT_LOCATION);
     return Arrays.stream(super.getSplits(job, numSplits))
                  .map(split -> new HiveIcebergSplit((IcebergSplit) split, location))
                  .toArray(InputSplit[]::new);
