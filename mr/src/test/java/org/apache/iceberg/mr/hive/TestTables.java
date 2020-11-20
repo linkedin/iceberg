@@ -22,6 +22,8 @@ package org.apache.iceberg.mr.hive;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -451,6 +453,44 @@ abstract class TestTables {
     }
   }
 
+  static class HiveTestTablesUnqualifiedURI extends TestTables {
+
+    private static class HiveCatalogUnqualifiedURI extends HiveCatalog {
+
+      HiveCatalogUnqualifiedURI(Configuration conf) {
+        super(conf);
+      }
+
+      @Override
+      protected String defaultWarehouseLocation(TableIdentifier tableIdentifier) {
+        try {
+          return new URI(super.defaultWarehouseLocation(tableIdentifier)).getPath();
+        } catch (URISyntaxException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+
+    HiveTestTablesUnqualifiedURI(Configuration conf, TemporaryFolder temp) {
+      super(new HiveCatalogUnqualifiedURI(conf), temp);
+    }
+
+    @Override
+    public Map<String, String> properties() {
+      return ImmutableMap.of(InputFormatConfig.CATALOG, "hive");
+    }
+
+    @Override
+    public String locationForCreateTableSQL(TableIdentifier identifier) {
+      return "";
+    }
+
+    @Override
+    public String createHiveTableSQL(TableIdentifier identifier, Map<String, String> tblProps) {
+      return null;
+    }
+  }
+
   private static String tablePath(TableIdentifier identifier) {
     return "/" + Joiner.on("/").join(identifier.namespace().levels()) + "/" + identifier.name();
   }
@@ -494,6 +534,11 @@ abstract class TestTables {
       @Override
       public TestTables instance(Configuration conf, TemporaryFolder temporaryFolder, String catalogName) {
         return new HiveTestTables(conf, temporaryFolder, catalogName);
+      }
+    },
+    HIVE_CATALOG_UNQUALIFIED_URI {
+      public TestTables instance(Configuration conf, TemporaryFolder temporaryFolder) {
+        return new HiveTestTablesUnqualifiedURI(conf, temporaryFolder);
       }
     };
 
