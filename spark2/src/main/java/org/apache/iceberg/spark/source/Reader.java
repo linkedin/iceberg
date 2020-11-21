@@ -24,6 +24,7 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -286,18 +287,21 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
   @Override
   public Statistics estimateStatistics() {
-    if (!(table instanceof LegacyHiveTable)) {
-      // its a fresh table, no data
-      if (table.currentSnapshot() == null) {
-        return new Stats(0L, 0L);
-      }
+    if (table instanceof LegacyHiveTable) {
+      // We currently don't have reliable stats for Hive tables
+      return EMPTY_STATS;
+    }
 
-      // estimate stats using snapshot summary only for partitioned tables (metadata tables are unpartitioned)
-      if (!table.spec().isUnpartitioned() && filterExpression() == Expressions.alwaysTrue()) {
-        long totalRecords = PropertyUtil.propertyAsLong(table.currentSnapshot().summary(),
-            SnapshotSummary.TOTAL_RECORDS_PROP, Long.MAX_VALUE);
-        return new Stats(SparkSchemaUtil.estimateSize(lazyType(), totalRecords), totalRecords);
-      }
+    // its a fresh table, no data
+    if (table.currentSnapshot() == null) {
+      return new Stats(0L, 0L);
+    }
+
+    // estimate stats using snapshot summary only for partitioned tables (metadata tables are unpartitioned)
+    if (!table.spec().isUnpartitioned() && filterExpression() == Expressions.alwaysTrue()) {
+      long totalRecords = PropertyUtil.propertyAsLong(table.currentSnapshot().summary(),
+          SnapshotSummary.TOTAL_RECORDS_PROP, Long.MAX_VALUE);
+      return new Stats(SparkSchemaUtil.estimateSize(lazyType(), totalRecords), totalRecords);
     }
 
     long sizeInBytes = 0L;
@@ -312,6 +316,18 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
     return new Stats(sizeInBytes, numRows);
   }
+
+  private static final Statistics EMPTY_STATS = new Statistics() {
+    @Override
+    public OptionalLong sizeInBytes() {
+      return OptionalLong.empty();
+    }
+
+    @Override
+    public OptionalLong numRows() {
+      return OptionalLong.empty();
+    }
+  };
 
   @Override
   public boolean enableBatchRead() {
