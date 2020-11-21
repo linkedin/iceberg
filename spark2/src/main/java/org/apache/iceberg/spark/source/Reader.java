@@ -24,6 +24,7 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -280,8 +281,12 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
   @Override
   public Statistics estimateStatistics() {
-    if (!(table instanceof LegacyHiveTable) &&
-        (filterExpressions == null || filterExpressions == Expressions.alwaysTrue())) {
+    if (table instanceof LegacyHiveTable) {
+      // We currently don't have reliable stats for Hive tables
+      return EMPTY_STATS;
+    }
+
+    if (filterExpressions == null || filterExpressions == Expressions.alwaysTrue()) {
       long totalRecords = PropertyUtil.propertyAsLong(table.currentSnapshot().summary(),
           SnapshotSummary.TOTAL_RECORDS_PROP, Long.MAX_VALUE);
       return new Stats(SparkSchemaUtil.estimateSize(lazyType(), totalRecords), totalRecords);
@@ -299,6 +304,18 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
     return new Stats(sizeInBytes, numRows);
   }
+
+  private static final Statistics EMPTY_STATS = new Statistics() {
+    @Override
+    public OptionalLong sizeInBytes() {
+      return OptionalLong.empty();
+    }
+
+    @Override
+    public OptionalLong numRows() {
+      return OptionalLong.empty();
+    }
+  };
 
   @Override
   public boolean enableBatchRead() {
