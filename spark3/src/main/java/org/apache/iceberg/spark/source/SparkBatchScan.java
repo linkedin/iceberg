@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collection;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileFormat;
@@ -184,8 +185,12 @@ class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
 
   @Override
   public Statistics estimateStatistics() {
-    if (!(table instanceof LegacyHiveTable) &&
-        (filterExpressions == null || filterExpressions.isEmpty())) {
+    if (table instanceof LegacyHiveTable) {
+      // We currently don't have reliable stats for Hive tables
+      return EMPTY_STATS;
+    }
+
+    if (filterExpressions == null || filterExpressions.isEmpty()) {
       LOG.debug("using table metadata to estimate table statistics");
       long totalRecords = PropertyUtil.propertyAsLong(table.currentSnapshot().summary(),
           SnapshotSummary.TOTAL_RECORDS_PROP, Long.MAX_VALUE);
@@ -207,6 +212,18 @@ class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
 
     return new Stats(sizeInBytes, numRows);
   }
+
+  private static final Statistics EMPTY_STATS = new Statistics() {
+    @Override
+    public OptionalLong sizeInBytes() {
+      return OptionalLong.empty();
+    }
+
+    @Override
+    public OptionalLong numRows() {
+      return OptionalLong.empty();
+    }
+  };
 
   private List<CombinedScanTask> tasks() {
     if (tasks == null) {
