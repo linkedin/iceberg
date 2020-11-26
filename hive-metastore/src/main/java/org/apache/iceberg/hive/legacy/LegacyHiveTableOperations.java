@@ -114,9 +114,19 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
 
     Iterable<Iterable<DataFile>> filesPerDirectory = Iterables.transform(
         matchingDirectories,
-        directory -> Iterables.transform(
-            FileSystemUtils.listFiles(directory.location(), conf),
-            file -> createDataFile(file, current().spec(), directory.partitionData(), directory.format())));
+        directory -> {
+          List<FileStatus> files;
+          if (FileSystemUtils.exists(directory.location(), conf)) {
+            files = FileSystemUtils.listFiles(directory.location(), conf);
+          } else {
+            LOG.warn("Cannot find directory: {}. Skipping.", directory.location());
+            files = ImmutableList.of();
+          }
+          return Iterables.transform(
+              files,
+              file -> createDataFile(file, current().spec(), directory.partitionData(), directory.format())
+          );
+        });
 
     // Note that we return an Iterable of Iterables here so that the TableScan can process iterables of individual
     // directories in parallel hence resulting in a parallel file listing

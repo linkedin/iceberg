@@ -50,6 +50,16 @@ class FileSystemUtils {
     return Arrays.asList(files);
   }
 
+  static boolean exists(String file, Configuration conf) {
+    final Path filePath = new Path(file);
+    try {
+      FileSystem fs = filePath.getFileSystem(conf);
+      return fs.exists(filePath);
+    } catch (IOException e) {
+      throw new RuntimeIOException(e, "Error determining if file or directory exists: " + file);
+    }
+  }
+
   private enum HiddenPathFilter implements PathFilter {
     INSTANCE;
 
