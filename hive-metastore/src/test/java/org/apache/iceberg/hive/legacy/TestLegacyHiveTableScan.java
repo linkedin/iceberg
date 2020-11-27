@@ -19,6 +19,7 @@
 
 package org.apache.iceberg.hive.legacy;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Partition;
@@ -104,6 +106,17 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
     addPartition(table, ImmutableList.of("ds", 1), AVRO, "A");
     addPartition(table, ImmutableList.of("ds", 2), AVRO, "B");
+    filesMatch(ImmutableMap.of("pcol=ds/pIntCol=2/B", AVRO, "pcol=ds/pIntCol=1/A", AVRO), hiveScan(table));
+  }
+
+  @Test
+  public void testHiveScanDanglingPartitions() throws Exception {
+    String tableName = "dangling_partition";
+    Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
+    addPartition(table, ImmutableList.of("ds", 1), AVRO, "A");
+    addPartition(table, ImmutableList.of("ds", 2), AVRO, "B");
+    addPartition(table, ImmutableList.of("ds", 3), AVRO, "C");
+    makePartitionDangling(table, ImmutableList.of("ds", 3));
     filesMatch(ImmutableMap.of("pcol=ds/pIntCol=2/B", AVRO, "pcol=ds/pIntCol=1/A", AVRO), hiveScan(table));
   }
 
@@ -254,6 +267,15 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
       Path filePath = partitionLocation.resolve(format.addExtension(fileName));
       Files.createFile(filePath);
     }
+  }
+
+  private void makePartitionDangling(Table table, List<Object> partitionValues) throws Exception {
+    String partitionLocation = metastoreClient.getPartition(
+        table.getDbName(),
+        table.getTableName(),
+        Lists.transform(partitionValues, Object::toString)
+    ).getSd().getLocation();
+    FileUtils.deleteDirectory(new File(new URI(partitionLocation)));
   }
 
   private Map<String, FileFormat> hiveScan(Table table) {
