@@ -33,6 +33,8 @@ import org.apache.iceberg.expressions.UnboundTerm;
 
 class HiveExpressions {
 
+  private static final Expression REMOVED = (Expression) () -> null;
+
   private HiveExpressions() {}
 
   /**
@@ -48,9 +50,18 @@ class HiveExpressions {
    */
   static Expression simplifyPartitionFilter(Expression expr, Set<String> partitionColumnNames) {
     try {
-      Expression partitionPredicatesOnly = ExpressionVisitors.visit(expr,
+      // Pushing down NOTs is critical for the correctness of RemoveNonPartitionPredicates
+      // e.g. consider a predicate on a partition field (P) and a predicate on a non-partition field (NP)
+      // With simply ignoring NP, NOT(P and NP) will be written to NOT(P)
+      // However the correct behaviour is NOT(P and NP) => NOT(P) OR NOT(NP) => True
+      Expression notPushedDown = Expressions.rewriteNot(expr);
+      Expression partitionPredicatesOnly = ExpressionVisitors.visit(notPushedDown,
           new RemoveNonPartitionPredicates(partitionColumnNames));
-      return ExpressionVisitors.visit(partitionPredicatesOnly, new RewriteUnsupportedOperators());
+      if (partitionPredicatesOnly == REMOVED) {
+        return Expressions.alwaysTrue();
+      } else {
+        return ExpressionVisitors.visit(partitionPredicatesOnly, new RewriteUnsupportedOperators());
+      }
     } catch (Exception e) {
       throw new RuntimeException("Error while processing expression: " + expr, e);
     }
@@ -93,17 +104,27 @@ class HiveExpressions {
 
     @Override
     public Expression not(Expression result) {
-      return Expressions.not(result);
+      return (result == REMOVED) ? REMOVED : Expressions.not(result);
     }
 
     @Override
     public Expression and(Expression leftResult, Expression rightResult) {
-      return Expressions.and(leftResult, rightResult);
+      // if one of the children is a non partition predicate, we can ignore it as it will be applied as a post-scan
+      // filter
+      if (leftResult == REMOVED && rightResult == REMOVED) {
+        return REMOVED;
+      } else if (leftResult == REMOVED) {
+        return rightResult;
+      } else if (rightResult == REMOVED) {
+        return leftResult;
+      } else {
+        return Expressions.and(leftResult, rightResult);
+      }
     }
 
     @Override
     public Expression or(Expression leftResult, Expression rightResult) {
-      return Expressions.or(leftResult, rightResult);
+      return (leftResult == REMOVED || rightResult == REMOVED) ? REMOVED : Expressions.or(leftResult, rightResult);
     }
 
     @Override
@@ -113,8 +134,7 @@ class HiveExpressions {
 
     @Override
     public <T> Expression predicate(UnboundPredicate<T> pred) {
-      return (partitionColumnNamesLowerCase.contains(pred.ref().name().toLowerCase())) ? pred
-          : Expressions.alwaysTrue();
+      return (partitionColumnNamesLowerCase.contains(pred.ref().name().toLowerCase())) ? pred : REMOVED;
     }
   }
 
