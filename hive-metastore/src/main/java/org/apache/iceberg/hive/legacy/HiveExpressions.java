@@ -34,6 +34,7 @@ import org.apache.iceberg.expressions.UnboundTerm;
 class HiveExpressions {
 
   private static final Expression REMOVED = (Expression) () -> null;
+
   private HiveExpressions() {}
 
   /**
@@ -50,7 +51,8 @@ class HiveExpressions {
   static Expression simplifyPartitionFilter(Expression expr, Set<String> partitionColumnNames) {
     try {
       // Pushing down NOTs is critical for the correctness of RemoveNonPartitionPredicates
-      // Without pushdown NOT(P and NP) will be written to NOT(P)
+      // e.g. consider a predicate on a partition field (P) and a predicate on a non-partition field (NP)
+      // With simply ignoring NP, NOT(P and NP) will be written to NOT(P)
       // However the correct behaviour is NOT(P and NP) => NOT(P) OR NOT(NP) => True
       Expression notPushedDown = Expressions.rewriteNot(expr);
       Expression partitionPredicatesOnly = ExpressionVisitors.visit(notPushedDown,
