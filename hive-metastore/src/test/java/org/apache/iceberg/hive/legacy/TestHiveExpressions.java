@@ -106,6 +106,20 @@ public class TestHiveExpressions {
   }
 
   @Test
+  public void testSimplifyRemoveNonPartitionColumnsWithinNot1() {
+    Expression input = and(not(equal("nonpcol", "1")), equal("pcol", "1"));
+    Expression expected = equal("pcol", "1");
+    Assert.assertEquals(expected.toString(), simplifyPartitionFilter(input, ImmutableSet.of("pcol")).toString());
+  }
+
+  @Test
+  public void testSimplifyRemoveNonPartitionColumnsWithinNot2() {
+    Expression input = not(and(equal("nonpcol", "1"), equal("pcol", "1")));
+    Expression expected = alwaysTrue();
+    Assert.assertEquals(expected.toString(), simplifyPartitionFilter(input, ImmutableSet.of("pcol")).toString());
+  }
+
+  @Test
   public void testToPartitionFilterStringEscapeStringLiterals() {
     Expression input = equal("pcol", "s'1");
     Assert.assertEquals("( pcol = 's\\'1' )", toPartitionFilterString(input));
