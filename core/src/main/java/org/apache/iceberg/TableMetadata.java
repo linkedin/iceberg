@@ -71,6 +71,17 @@ public class TableMetadata implements Serializable {
     return newTableMetadata(schema, spec, location, properties, DEFAULT_TABLE_FORMAT_VERSION);
   }
 
+  public static TableMetadata newTableMetadataWithoutFreshIds(Schema schema,
+                                               PartitionSpec spec,
+                                               String location,
+                                               Map<String, String> properties) {
+    return new TableMetadata(null, DEFAULT_TABLE_FORMAT_VERSION, UUID.randomUUID().toString(), location,
+        INITIAL_SEQUENCE_NUMBER, System.currentTimeMillis(),
+        -1, schema, INITIAL_SPEC_ID, ImmutableList.of(spec),
+        ImmutableMap.copyOf(properties), -1, ImmutableList.of(),
+        ImmutableList.of(), ImmutableList.of());
+  }
+
   static TableMetadata newTableMetadata(Schema schema,
                                         PartitionSpec spec,
                                         String location,
