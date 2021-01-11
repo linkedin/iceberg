@@ -87,15 +87,16 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
 
     TypeDescription fileSchema = orcFileReader.getSchema();
     final TypeDescription readOrcSchema;
+    final TypeDescription fileSchemaWithIds;
     if (ORCSchemaUtil.hasIds(fileSchema)) {
-      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchema);
+      fileSchemaWithIds = fileSchema;
     } else {
       if (nameMapping == null) {
         nameMapping = MappingUtil.create(schema);
       }
-      TypeDescription typeWithIds = ORCSchemaUtil.applyNameMapping(fileSchema, nameMapping);
-      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, typeWithIds);
+      fileSchemaWithIds = ORCSchemaUtil.applyNameMapping(fileSchema, nameMapping);
     }
+    readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchemaWithIds);
 
     SearchArgument sarg = null;
     if (filter != null) {
@@ -125,10 +126,9 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
       Schema extraFilterColumns = TypeUtil.select(rowFilter.requiredSchema(), filterColumnIdsNotInReadSchema);
       Schema finalReadSchema = TypeUtil.join(schema, extraFilterColumns);
 
-      TypeDescription finalReadOrcSchema = ORCSchemaUtil.buildOrcProjection(finalReadSchema,
-          orcFileReader.getSchema());
+      TypeDescription finalReadOrcSchema = ORCSchemaUtil.buildOrcProjection(finalReadSchema, fileSchemaWithIds);
       TypeDescription rowFilterOrcSchema = ORCSchemaUtil.buildOrcProjection(rowFilter.requiredSchema(),
-          orcFileReader.getSchema());
+          fileSchemaWithIds);
       RowFilterValueReader filterReader = new RowFilterValueReader(finalReadOrcSchema, rowFilterOrcSchema);
 
       return new OrcRowIterator<>(
