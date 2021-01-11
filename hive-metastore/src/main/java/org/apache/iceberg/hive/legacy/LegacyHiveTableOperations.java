@@ -20,6 +20,7 @@
 package org.apache.iceberg.hive.legacy;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
@@ -34,15 +35,19 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableMetadata;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hive.HiveClientPool;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.LocationProvider;
+import org.apache.iceberg.mapping.MappingUtil;
+import org.apache.iceberg.mapping.NameMappingParser;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -84,8 +89,12 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
       Schema schema = LegacyHiveTableUtils.getSchema(hiveTable);
       PartitionSpec spec = LegacyHiveTableUtils.getPartitionSpec(hiveTable, schema);
 
-      TableMetadata metadata = TableMetadata.newTableMetadata(schema, spec, hiveTable.getSd().getLocation(),
-          LegacyHiveTableUtils.getTableProperties(hiveTable));
+      Map<String, String> tableProperties = Maps.newHashMap(LegacyHiveTableUtils.getTableProperties(hiveTable));
+      // Provide a case insensitive name mapping for Hive tables
+      tableProperties.put(TableProperties.DEFAULT_NAME_MAPPING,
+          NameMappingParser.toJson(MappingUtil.create(schema, false)));
+      TableMetadata metadata = TableMetadata.newTableMetadataWithoutFreshIds(schema, spec,
+          hiveTable.getSd().getLocation(), tableProperties);
       setCurrentMetadata(metadata);
     } catch (TException e) {
       String errMsg = String.format("Failed to get table info from metastore %s.%s", databaseName, tableName);
