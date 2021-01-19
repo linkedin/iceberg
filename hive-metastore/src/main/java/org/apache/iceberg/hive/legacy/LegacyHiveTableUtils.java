@@ -19,13 +19,16 @@
 
 package org.apache.iceberg.hive.legacy;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import org.apache.avro.SchemaBuilder;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Partition;
+import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
@@ -56,7 +59,13 @@ class LegacyHiveTableUtils {
     String schemaStr = props.get("avro.schema.literal");
     Schema schema;
     if (schemaStr != null) {
-      schema = AvroSchemaUtil.toIceberg(new org.apache.avro.Schema.Parser().parse(schemaStr));
+      Type icebergType = HiveTypeUtil.convert(LegacyHiveTableUtils.structTypeInfoFromCols(table.getSd().getCols()));
+      String metastoreSchemaString = AvroSchemaUtil.convert(icebergType).toString();
+      org.apache.avro.Schema metastoreSchemaWithoutNullable =
+          LegacyHiveSchemaUtils.extractActualTypeIfFieldIsNullableTypeRecord(new org.apache.avro.Schema.Parser().parse(metastoreSchemaString));
+
+      org.apache.avro.Schema inferredSchema = new org.apache.avro.Schema.Parser().parse(schemaStr);
+      schema = AvroSchemaUtil.toIceberg(LegacyHiveSchemaUtils.mergeSchemas(metastoreSchemaWithoutNullable, inferredSchema));
     } else {
       //TODO: Do we need to support column and column.types properties for ORC tables?
       LOG.warn("Table {}.{} does not have an avro.schema.literal set; using Hive schema instead. " +
