@@ -58,11 +58,24 @@ class LegacyHiveTableUtils {
     if (schemaStr != null) {
       org.apache.avro.Schema avroSchema = new org.apache.avro.Schema.Parser().parse(schemaStr);
       org.apache.avro.Schema hiveSchema = LegacyHiveSchemaUtils.convertHiveSchemaToAvro(table);
-      org.apache.avro.Schema hiveSchemaWithoutNullable = LegacyHiveSchemaUtils.extractActualTypeIfFieldIsNullableTypeRecord(hiveSchema);
+      org.apache.avro.Schema avroSchemaWithoutNullable =
+          LegacyHiveSchemaUtils.extractActualTypeIfFieldIsNullableTypeRecord(avroSchema);
+      org.apache.avro.Schema hiveSchemaWithoutNullable =
+          LegacyHiveSchemaUtils.extractActualTypeIfFieldIsNullableTypeRecord(hiveSchema);
 
-      org.apache.avro.Schema mergedSchema = LegacyHiveSchemaUtils.mergeRecordSchema(avroSchema, hiveSchemaWithoutNullable);
+      org.apache.avro.Schema tableSchema = avroSchema;
+      boolean isHiveSchemaEvolved =
+          LegacyHiveSchemaUtils.isRecordSchemaEvolved(avroSchemaWithoutNullable, hiveSchemaWithoutNullable);
 
-      schema = AvroSchemaUtil.toIceberg(mergedSchema);
+      if (isHiveSchemaEvolved) {
+        try {
+          tableSchema = LegacyHiveSchemaUtils.mergeRecordSchema(avroSchema, hiveSchemaWithoutNullable);
+        } catch (Exception e) {
+          tableSchema = avroSchema;
+        }
+      }
+
+      schema = AvroSchemaUtil.toIceberg(tableSchema);
     } else {
       //TODO: Do we need to support column and column.types properties for ORC tables?
       LOG.warn("Table {}.{} does not have an avro.schema.literal set; using Hive schema instead. " +

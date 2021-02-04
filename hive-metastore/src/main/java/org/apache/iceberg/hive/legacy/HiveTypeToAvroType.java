@@ -1,11 +1,29 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package org.apache.iceberg.hive.legacy;
 
-import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.apache.avro.Schema;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe;
 import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -17,6 +35,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.UnionTypeInfo;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.codehaus.jackson.node.JsonNodeFactory;
 import org.codehaus.jackson.node.NullNode;
 
@@ -63,9 +82,9 @@ public class HiveTypeToAvroType {
 
   Schema convertTypeInfoToAvroSchema(TypeInfo typeInfo, String recordNamespace, String recordName) {
     Schema schema;
-    ObjectInspector.Category c = typeInfo.getCategory();
+    ObjectInspector.Category category = typeInfo.getCategory();
 
-    switch (c) {
+    switch (category) {
       case STRUCT:
         // We don't cache the structType because otherwise it could be possible that a field
         // "lastname" is of type "firstname", where firstname is a compiled class.
@@ -85,7 +104,7 @@ public class HiveTypeToAvroType {
         schema = parseSchemaFromUnion((UnionTypeInfo) typeInfo, recordNamespace, recordName);
         break;
       default:
-        throw new UnsupportedOperationException("Conversion from " + c + " not supported");
+        throw new UnsupportedOperationException("Conversion from " + category + " not supported");
     }
 
     if (mkFieldsOptional) {
@@ -98,7 +117,8 @@ public class HiveTypeToAvroType {
     List<TypeInfo> typeInfos = typeInfo.getAllUnionObjectTypeInfos();
 
     // A union might contain duplicate struct typeinfos because the underlying Avro union has two Record types with
-    // different names but the same internal structure. For example, in tracking.CommunicationRequestEvent.specificRequest,
+    // different names but the same internal structure.
+    // For example, in tracking.CommunicationRequestEvent.specificRequest,
     // PropGenerated and PropExternalCommunication have the same structure. In case of duplicate typeinfos, we generate
     // a new record type for the duplicates.
     List<Schema> schemas = new ArrayList<>();
@@ -126,8 +146,8 @@ public class HiveTypeToAvroType {
     return Schema.createUnion(schemas);
   }
 
-  // Previously, Hive use recordType[N] as the recordName for each structType, with the change we made in LIHADOOP-36761,
-  // the new record name will be in the form of "structNamespace.structName"
+  // Previously, Hive use recordType[N] as the recordName for each structType,
+  // with the change we made in LIHADOOP-36761, the new record name will be in the form of "structNamespace.structName"
   private Schema parseSchemaFromStruct(final StructTypeInfo typeInfo, final String recordNamespace,
       final String recordName) {
     final Schema recordSchema = convertFieldsTypeInfoToAvroSchema(recordNamespace, recordName,

@@ -1,6 +1,24 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package org.apache.iceberg.hive.legacy;
 
-import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -10,18 +28,24 @@ import java.util.Queue;
 import javax.annotation.Nonnull;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaBuilder;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
-import org.codehaus.jackson.JsonNode;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class LegacyHiveSchemaUtils {
+  private LegacyHiveSchemaUtils() {}
+
+  private static final Logger LOG = LoggerFactory.getLogger(LegacyHiveSchemaUtils.class);
+
   static Schema convertHiveSchemaToAvro(@Nonnull final Table table) {
-    Preconditions.checkNotNull(table);
+    Preconditions.checkNotNull(table, "table cannot be null");
 
     String recordName = table.getTableName();
     String recordNamespace = table.getDbName() + "." + recordName;
@@ -39,11 +63,6 @@ public class LegacyHiveSchemaUtils {
   private static Schema convertFieldSchemaToAvroSchema(@Nonnull final String recordName,
       @Nonnull final String recordNamespace, @Nonnull final boolean mkFieldsOptional,
       @Nonnull final List<FieldSchema> columns) {
-    Preconditions.checkNotNull(recordName);
-    Preconditions.checkNotNull(recordNamespace);
-    Preconditions.checkNotNull(mkFieldsOptional);
-    Preconditions.checkNotNull(columns);
-
     final List<String> columnNames = new ArrayList<>(columns.size());
     final List<TypeInfo> columnsTypeInfo = new ArrayList<>(columns.size());
 
@@ -57,8 +76,6 @@ public class LegacyHiveSchemaUtils {
   }
 
   private static String getStandardName(@Nonnull String name) {
-    Preconditions.checkNotNull(name);
-
     String[] sArr = name.split("_");
     StringBuilder sb = new StringBuilder();
     for (String str : sArr) {
@@ -124,16 +141,17 @@ public class LegacyHiveSchemaUtils {
     return fieldAssembler.endRecord();
   }
 
-  private static Schema extractActualTypeIfFieldIsNullableType(Schema schema) {
-    if (schema == null) {
+  private static Schema extractActualTypeIfFieldIsNullableType(Schema nullableType) {
+    if (nullableType == null) {
       return null;
     }
 
-    if (AvroSerdeUtils.isNullableType(schema)) {
-      schema = AvroSerdeUtils.getOtherTypeFromNullableType(schema);
+    Schema actualType = nullableType;
+    if (AvroSerdeUtils.isNullableType(nullableType)) {
+      actualType = AvroSerdeUtils.getOtherTypeFromNullableType(nullableType);
     }
 
-    switch (schema.getType()) {
+    switch (actualType.getType()) {
       case BOOLEAN:
       case BYTES:
       case DOUBLE:
@@ -143,25 +161,25 @@ public class LegacyHiveSchemaUtils {
       case INT:
       case LONG:
       case STRING:
-        return schema;
+        return actualType;
       case MAP:
-        Schema valueSchema = extractActualTypeIfFieldIsNullableType(schema.getValueType());
+        Schema valueSchema = extractActualTypeIfFieldIsNullableType(actualType.getValueType());
         Schema mapSchema = Schema.createMap(valueSchema);
 
         return mapSchema;
       case ARRAY:
-        Schema elementSchema = extractActualTypeIfFieldIsNullableType(schema.getElementType());
+        Schema elementSchema = extractActualTypeIfFieldIsNullableType(actualType.getElementType());
         Schema arraySchema = Schema.createArray(elementSchema);
 
         return arraySchema;
       case RECORD:
-        Schema recordSchema = extractActualTypeIfFieldIsNullableTypeRecord(schema);
+        Schema recordSchema = extractActualTypeIfFieldIsNullableTypeRecord(actualType);
         return recordSchema;
       case UNION:
         throw new IllegalArgumentException(
-            schema.toString(true) + " is unsupported UNION type. Only nullable field is supported");
+            actualType.toString(true) + " is unsupported UNION type. Only nullable field is supported");
       default:
-        throw new IllegalArgumentException("Unsupported Schema type: " + schema.getType().toString());
+        throw new IllegalArgumentException("Unsupported Schema type: " + actualType.getType().toString());
     }
   }
 
@@ -362,8 +380,8 @@ public class LegacyHiveSchemaUtils {
     } else if (oldFieldSchema.getType().equals(Schema.Type.UNION)) {
       Schema complexNonNullableSchema = extractTargetTypeFromNullableUnionType(oldFieldSchema, schemaType);
       if (complexNonNullableSchema == null) {
-        throw new IllegalArgumentException("New Schema is " + schemaType.toString() + " type, "
-            + "while old Schema is UNION type without " + schemaType.toString() + " type in it");
+        throw new IllegalArgumentException("New Schema is " + schemaType.toString() + " type, " +
+            "while old Schema is UNION type without " + schemaType.toString() + " type in it");
       }
 
       Schema evolvedInnerSchema = mergeEvolvedArrayAndMapInnerSchema(complexNonNullableSchema, newFieldSchema);
@@ -372,8 +390,8 @@ public class LegacyHiveSchemaUtils {
 
       evolvedComplexSchema = createNullableUnionSchema(evolvedComplexNonNullableSchema);
     } else {
-      throw new IllegalArgumentException("New Schema is " + schemaType.toString() + " type, "
-          + "while old Schema is neither " + schemaType.toString() + " type nor UNION type");
+      throw new IllegalArgumentException("New Schema is " + schemaType.toString() + " type, " +
+          "while old Schema is neither " + schemaType.toString() + " type nor UNION type");
     }
 
     if (evolvedComplexSchema == null) {
@@ -388,10 +406,10 @@ public class LegacyHiveSchemaUtils {
       throw new IllegalArgumentException("The input schemas cannot be null");
     }
 
-    if (!((oldFieldSchema.getType().equals(Schema.Type.ARRAY) && newFieldSchema.getType().equals(Schema.Type.ARRAY))
-        || (oldFieldSchema.getType().equals(Schema.Type.MAP) && newFieldSchema.getType().equals(Schema.Type.MAP)))) {
-      throw new IllegalArgumentException("Input schemas must be of both ARRAY type or both MAP type. "
-          + "Old schema type: " + oldFieldSchema.getType() + ", " + "new schema type: " + newFieldSchema.getType());
+    if (!((oldFieldSchema.getType().equals(Schema.Type.ARRAY) && newFieldSchema.getType().equals(Schema.Type.ARRAY)) ||
+        (oldFieldSchema.getType().equals(Schema.Type.MAP) && newFieldSchema.getType().equals(Schema.Type.MAP)))) {
+      throw new IllegalArgumentException("Input schemas must be of both ARRAY type or both MAP type. " +
+          "Old schema type: " + oldFieldSchema.getType() + ", " + "new schema type: " + newFieldSchema.getType());
     }
 
     Schema oldInnerSchema = null;
@@ -436,8 +454,8 @@ public class LegacyHiveSchemaUtils {
         } else if (oldInnerSchema.getType().equals(Schema.Type.UNION)) {
           Schema recordTypeSchema = extractTargetTypeFromNullableUnionType(oldInnerSchema, Schema.Type.RECORD);
           if (recordTypeSchema == null) {
-            throw new IllegalArgumentException("New element Schema is RECORD type, "
-                + "while old element Schema is UNION type without RECORD type in it");
+            throw new IllegalArgumentException("New element Schema is RECORD type, " +
+                "while old element Schema is UNION type without RECORD type in it");
           }
 
           Schema evolvedElementSchemaNonnullable = mergeRecordSchema(recordTypeSchema, newInnerSchema);
@@ -468,14 +486,15 @@ public class LegacyHiveSchemaUtils {
     }
 
     if (!oldSchema.getType().equals(Schema.Type.RECORD) || !newSchema.getType().equals(Schema.Type.RECORD)) {
-      throw new IllegalArgumentException("Input schemas must be of RECORD type. " + "Old schema type: "
-          + oldSchema.getType() + ", " + "new schema type: " + newSchema.getType());
+      throw new IllegalArgumentException("Input schemas must be of RECORD type. " + "Old schema type: " +
+          oldSchema.getType() + ", " + "new schema type: " + newSchema.getType());
     }
   }
 
   private static Schema extractTargetTypeFromNullableUnionType(Schema unionSchema, Schema.Type targetType) {
-    if (unionSchema == null || !unionSchema.getType().equals(Schema.Type.UNION)
-        || !AvroSerdeUtils.isNullableType(unionSchema)) {
+    if (unionSchema == null ||
+        !unionSchema.getType().equals(Schema.Type.UNION) ||
+        !AvroSerdeUtils.isNullableType(unionSchema)) {
       throw new IllegalArgumentException("Input schemas must be of nullable UNION type.");
     }
 
@@ -500,6 +519,133 @@ public class LegacyHiveSchemaUtils {
     return Schema.createUnion(unionSchemas);
   }
 
+  static boolean isRecordSchemaEvolved(Schema oldSchema, Schema newSchema) {
+    validateInputRecordSchema(oldSchema, newSchema);
+
+    if (oldSchema.toString(true).equals(newSchema.toString(true))) {
+      return false;
+    }
+
+    List<Schema.Field> oldSchemaFields = oldSchema.getFields();
+    List<Schema.Field> newSchemaFields = newSchema.getFields();
+
+    Map<String, Schema.Field> oldSchemaFieldsMap = new HashMap<>();
+    for (Schema.Field field : oldSchemaFields) {
+      oldSchemaFieldsMap.put(field.name().toLowerCase(), field);
+    }
+
+    Map<String, Schema.Field> newSchemaFieldsMap = new HashMap<>();
+    for (Schema.Field field : newSchemaFields) {
+      newSchemaFieldsMap.put(field.name().toLowerCase(), field);
+    }
+
+    for (Schema.Field oldField : oldSchemaFields) {
+      if (!newSchemaFieldsMap.containsKey(oldField.name().toLowerCase())) {
+        // oldField is deleted in new schema
+        LOG.info("Schema is evolved. The field {} is deleted in new schema", oldField.name());
+        return true;
+      }
+    }
+
+    for (Schema.Field newField : newSchemaFields) {
+      if (!oldSchemaFieldsMap.containsKey(newField.name().toLowerCase())) {
+        // oldField is added in new schema
+        LOG.info("Schema is evolved. The field {} is added in new schema", newField.name());
+        return true;
+      }
+    }
+
+    for (Schema.Field oldField : oldSchemaFields) {
+      Schema.Field newField = newSchemaFieldsMap.get(oldField.name().toLowerCase());
+
+      if (isSchemaEvolved(oldField.schema(), newField.schema())) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private static boolean isSchemaEvolved(Schema oldSchema, Schema newSchema) {
+    if (oldSchema == null || newSchema == null) {
+      throw new IllegalArgumentException("The input schemas cannot be null");
+    }
+
+    if (!oldSchema.getType().equals(newSchema.getType())) {
+      if (oldSchema.getType().equals(Schema.Type.ENUM) && newSchema.getType().equals(Schema.Type.STRING)) {
+        return false;
+      }
+
+      LOG.info("Schema is evolved. The old schema type is: {}, the new schema type is: {}",
+          oldSchema.getType(), newSchema.getType());
+      return true;
+    }
+
+    switch (newSchema.getType()) {
+      case BOOLEAN:
+      case BYTES:
+      case DOUBLE:
+      case FLOAT:
+      case INT:
+      case LONG:
+      case STRING:
+      case FIXED:
+        return false;
+      case ENUM:
+        return oldSchema.getEnumSymbols().size() != newSchema.getEnumSymbols().size();
+
+      case RECORD:
+        return isRecordSchemaEvolved(oldSchema, newSchema);
+
+      case MAP:
+        return isSchemaEvolved(oldSchema.getValueType(), newSchema.getValueType());
+
+      case ARRAY:
+        return isSchemaEvolved(oldSchema.getElementType(), newSchema.getElementType());
+
+      case UNION:
+        boolean isBothNullableType =
+            AvroSerdeUtils.isNullableType(oldSchema) && AvroSerdeUtils.isNullableType(newSchema);
+
+        if (!isBothNullableType) {
+          throw new IllegalArgumentException(
+              "We do not support UNION type " + "except nullable field in schema: " + newSchema.toString(true));
+        }
+
+        Schema oldNonNullType = AvroSerdeUtils.getOtherTypeFromNullableType(oldSchema);
+        Schema newNonNullType = AvroSerdeUtils.getOtherTypeFromNullableType(newSchema);
+
+        return isSchemaEvolved(oldNonNullType, newNonNullType);
+      default:
+        throw new IllegalArgumentException(
+            "Unsupported Avro type " + newSchema.getType() + " in new schema: " + newSchema.toString(true));
+    }
+  }
+
+  private static boolean isPartitioned(@Nonnull Table tableOrView) {
+    Preconditions.checkNotNull(tableOrView, "tableOrView cannot be null");
+
+    List<FieldSchema> partitionColumns = getPartitionCols(tableOrView);
+
+    if (partitionColumns == null) {
+      return false;
+    }
+
+    return partitionColumns.size() != 0;
+  }
+
+  private static List<FieldSchema> getPartitionCols(@Nonnull Table tableOrView) {
+    Preconditions.checkNotNull(tableOrView, "tableOrView cannot be null");
+
+    List<FieldSchema> partKeys = tableOrView.getPartitionKeys();
+    if (partKeys == null) {
+      partKeys = new ArrayList<>();
+      tableOrView.setPartitionKeys(partKeys);
+    }
+
+    return partKeys;
+  }
+
   private static void mergeAndAppendField(Schema.Field sourceField, Schema.Field metaDataField,
       SchemaBuilder.FieldAssembler<Schema> fieldAssembler) {
     Schema.Type actualMetaDataFieldType = extractActualTypeIfFieldIsNullableType(metaDataField.schema()).getType();
@@ -515,29 +661,5 @@ public class LegacyHiveSchemaUtils {
       fieldAssembler.name(metaDataField.name()).doc(metaDataField.doc())
           .type(useMetaDataType ? metaDataField.schema() : sourceField.schema()).noDefault();
     }
-  }
-
-  private static boolean isPartitioned(@Nonnull Table tableOrView) {
-    Preconditions.checkNotNull(tableOrView);
-
-    List<FieldSchema> partitionColumns = getPartitionCols(tableOrView);
-
-    if (partitionColumns == null) {
-      return false;
-    }
-
-    return (partitionColumns.size() != 0);
-  }
-
-  private static List<FieldSchema> getPartitionCols(@Nonnull Table tableOrView) {
-    Preconditions.checkNotNull(tableOrView);
-
-    List<FieldSchema> partKeys = tableOrView.getPartitionKeys();
-    if (partKeys == null) {
-      partKeys = new ArrayList<>();
-      tableOrView.setPartitionKeys(partKeys);
-    }
-
-    return partKeys;
   }
 }
