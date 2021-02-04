@@ -37,7 +37,6 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.UnionTypeInfo;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.codehaus.jackson.node.JsonNodeFactory;
-import org.codehaus.jackson.node.NullNode;
 
 
 public class HiveTypeToAvroType {
@@ -71,7 +70,7 @@ public class HiveTypeToAvroType {
       // We will set the recordName to be capitalized, and the recordNameSpace will be in lower case
       final Schema schema = convertTypeInfoToAvroSchema(fieldTypeInfo, recordNamespace + "." + recordName.toLowerCase(),
           StringUtils.capitalize(fieldName));
-      final Schema.Field f = new Schema.Field(fieldName, schema, null, mkFieldsOptional ? NullNode.instance : null);
+      final Schema.Field f = new Schema.Field(fieldName, schema, null, null);
       fields.add(f);
     }
 

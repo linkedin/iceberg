@@ -198,18 +198,7 @@ public class LegacyHiveSchemaUtils {
     List<Schema.Field> sourceFields = sourceSchema.getFields();
 
     Map<String, Queue<Schema.Field>> metaDataFieldsMap = new HashMap<>();
-    for (Schema.Field field : metaDataFields) {
-      // The field name of sourceSchema is from hive thus case sensitivity info can be lost in some cases
-      // We use lowercase field name to check whether a field is an metaData field or source field
-      String fieldLowercase = field.name().toLowerCase();
-      if (metaDataFieldsMap.containsKey(fieldLowercase)) {
-        metaDataFieldsMap.get(fieldLowercase).offer(field);
-      } else {
-        Queue<Schema.Field> fieldsQueue = new LinkedList<>();
-        fieldsQueue.offer(field);
-        metaDataFieldsMap.put(fieldLowercase, fieldsQueue);
-      }
-    }
+    generateMetaDataFieldsMap(metaDataFields, metaDataFieldsMap);
 
     String recordName = metaDataSchema.getName();
     String recordNamespace = metaDataSchema.getNamespace();
@@ -292,72 +281,17 @@ public class LegacyHiveSchemaUtils {
           }
           break;
         case MAP:
-          if (isNewlyAddedField) {
-            fieldAssembler.name(sourceFieldName).type().optional().map().values(sourceFieldSchema.getValueType());
-          } else {
-            Schema.Field oldField = metaDataFieldsMap.get(sourceFieldNameLowercase).poll();
-            Schema oldFieldSchema = oldField.schema();
-
-            Schema evolvedMapSchema = mergeArrayAndMapFieldSchema(oldFieldSchema, sourceFieldSchema, Schema.Type.MAP);
-            Schema.Field evolvedMapField =
-                new Schema.Field(oldField.name(), evolvedMapSchema, oldField.doc(), oldField.defaultVal());
-
-            mergeAndAppendField(sourceField, evolvedMapField, fieldAssembler);
-          }
+          handleMapSchemaMerge(metaDataFieldsMap, fieldAssembler, sourceField, sourceFieldName, sourceFieldSchema,
+              sourceFieldNameLowercase, isNewlyAddedField);
           break;
         case ARRAY:
-          if (isNewlyAddedField) {
-            fieldAssembler.name(sourceFieldName).type().optional().array().items(sourceFieldSchema.getElementType());
-          } else {
-            Schema.Field oldField = metaDataFieldsMap.get(sourceFieldNameLowercase).poll();
-            Schema oldFieldSchema = oldField.schema();
-
-            Schema evolvedArraySchema =
-                mergeArrayAndMapFieldSchema(oldFieldSchema, sourceFieldSchema, Schema.Type.ARRAY);
-            Schema.Field evolvedArrayField =
-                new Schema.Field(oldField.name(), evolvedArraySchema, oldField.doc(), oldField.defaultVal());
-
-            mergeAndAppendField(sourceField, evolvedArrayField, fieldAssembler);
-          }
+          handleArraySchemaMerge(metaDataFieldsMap, fieldAssembler, sourceField, sourceFieldName, sourceFieldSchema,
+              sourceFieldNameLowercase, isNewlyAddedField);
           break;
         case RECORD:
-          if (isNewlyAddedField) {
-            fieldAssembler.name(sourceFieldName).type().unionOf().nullType().and().type(sourceFieldSchema).endUnion()
-                .nullDefault();
-            break;
-          } else {
-            Schema.Field oldField = metaDataFieldsMap.get(sourceFieldNameLowercase).poll();
-            Schema oldFieldSchema = oldField.schema();
-            String oldFieldName = oldField.name();
-
-            if (oldFieldSchema.getType().equals(Schema.Type.RECORD)) {
-              Schema evolvedSchema = mergeRecordSchema(oldFieldSchema, sourceFieldSchema);
-              fieldAssembler.name(oldFieldName).type(evolvedSchema).noDefault();
-              break;
-            } else if (oldFieldSchema.getType().equals(Schema.Type.UNION)) {
-              boolean isRecordFound = false;
-              for (Schema field : oldFieldSchema.getTypes()) {
-                if (field.getType().equals(Schema.Type.RECORD)) {
-                  isRecordFound = true;
-                  Schema evolvedSchema = mergeRecordSchema(field, sourceFieldSchema);
-                  fieldAssembler.name(oldFieldName).type().unionOf().nullType().and().type(evolvedSchema).endUnion()
-                      .noDefault();
-
-                  break;
-                }
-              }
-
-              if (isRecordFound) {
-                break;
-              } else {
-                throw new IllegalArgumentException(
-                    "New Schema is RECORD type, while old Schema is UNION type without RECORD type in it");
-              }
-            }
-
-            throw new IllegalArgumentException(
-                "New Schema is RECORD type, while old Schema is nether RECORD type nor UNION type");
-          }
+          handleRecordSchemaMerge(metaDataFieldsMap, fieldAssembler, sourceFieldName, sourceFieldSchema,
+              sourceFieldNameLowercase, isNewlyAddedField);
+          break;
         case UNION:
           throw new IllegalArgumentException(
               "We do not support UNION type except nullable field which is handled in other types");
@@ -367,6 +301,99 @@ public class LegacyHiveSchemaUtils {
     }
 
     return fieldAssembler.endRecord();
+  }
+
+  private static void generateMetaDataFieldsMap(List<Schema.Field> metaDataFields,
+      Map<String, Queue<Schema.Field>> metaDataFieldsMap) {
+    for (Schema.Field field : metaDataFields) {
+      // The field name of sourceSchema is from hive thus case sensitivity info can be lost in some cases
+      // We use lowercase field name to check whether a field is an metaData field or source field
+      String fieldLowercase = field.name().toLowerCase();
+      if (metaDataFieldsMap.containsKey(fieldLowercase)) {
+        metaDataFieldsMap.get(fieldLowercase).offer(field);
+      } else {
+        Queue<Schema.Field> fieldsQueue = new LinkedList<>();
+        fieldsQueue.offer(field);
+        metaDataFieldsMap.put(fieldLowercase, fieldsQueue);
+      }
+    }
+  }
+
+  private static void handleMapSchemaMerge(Map<String, Queue<Schema.Field>> metaDataFieldsMap,
+      SchemaBuilder.FieldAssembler<Schema> fieldAssembler, Schema.Field sourceField, String sourceFieldName,
+      Schema sourceFieldSchema, String sourceFieldNameLowercase, boolean isNewlyAddedField) {
+    if (isNewlyAddedField) {
+      fieldAssembler.name(sourceFieldName).type().optional().map().values(sourceFieldSchema.getValueType());
+    } else {
+      Schema.Field oldField = metaDataFieldsMap.get(sourceFieldNameLowercase).poll();
+      Schema oldFieldSchema = oldField.schema();
+
+      Schema evolvedMapSchema = mergeArrayAndMapFieldSchema(oldFieldSchema, sourceFieldSchema, Schema.Type.MAP);
+      Schema.Field evolvedMapField =
+          new Schema.Field(oldField.name(), evolvedMapSchema, oldField.doc(), oldField.defaultVal());
+
+      mergeAndAppendField(sourceField, evolvedMapField, fieldAssembler);
+    }
+  }
+
+  private static void handleArraySchemaMerge(Map<String, Queue<Schema.Field>> metaDataFieldsMap,
+      SchemaBuilder.FieldAssembler<Schema> fieldAssembler, Schema.Field sourceField, String sourceFieldName,
+      Schema sourceFieldSchema, String sourceFieldNameLowercase, boolean isNewlyAddedField) {
+    if (isNewlyAddedField) {
+      fieldAssembler.name(sourceFieldName).type().optional().array().items(sourceFieldSchema.getElementType());
+    } else {
+      Schema.Field oldField = metaDataFieldsMap.get(sourceFieldNameLowercase).poll();
+      Schema oldFieldSchema = oldField.schema();
+
+      Schema evolvedArraySchema =
+          mergeArrayAndMapFieldSchema(oldFieldSchema, sourceFieldSchema, Schema.Type.ARRAY);
+      Schema.Field evolvedArrayField =
+          new Schema.Field(oldField.name(), evolvedArraySchema, oldField.doc(), oldField.defaultVal());
+
+      mergeAndAppendField(sourceField, evolvedArrayField, fieldAssembler);
+    }
+  }
+
+  private static void handleRecordSchemaMerge(Map<String, Queue<Schema.Field>> metaDataFieldsMap,
+      SchemaBuilder.FieldAssembler<Schema> fieldAssembler, String sourceFieldName, Schema sourceFieldSchema,
+      String sourceFieldNameLowercase, boolean isNewlyAddedField) {
+    if (isNewlyAddedField) {
+      fieldAssembler.name(sourceFieldName).type().unionOf().nullType().and().type(sourceFieldSchema).endUnion()
+          .nullDefault();
+      return;
+    } else {
+      Schema.Field oldField = metaDataFieldsMap.get(sourceFieldNameLowercase).poll();
+      Schema oldFieldSchema = oldField.schema();
+      String oldFieldName = oldField.name();
+
+      if (oldFieldSchema.getType().equals(Schema.Type.RECORD)) {
+        Schema evolvedSchema = mergeRecordSchema(oldFieldSchema, sourceFieldSchema);
+        fieldAssembler.name(oldFieldName).type(evolvedSchema).noDefault();
+        return;
+      } else if (oldFieldSchema.getType().equals(Schema.Type.UNION)) {
+        boolean isRecordFound = false;
+        for (Schema field : oldFieldSchema.getTypes()) {
+          if (field.getType().equals(Schema.Type.RECORD)) {
+            isRecordFound = true;
+            Schema evolvedSchema = mergeRecordSchema(field, sourceFieldSchema);
+            fieldAssembler.name(oldFieldName).type().unionOf().nullType().and().type(evolvedSchema).endUnion()
+                .noDefault();
+
+            break;
+          }
+        }
+
+        if (isRecordFound) {
+          return;
+        } else {
+          throw new IllegalArgumentException(
+              "New Schema is RECORD type, while old Schema is UNION type without RECORD type in it");
+        }
+      }
+
+      throw new IllegalArgumentException(
+          "New Schema is RECORD type, while old Schema is nether RECORD type nor UNION type");
+    }
   }
 
   private static Schema mergeArrayAndMapFieldSchema(Schema oldFieldSchema, Schema newFieldSchema,
@@ -449,21 +476,7 @@ public class LegacyHiveSchemaUtils {
 
         break;
       case RECORD:
-        if (oldInnerSchema.getType().equals(Schema.Type.RECORD)) {
-          evolvedInnerSchema = mergeRecordSchema(oldInnerSchema, newInnerSchema);
-        } else if (oldInnerSchema.getType().equals(Schema.Type.UNION)) {
-          Schema recordTypeSchema = extractTargetTypeFromNullableUnionType(oldInnerSchema, Schema.Type.RECORD);
-          if (recordTypeSchema == null) {
-            throw new IllegalArgumentException("New element Schema is RECORD type, " +
-                "while old element Schema is UNION type without RECORD type in it");
-          }
-
-          Schema evolvedElementSchemaNonnullable = mergeRecordSchema(recordTypeSchema, newInnerSchema);
-          evolvedInnerSchema = createNullableUnionSchema(evolvedElementSchemaNonnullable);
-        } else {
-          throw new IllegalArgumentException(
-              "New element Schema is RECORD type, " + "while old element Schema is neither RECORD type nor UNION type");
-        }
+        evolvedInnerSchema = handleArrayAndMapInnerRecordSchema(oldInnerSchema, newInnerSchema);
 
         break;
       case UNION:
@@ -477,6 +490,26 @@ public class LegacyHiveSchemaUtils {
       throw new RuntimeException("Fail to generate evolved schema");
     }
 
+    return evolvedInnerSchema;
+  }
+
+  private static Schema handleArrayAndMapInnerRecordSchema(Schema oldInnerSchema, Schema newInnerSchema) {
+    Schema evolvedInnerSchema;
+    if (oldInnerSchema.getType().equals(Schema.Type.RECORD)) {
+      evolvedInnerSchema = mergeRecordSchema(oldInnerSchema, newInnerSchema);
+    } else if (oldInnerSchema.getType().equals(Schema.Type.UNION)) {
+      Schema recordTypeSchema = extractTargetTypeFromNullableUnionType(oldInnerSchema, Schema.Type.RECORD);
+      if (recordTypeSchema == null) {
+        throw new IllegalArgumentException("New element Schema is RECORD type, " +
+            "while old element Schema is UNION type without RECORD type in it");
+      }
+
+      Schema evolvedElementSchemaNonnullable = mergeRecordSchema(recordTypeSchema, newInnerSchema);
+      evolvedInnerSchema = createNullableUnionSchema(evolvedElementSchemaNonnullable);
+    } else {
+      throw new IllegalArgumentException(
+          "New element Schema is RECORD type, " + "while old element Schema is neither RECORD type nor UNION type");
+    }
     return evolvedInnerSchema;
   }
 
