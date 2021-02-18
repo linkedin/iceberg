@@ -130,7 +130,7 @@ public class AvroSchemaUtil {
     return false;
   }
 
-  static Schema toOption(Schema schema) {
+  public static Schema toOption(Schema schema) {
     if (schema.getType() == UNION) {
       Preconditions.checkArgument(isOptionSchema(schema),
           "Union schemas are not supported: %s", schema);
@@ -140,7 +140,7 @@ public class AvroSchemaUtil {
     }
   }
 
-  static Schema fromOption(Schema schema) {
+  public static Schema fromOption(Schema schema) {
     Preconditions.checkArgument(schema.getType() == UNION,
         "Expected union schema but was passed: %s", schema);
     Preconditions.checkArgument(schema.getTypes().size() == 2,
@@ -152,7 +152,7 @@ public class AvroSchemaUtil {
     }
   }
 
-  static Schema fromOptions(List<Schema> options) {
+  public static Schema fromOptions(List<Schema> options) {
     Preconditions.checkArgument(options.size() == 2,
         "Expected two schemas, but was passed: %s options", options.size());
     if (options.get(0).getType() == Schema.Type.NULL) {
