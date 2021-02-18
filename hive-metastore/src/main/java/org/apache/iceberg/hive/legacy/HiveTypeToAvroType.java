@@ -39,18 +39,11 @@ import org.codehaus.jackson.node.JsonNodeFactory;
 public class HiveTypeToAvroType {
   private int recordCounter;
 
-  private final boolean mkFieldsOptional;
-
   // Additional numeric type, similar to other logical type names in AvroSerde
   private static final String SHORT_TYPE_NAME = "short";
   private static final String BYTE_TYPE_NAME = "byte";
 
-  public HiveTypeToAvroType(boolean mkFieldsOptional) {
-    this.recordCounter = 0;
-    this.mkFieldsOptional = mkFieldsOptional;
-  }
-
-  Schema convertTypeInfoToAvroSchema(TypeInfo typeInfo, String recordNamespace, String recordName) {
+  static Schema convertTypeInfoToAvroSchema(TypeInfo typeInfo, String recordNamespace, String recordName) {
     Schema schema;
     ObjectInspector.Category category = typeInfo.getCategory();
 
@@ -80,14 +73,14 @@ public class HiveTypeToAvroType {
     return schema;
   }
 
-  private Schema parseSchemaFromUnion(UnionTypeInfo unionTypeInfo, final String recordNamespace,
+  private static Schema parseSchemaFromUnion(UnionTypeInfo unionTypeInfo, final String recordNamespace,
                                       final String recordName) {
     List<TypeInfo> typeInfos = unionTypeInfo.getAllUnionObjectTypeInfos();
 
     // A union might contain duplicate struct typeinfos because the underlying Avro union has two Record types with
     // different names but the same internal structure.
     // In the case of duplicate typeinfos, we generate a new record type for each struct typeinfo.
-
+    int recordCounter = 0;
     List<Schema> schemas = new ArrayList<>();
 
     for (TypeInfo typeInfo : typeInfos) {
@@ -112,7 +105,7 @@ public class HiveTypeToAvroType {
 
   // Previously, Hive use recordType[N] as the recordName for each structType,
   // with the change we made in LIHADOOP-36761, the new record name will be in the form of "structNamespace.structName"
-  private Schema parseSchemaFromStruct(final StructTypeInfo typeInfo, final String recordNamespace,
+  private static Schema parseSchemaFromStruct(final StructTypeInfo typeInfo, final String recordNamespace,
       final String recordName) {
     final List<Schema.Field> avroFields = new ArrayList<>();
 
@@ -135,13 +128,14 @@ public class HiveTypeToAvroType {
     return recordSchema;
   }
 
-  private Schema parseSchemaFromList(final ListTypeInfo typeInfo, final String recordNamespace,
+  private static Schema parseSchemaFromList(final ListTypeInfo typeInfo, final String recordNamespace,
       final String recordName) {
     Schema listSchema = convertTypeInfoToAvroSchema(typeInfo.getListElementTypeInfo(), recordNamespace, recordName);
     return Schema.createArray(listSchema);
   }
 
-  private Schema parseSchemaFromMap(final MapTypeInfo typeInfo, final String recordNamespace, final String recordName) {
+  private static Schema parseSchemaFromMap(final MapTypeInfo typeInfo, final String recordNamespace,
+                                           final String recordName) {
     final TypeInfo keyTypeInfo = typeInfo.getMapKeyTypeInfo();
     final PrimitiveObjectInspector.PrimitiveCategory pc = ((PrimitiveTypeInfo) keyTypeInfo).getPrimitiveCategory();
     if (pc != PrimitiveObjectInspector.PrimitiveCategory.STRING) {
@@ -154,7 +148,7 @@ public class HiveTypeToAvroType {
     return Schema.createMap(valueSchema);
   }
 
-  private Schema parseSchemaFromPrimitive(PrimitiveTypeInfo primitiveTypeInfo) {
+  private static Schema parseSchemaFromPrimitive(PrimitiveTypeInfo primitiveTypeInfo) {
     Schema schema;
     switch (primitiveTypeInfo.getPrimitiveCategory()) {
       case LONG:

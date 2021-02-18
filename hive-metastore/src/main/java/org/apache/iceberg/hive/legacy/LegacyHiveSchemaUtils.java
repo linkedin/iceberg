@@ -65,8 +65,7 @@ public class LegacyHiveSchemaUtils {
                     .collect(Collectors.toList())
     );
 
-    return new HiveTypeToAvroType(true)
-            .convertTypeInfoToAvroSchema(structTypeInfo, recordNamespace, getStandardName(recordName));
+    return HiveTypeToAvroType.convertTypeInfoToAvroSchema(structTypeInfo, recordNamespace, getStandardName(recordName));
   }
 
   private static String getStandardName(@Nonnull String name) {
