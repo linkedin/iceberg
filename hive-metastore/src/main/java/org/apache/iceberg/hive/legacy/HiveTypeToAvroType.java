@@ -33,7 +33,6 @@ import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.codehaus.jackson.node.JsonNodeFactory;
 
-
 class HiveTypeToAvroType extends HiveTypeUtil.HiveSchemaVisitor<Schema> {
 
   static Schema visit(TypeInfo typeInfo) {

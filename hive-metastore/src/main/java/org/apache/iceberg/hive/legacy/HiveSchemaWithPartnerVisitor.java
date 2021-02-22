@@ -27,7 +27,6 @@ import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 
-
 /**
  * A Hive {@link TypeInfo} visitor with an accompanying partner schema
  *
@@ -52,7 +51,7 @@ public abstract class HiveSchemaWithPartnerVisitor<P, FP, R, FR> {
    */
   public interface PartnerAccessors<P, FP> {
 
-    FP fieldPartner(P partnerStruct, String name);
+    FP fieldPartner(P partnerStruct, String fieldName);
 
     P fieldType(FP partnerField);
 
