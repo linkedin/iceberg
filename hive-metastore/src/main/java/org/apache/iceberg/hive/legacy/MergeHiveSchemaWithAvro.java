@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.avro.JsonProperties;
 import org.apache.avro.Schema;
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.ListTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
@@ -38,11 +37,9 @@ import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
  *
  * 1. Fields are matched between Hive and Avro schemas using a case insensitive search by field name
  * 2. Copies field names, nullability, default value, field props from the Avro schema
- * 3. Copies field type from the Hive schema. We currently perform a check to ensure type compatibility between matched
- *    fields only for container types i.e STRUCT, LIST and MAP. e.g. STRUCT in Hive schema must be matched to
- *    a RECORD in Avro schema. We perform a blind copy of Hive schema for primitive types.
- *    TODO: We should check for type compatibility of primitives instead of a blind copy. We should also handle some
- *          cases of type promotion, e.g. INT -> LONG, BINARY -> FIXED, STRING -> ENUM, etc
+ * 3. Copies field type from the Hive schema.
+ *    TODO: We should also handle some cases of type promotion where the types in Avro are potentially more correct
+ *    e.g.BINARY in Hive -> FIXED in Avro, STRING in Hive -> ENUM in Avro, etc
  * 4. Retains fields found only in the Hive schema; Ignores fields found only in the Avro schema
  * 5. Fields found only in Hive schema are represented as optional fields in the resultant Avro schema
  * 6. For fields found only in Hive schema, field names are sanitized to make them compatible with Avro identifier spec
@@ -59,29 +56,24 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
 
   @Override
   public Schema struct(StructTypeInfo struct, Schema partner, List<Schema.Field> fieldResults) {
-    if (partner == null) {
-      // if there was no matching Avro struct, return an optional struct with new record/namespace
+    boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
+    Schema result;
+    if (partner == null || extractIfOption(partner).getType() != Schema.Type.RECORD) {
+      // if there was no matching Avro struct, return a struct with new record/namespace
       int recordNum = recordCounter.incrementAndGet();
-      return AvroSchemaUtil.toOption(
-          Schema.createRecord("record" + recordNum, null, "namespace" + recordNum, false, fieldResults));
-    } else if (AvroSchemaUtil.isOptionSchema(partner)) {
-      // if the matching Avro struct was an option, return an optional struct by copying the original record
-      // but with our new fields
-      return AvroSchemaUtil.toOption(
-          AvroSchemaUtil.copyRecord(AvroSchemaUtil.fromOption(partner), fieldResults, null));
+      result = Schema.createRecord("record" + recordNum, null, "namespace" + recordNum, false, fieldResults);
     } else {
-      return AvroSchemaUtil.copyRecord(partner, fieldResults, null);
+      result = AvroSchemaUtil.copyRecord(extractIfOption(partner), fieldResults, null);
     }
+    return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
   }
 
   @Override
   public Schema.Field field(String name, TypeInfo field, Schema.Field partner, Schema fieldResult) {
+    // No need to infer `shouldResultBeOptional`. We expect other visitor methods to return optional schemas
+    // in their field results if required
     if (partner == null) {
-      // if there was no matching Avro field, return an optional field with null default
-      // here we expect and assert that other visitor method will always return an optional schema in case their
-      // partner is missing
-      Preconditions.checkArgument(AvroSchemaUtil.isOptionSchema(fieldResult),
-          "Expected an option schema for a missing Avro field. Found: %s", fieldResult);
+      // if there was no matching Avro field, use name form the Hive schema and set a null default
       return new Schema.Field(
           AvroSchemaUtil.makeCompatibleName(name), fieldResult, null, Schema.Field.NULL_DEFAULT_VALUE);
     } else {
@@ -114,41 +106,29 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
 
   @Override
   public Schema list(ListTypeInfo list, Schema partner, Schema elementResult) {
-    if (partner == null || AvroSchemaUtil.isOptionSchema(partner)) {
-      // if there was no matching Avro list, or if matching Avro list was an option, return an optional list
-      return AvroSchemaUtil.toOption(Schema.createArray(elementResult));
-    } else {
-      return Schema.createArray(elementResult);
-    }
+    // if there was no matching Avro list, or if matching Avro list was an option, return an optional list
+    boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
+    Schema result = Schema.createArray(elementResult);
+    return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
   }
 
   @Override
   public Schema map(MapTypeInfo map, Schema partner, Schema keyResult, Schema valueResult) {
     Preconditions.checkArgument(extractIfOption(keyResult).getType() == Schema.Type.STRING,
         "Map keys should always be non-nullable strings. Found: %s", keyResult);
-    if (partner == null || AvroSchemaUtil.isOptionSchema(partner)) {
-      // if there was no matching Avro map, or if matching Avro map was an option, return an optional map
-      return AvroSchemaUtil.toOption(Schema.createMap(valueResult));
-    } else {
-      return Schema.createMap(valueResult);
-    }
+    // if there was no matching Avro map, or if matching Avro map was an option, return an optional map
+    boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
+    Schema result = Schema.createMap(valueResult);
+    return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
   }
 
   @Override
   public Schema primitive(PrimitiveTypeInfo primitive, Schema partner) {
-    Schema schema = HiveTypeUtil.visit(primitive, hiveToAvro);
-    if (partner == null) {
-      // if there was no matching Avro primitive, return an optional primitive
-      return AvroSchemaUtil.toOption(schema);
-    } else {
-      Schema partnerWithoutNull = extractIfOption(partner);
-      Schema promoted = checkCompatibilityAndPromote(schema, partnerWithoutNull);
-      if (AvroSchemaUtil.isOptionSchema(partner)) {
-        return AvroSchemaUtil.toOption(promoted);
-      } else {
-        return promoted;
-      }
-    }
+    boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
+    Schema hivePrimitive = HiveTypeUtil.visit(primitive, hiveToAvro);
+    // if there was no matching Avro primitive, use the Hive primitive
+    Schema result = partner == null ? hivePrimitive : checkCompatibilityAndPromote(hivePrimitive, partner);
+    return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
   }
 
   private Schema checkCompatibilityAndPromote(Schema schema, Schema partner) {
@@ -167,17 +147,9 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
     private static final Schema MAP_KEY = Schema.create(Schema.Type.STRING);
 
     @Override
-    public Schema.Field fieldPartner(Schema partnerStruct, String fieldName) {
-      Schema struct = extractIfOption(partnerStruct);
-      Preconditions.checkArgument(struct.getType() == Schema.Type.RECORD,
-          "Cannot merge Hive type %s with Avro type %s", ObjectInspector.Category.STRUCT, struct.getType());
-      // TODO: Optimize? This will be called for every struct field, we will run the for loop for every struct field
-      for (Schema.Field field : struct.getFields()) {
-        if (field.name().equalsIgnoreCase(fieldName)) {
-          return field;
-        }
-      }
-      return null;
+    public Schema.Field fieldPartner(Schema partner, String fieldName) {
+      Schema schema = extractIfOption(partner);
+      return (schema.getType() == Schema.Type.RECORD) ? findCaseInsensitive(schema, fieldName) : null;
     }
 
     @Override
@@ -186,24 +158,32 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
     }
 
     @Override
-    public Schema mapKeyPartner(Schema partnerMap) {
-      return MAP_KEY;
+    public Schema mapKeyPartner(Schema partner) {
+      Schema schema = extractIfOption(partner);
+      return (schema.getType() == Schema.Type.MAP) ? MAP_KEY : null;
     }
 
     @Override
-    public Schema mapValuePartner(Schema partnerMap) {
-      Schema map = extractIfOption(partnerMap);
-      Preconditions.checkArgument(map.getType() == Schema.Type.MAP,
-          "Cannot merge Hive type %s with Avro type %s", ObjectInspector.Category.MAP, map.getType());
-      return map.getValueType();
+    public Schema mapValuePartner(Schema partner) {
+      Schema schema = extractIfOption(partner);
+      return (schema.getType() == Schema.Type.MAP) ? schema.getValueType() : null;
     }
 
     @Override
-    public Schema listElementPartner(Schema partnerList) {
-      Schema list = extractIfOption(partnerList);
-      Preconditions.checkArgument(list.getType() == Schema.Type.ARRAY,
-          "Cannot merge Hive type %s with Avro type %s", ObjectInspector.Category.LIST, list.getType());
-      return list.getElementType();
+    public Schema listElementPartner(Schema partner) {
+      Schema schema = extractIfOption(partner);
+      return (schema.getType() == Schema.Type.ARRAY) ? schema.getElementType() : null;
+    }
+
+    private Schema.Field findCaseInsensitive(Schema struct, String fieldName) {
+      Preconditions.checkArgument(struct.getType() == Schema.Type.RECORD);
+      // TODO: Optimize? This will be called for every struct field, we will run the for loop for every struct field
+      for (Schema.Field field : struct.getFields()) {
+        if (field.name().equalsIgnoreCase(fieldName)) {
+          return field;
+        }
+      }
+      return null;
     }
   }
 

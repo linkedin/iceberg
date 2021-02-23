@@ -67,6 +67,28 @@ public class TestMergeHiveSchemaWithAvro {
   }
 
   @Test
+  public void shouldUseTypesFromHive() {
+    String hive = "struct<fa:struct<ga:int>,fb:array<int>,fc:map<string,int>,fd:string>";
+    Schema avro = struct("r1",
+        required("fA", Schema.Type.INT),
+        required("fB", Schema.Type.INT),
+        required("fC", Schema.Type.INT),
+        required("fD", Schema.Type.INT)
+    );
+
+    Schema expected = struct("r1",
+        required("fA", struct("record1", null, "namespace1",
+            optional("ga", Schema.Type.INT)
+        )),
+        required("fB", array(nullable(Schema.Type.INT))),
+        required("fC", map(nullable(Schema.Type.INT))),
+        required("fD", Schema.Type.STRING)
+    );
+
+    assertSchema(expected, merge(hive, avro));
+  }
+
+  @Test
   public void shouldIgnoreExtraFieldsFromAvro() {
     String hive = "struct<fa:int,fb:struct<ga:int>>";
     Schema avro = struct("r1",
@@ -243,42 +265,6 @@ public class TestMergeHiveSchemaWithAvro {
 
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Map keys should always be non-nullable strings");
-    assertSchema(avro, merge(hive, avro));
-  }
-
-  @Test
-  public void shouldFailIfContainerTypesDontMatch1() {
-    String hive = "struct<fa:struct<ga:int>>";
-    Schema avro = struct("r1",
-        required("fA", Schema.Type.INT)
-    );
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Cannot merge Hive type STRUCT with Avro type INT");
-    assertSchema(avro, merge(hive, avro));
-  }
-
-  @Test
-  public void shouldFailIfContainerTypesDontMatch2() {
-    String hive = "struct<fa:array<int>>";
-    Schema avro = struct("r1",
-        required("fA", Schema.Type.INT)
-    );
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Cannot merge Hive type LIST with Avro type INT");
-    assertSchema(avro, merge(hive, avro));
-  }
-
-  @Test
-  public void shouldFailIfContainerTypesDontMatch3() {
-    String hive = "struct<fa:map<int,int>>";
-    Schema avro = struct("r1",
-        required("fA", Schema.Type.INT)
-    );
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Cannot merge Hive type MAP with Avro type INT");
     assertSchema(avro, merge(hive, avro));
   }
 
