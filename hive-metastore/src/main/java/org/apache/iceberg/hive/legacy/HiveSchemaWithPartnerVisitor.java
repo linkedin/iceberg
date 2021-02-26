@@ -64,7 +64,7 @@ public abstract class HiveSchemaWithPartnerVisitor<P, FP, R, FR> {
 
   @SuppressWarnings("MethodTypeParameterName")
   public static <P, FP, R, FR> R visit(TypeInfo typeInfo, P partner, HiveSchemaWithPartnerVisitor<P, FP, R, FR> visitor,
-      PartnerAccessor<P, FP> accessors) {
+      PartnerAccessor<P, FP> accessor) {
     switch (typeInfo.getCategory()) {
       case STRUCT:
         StructTypeInfo structTypeInfo = (StructTypeInfo) typeInfo;
@@ -72,9 +72,9 @@ public abstract class HiveSchemaWithPartnerVisitor<P, FP, R, FR> {
         List<FR> results = Lists.newArrayListWithExpectedSize(names.size());
         for (String name : names) {
           TypeInfo fieldTypeInfo = structTypeInfo.getStructFieldTypeInfo(name);
-          FP fieldPartner = partner != null ? accessors.fieldPartner(partner, name) : null;
-          P fieldPartnerType = fieldPartner != null ? accessors.fieldType(fieldPartner) : null;
-          R result = visit(fieldTypeInfo, fieldPartnerType, visitor, accessors);
+          FP fieldPartner = partner != null ? accessor.fieldPartner(partner, name) : null;
+          P fieldPartnerType = fieldPartner != null ? accessor.fieldType(fieldPartner) : null;
+          R result = visit(fieldTypeInfo, fieldPartnerType, visitor, accessor);
           results.add(visitor.field(name, fieldTypeInfo, fieldPartner, result));
         }
         return visitor.struct(structTypeInfo, partner, results);
@@ -82,16 +82,16 @@ public abstract class HiveSchemaWithPartnerVisitor<P, FP, R, FR> {
       case LIST:
         ListTypeInfo listTypeInfo = (ListTypeInfo) typeInfo;
         TypeInfo elementTypeInfo = listTypeInfo.getListElementTypeInfo();
-        P elementPartner = partner != null ? accessors.listElementPartner(partner) : null;
-        R elementResult = visit(elementTypeInfo, elementPartner, visitor, accessors);
+        P elementPartner = partner != null ? accessor.listElementPartner(partner) : null;
+        R elementResult = visit(elementTypeInfo, elementPartner, visitor, accessor);
         return visitor.list(listTypeInfo, partner, elementResult);
 
       case MAP:
         MapTypeInfo mapTypeInfo = (MapTypeInfo) typeInfo;
-        P keyPartner = partner != null ? accessors.mapKeyPartner(partner) : null;
-        R keyResult = visit(mapTypeInfo.getMapKeyTypeInfo(), keyPartner, visitor, accessors);
-        P valuePartner = partner != null ? accessors.mapValuePartner(partner) : null;
-        R valueResult = visit(mapTypeInfo.getMapValueTypeInfo(), valuePartner, visitor, accessors);
+        P keyPartner = partner != null ? accessor.mapKeyPartner(partner) : null;
+        R keyResult = visit(mapTypeInfo.getMapKeyTypeInfo(), keyPartner, visitor, accessor);
+        P valuePartner = partner != null ? accessor.mapValuePartner(partner) : null;
+        R valueResult = visit(mapTypeInfo.getMapValueTypeInfo(), valuePartner, visitor, accessor);
         return visitor.map(mapTypeInfo, partner, keyResult, valueResult);
 
       case PRIMITIVE:
