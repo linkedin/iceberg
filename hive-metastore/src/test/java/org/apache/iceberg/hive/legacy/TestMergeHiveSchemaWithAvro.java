@@ -23,7 +23,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Arrays;
 import java.util.Map;
+
+import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
+import org.apache.avro.SchemaBuilder;
 import org.apache.avro.util.internal.JacksonUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
@@ -266,6 +269,25 @@ public class TestMergeHiveSchemaWithAvro {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("Map keys should always be non-nullable strings");
     assertSchema(avro, merge(hive, avro));
+  }
+
+  @Test
+  public void shouldRecoverLogicalType() {
+    String hive = "struct<fa:date,fb:timestamp,fc:decimal(4,2)>";
+    Schema avro = struct("r1",
+            optional("fa", Schema.Type.INT),
+            optional("fb", Schema.Type.LONG),
+            optional("fc", Schema.Type.BYTES));
+    Schema merged = merge(hive, avro);
+
+    Schema expected = struct("r1",
+            optional("fa", LogicalTypes.date().addToSchema(Schema.create(Schema.Type.INT))),
+            optional("fb", LogicalTypes.timestampMillis().addToSchema(Schema.create(Schema.Type.LONG))),
+            optional("fc", LogicalTypes.decimal(4, 2).addToSchema(Schema.create(Schema.Type.BYTES))));
+
+    assertSchema(expected, merged);
+    Assert.assertEquals("date",
+            AvroSchemaUtil.fromOption(merged.getField("fa").schema()).getLogicalType().getName());
   }
 
   // TODO: tests to retain schema props

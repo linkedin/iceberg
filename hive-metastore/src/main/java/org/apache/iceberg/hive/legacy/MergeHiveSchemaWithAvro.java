@@ -22,8 +22,8 @@ package org.apache.iceberg.hive.legacy;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.avro.JsonProperties;
+import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
-import org.apache.hadoop.hive.serde2.avro.AvroSerDe;
 import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.ListTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
-import org.codehaus.jackson.node.JsonNodeFactory;
 
 
 /**
@@ -204,20 +203,11 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
 
   // TODO: This should be refactored into a visitor if we ever require conversion of complex types
   public Schema hivePrimitiveToAvro(PrimitiveTypeInfo primitive) {
-    Schema schema;
     switch (primitive.getPrimitiveCategory()) {
       case INT:
-        return Schema.create(Schema.Type.INT);
-
       case BYTE:
-        schema = Schema.create(Schema.Type.INT);
-        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, BYTE_TYPE_NAME);
-        return schema;
-
       case SHORT:
-        schema = Schema.create(Schema.Type.INT);
-        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, SHORT_TYPE_NAME);
-        return schema;
+        return Schema.create(Schema.Type.INT);
 
       case LONG:
         return Schema.create(Schema.Type.LONG);
@@ -243,23 +233,14 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
         return Schema.create(Schema.Type.NULL);
 
       case DATE:
-        schema = Schema.create(Schema.Type.INT);
-        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, AvroSerDe.DATE_TYPE_NAME);
-        return schema;
+        return LogicalTypes.date().addToSchema(Schema.create(Schema.Type.INT));
 
       case TIMESTAMP:
-        schema = Schema.create(Schema.Type.LONG);
-        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, AvroSerDe.TIMESTAMP_TYPE_NAME);
-        return schema;
+        return LogicalTypes.timestampMillis().addToSchema(Schema.create(Schema.Type.LONG));
 
       case DECIMAL:
         DecimalTypeInfo dti = (DecimalTypeInfo) primitive;
-        JsonNodeFactory factory = JsonNodeFactory.instance;
-        schema = Schema.create(Schema.Type.BYTES);
-        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, AvroSerDe.DECIMAL_TYPE_NAME);
-        schema.addProp(AvroSerDe.AVRO_PROP_PRECISION, factory.numberNode(dti.getPrecision()));
-        schema.addProp(AvroSerDe.AVRO_PROP_SCALE, factory.numberNode(dti.getScale()));
-        return schema;
+        return LogicalTypes.decimal(dti.getPrecision(), dti.getScale()).addToSchema(Schema.create(Schema.Type.BYTES));
 
       default:
         throw new UnsupportedOperationException(primitive + " is not supported.");
