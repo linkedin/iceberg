@@ -31,9 +31,9 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
  * A Hive {@link TypeInfo} visitor with an accompanying partner schema
  *
  * This visitor traverses the Hive {@link TypeInfo} tree contiguously accessing the schema tree for the partner schema
- * using {@link PartnerAccessors}. When visiting each type in the Hive tree, the implementation is also presented
+ * using {@link PartnerAccessor}. When visiting each type in the Hive tree, the implementation is also presented
  * with the corresponding type from the partner schema, or else a {@code null} if no match was found. Matching
- * behavior can be controlled by implementing the methods in {@link PartnerAccessors}
+ * behavior can be controlled by implementing the methods in {@link PartnerAccessor}
  *
  * @param <P> type of partner schema
  * @param <FP> type of the field representation in the partner schema
@@ -49,7 +49,7 @@ public abstract class HiveSchemaWithPartnerVisitor<P, FP, R, FR> {
    * @param <P> type of partner schema
    * @param <FP> type of the field representation in the partner schema
    */
-  public interface PartnerAccessors<P, FP> {
+  public interface PartnerAccessor<P, FP> {
 
     FP fieldPartner(P partnerStruct, String fieldName);
 
@@ -64,7 +64,7 @@ public abstract class HiveSchemaWithPartnerVisitor<P, FP, R, FR> {
 
   @SuppressWarnings("MethodTypeParameterName")
   public static <P, FP, R, FR> R visit(TypeInfo typeInfo, P partner, HiveSchemaWithPartnerVisitor<P, FP, R, FR> visitor,
-      PartnerAccessors<P, FP> accessors) {
+      PartnerAccessor<P, FP> accessors) {
     switch (typeInfo.getCategory()) {
       case STRUCT:
         StructTypeInfo structTypeInfo = (StructTypeInfo) typeInfo;

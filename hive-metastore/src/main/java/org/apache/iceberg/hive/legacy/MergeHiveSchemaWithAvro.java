@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.avro.JsonProperties;
 import org.apache.avro.Schema;
+import org.apache.hadoop.hive.serde2.avro.AvroSerDe;
+import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.ListTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
@@ -30,6 +32,8 @@ import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.codehaus.jackson.node.JsonNodeFactory;
+
 
 /**
  * A {@link HiveSchemaWithPartnerVisitor} which augments a Hive schema with extra metadata from a partner Avro schema
@@ -52,7 +56,6 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
   }
 
   private final AtomicInteger recordCounter = new AtomicInteger(0);
-  private final HiveTypeToAvroType hiveToAvro = new HiveTypeToAvroType();
 
   @Override
   public Schema struct(StructTypeInfo struct, Schema partner, List<Schema.Field> fieldResults) {
@@ -125,7 +128,7 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
   @Override
   public Schema primitive(PrimitiveTypeInfo primitive, Schema partner) {
     boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
-    Schema hivePrimitive = HiveTypeUtil.visit(primitive, hiveToAvro);
+    Schema hivePrimitive = hivePrimitiveToAvro(primitive);
     // if there was no matching Avro primitive, use the Hive primitive
     Schema result = partner == null ? hivePrimitive : checkCompatibilityAndPromote(hivePrimitive, partner);
     return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
@@ -138,10 +141,10 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
   }
 
   /**
-   * A {@link PartnerAccessors} which matches the requested field from a partner Avro struct by case insensitive
+   * A {@link PartnerAccessor} which matches the requested field from a partner Avro struct by case insensitive
    * field name match
    */
-  private static class AvroPartnerAccessor implements PartnerAccessors<Schema, Schema.Field> {
+  private static class AvroPartnerAccessor implements PartnerAccessor<Schema, Schema.Field> {
     private static final AvroPartnerAccessor INSTANCE = new AvroPartnerAccessor();
 
     private static final Schema MAP_KEY = Schema.create(Schema.Type.STRING);
@@ -192,6 +195,74 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
       return AvroSchemaUtil.fromOption(schema);
     } else {
       return schema;
+    }
+  }
+
+  // Additional numeric type, similar to other logical type names in AvroSerde
+  private static final String SHORT_TYPE_NAME = "short";
+  private static final String BYTE_TYPE_NAME = "byte";
+
+  // TODO: This should be refactored into a visitor if we ever require conversion of complex types
+  public Schema hivePrimitiveToAvro(PrimitiveTypeInfo primitive) {
+    Schema schema;
+    switch (primitive.getPrimitiveCategory()) {
+      case INT:
+        return Schema.create(Schema.Type.INT);
+
+      case BYTE:
+        schema = Schema.create(Schema.Type.INT);
+        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, BYTE_TYPE_NAME);
+        return schema;
+
+      case SHORT:
+        schema = Schema.create(Schema.Type.INT);
+        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, SHORT_TYPE_NAME);
+        return schema;
+
+      case LONG:
+        return Schema.create(Schema.Type.LONG);
+
+      case FLOAT:
+        return Schema.create(Schema.Type.FLOAT);
+
+      case DOUBLE:
+        return Schema.create(Schema.Type.DOUBLE);
+
+      case BOOLEAN:
+        return Schema.create(Schema.Type.BOOLEAN);
+
+      case CHAR:
+      case STRING:
+      case VARCHAR:
+        return Schema.create(Schema.Type.STRING);
+
+      case BINARY:
+        return Schema.create(Schema.Type.BYTES);
+
+      case VOID:
+        return Schema.create(Schema.Type.NULL);
+
+      case DATE:
+        schema = Schema.create(Schema.Type.INT);
+        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, AvroSerDe.DATE_TYPE_NAME);
+        return schema;
+
+      case TIMESTAMP:
+        schema = Schema.create(Schema.Type.LONG);
+        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, AvroSerDe.TIMESTAMP_TYPE_NAME);
+        return schema;
+
+      case DECIMAL:
+        DecimalTypeInfo dti = (DecimalTypeInfo) primitive;
+        JsonNodeFactory factory = JsonNodeFactory.instance;
+        schema = Schema.create(Schema.Type.BYTES);
+        schema.addProp(AvroSerDe.AVRO_PROP_LOGICAL_TYPE, AvroSerDe.DECIMAL_TYPE_NAME);
+        schema.addProp(AvroSerDe.AVRO_PROP_PRECISION, factory.numberNode(dti.getPrecision()));
+        schema.addProp(AvroSerDe.AVRO_PROP_SCALE, factory.numberNode(dti.getScale()));
+        return schema;
+
+      default:
+        throw new UnsupportedOperationException(primitive + " is not supported.");
     }
   }
 }
