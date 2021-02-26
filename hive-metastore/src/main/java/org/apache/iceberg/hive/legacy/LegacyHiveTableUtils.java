@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
@@ -35,6 +36,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.avro.AvroSchemaUtil;
+import org.apache.iceberg.avro.AvroSchemaVisitor;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Conversions;
@@ -54,12 +56,24 @@ class LegacyHiveTableUtils {
   static Schema getSchema(org.apache.hadoop.hive.metastore.api.Table table) {
     Map<String, String> props = getTableProperties(table);
     String schemaStr = props.get("avro.schema.literal");
+    org.apache.avro.Schema avroSchema = schemaStr != null ? new org.apache.avro.Schema.Parser().parse(schemaStr) : null;
     Schema schema;
-    if (schemaStr != null) {
-      schema = AvroSchemaUtil.toIceberg(new org.apache.avro.Schema.Parser().parse(schemaStr));
+    if (avroSchema != null) {
+      FileFormat format = serdeToFileFormat(table.getSd().getSerdeInfo().getSerializationLib());
+      org.apache.avro.Schema finalAvroSchema;
+      if (format.equals(FileFormat.AVRO) || HasDuplicateLowercaseColumnNames.visit(avroSchema)) {
+        // Case 1: If serde == AVRO, early escape; Hive column info is not reliable and can be empty for these tables
+        //         Hive itself uses avro.schema.literal as source of truth for these tables, so this should be fine
+        // Case 2: If avro.schema.literal has duplicate column names when lowercased, that means we cannot do reliable
+        //         matching with Hive schema as multiple Avro fields can map to the same Hive field
+        finalAvroSchema = avroSchema;
+      } else {
+        finalAvroSchema = MergeHiveSchemaWithAvro.visit(structTypeInfoFromCols(table.getSd().getCols()), avroSchema);
+      }
+      schema = AvroSchemaUtil.toIceberg(finalAvroSchema);
     } else {
       // TODO: Do we need to support column and column.types properties for ORC tables?
-      LOG.warn("Table {}.{} does not have an avro.schema.literal set; using Hive schema instead. " +
+      LOG.info("Table {}.{} does not have an avro.schema.literal set; using Hive schema instead. " +
                    "The schema will not have case sensitivity and nullability information",
                table.getDbName(), table.getTableName());
       Type icebergType = HiveTypeUtil.convert(structTypeInfoFromCols(table.getSd().getCols()));
@@ -74,7 +88,7 @@ class LegacyHiveTableUtils {
     return new Schema(fields);
   }
 
-  static TypeInfo structTypeInfoFromCols(List<FieldSchema> cols) {
+  static StructTypeInfo structTypeInfoFromCols(List<FieldSchema> cols) {
     Preconditions.checkArgument(cols != null && cols.size() > 0, "No Hive schema present");
     List<String> fieldNames = cols
         .stream()
@@ -84,7 +98,7 @@ class LegacyHiveTableUtils {
         .stream()
         .map(f -> TypeInfoUtils.getTypeInfoFromTypeString(f.getType()))
         .collect(Collectors.toList());
-    return TypeInfoFactory.getStructTypeInfo(fieldNames, fieldTypeInfos);
+    return (StructTypeInfo) TypeInfoFactory.getStructTypeInfo(fieldNames, fieldTypeInfos);
   }
 
   private static Schema partitionSchema(List<FieldSchema> partitionKeys, Schema dataSchema) {
@@ -167,6 +181,40 @@ class LegacyHiveTableUtils {
         return FileFormat.ORC;
       default:
         throw new IllegalArgumentException("Unrecognized serde: " + serde);
+    }
+  }
+
+  private static class HasDuplicateLowercaseColumnNames extends AvroSchemaVisitor<Boolean> {
+
+    private static boolean visit(org.apache.avro.Schema schema) {
+      return AvroSchemaVisitor.visit(schema, new HasDuplicateLowercaseColumnNames());
+    }
+
+    @Override
+    public Boolean record(org.apache.avro.Schema record, List<String> names, List<Boolean> fieldResults) {
+      return fieldResults.stream().anyMatch(x -> x) ||
+          names.stream().collect(Collectors.groupingBy(String::toLowerCase))
+              .values().stream().anyMatch(x -> x.size() > 1);
+    }
+
+    @Override
+    public Boolean union(org.apache.avro.Schema union, List<Boolean> optionResults) {
+      return optionResults.stream().anyMatch(x -> x);
+    }
+
+    @Override
+    public Boolean array(org.apache.avro.Schema array, Boolean elementResult) {
+      return elementResult;
+    }
+
+    @Override
+    public Boolean map(org.apache.avro.Schema map, Boolean valueResult) {
+      return valueResult;
+    }
+
+    @Override
+    public Boolean primitive(org.apache.avro.Schema primitive) {
+      return false;
     }
   }
 }
