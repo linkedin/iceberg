@@ -135,7 +135,7 @@ public class AvroSchemaUtil {
     return false;
   }
 
-  static Schema toOption(Schema schema) {
+  public static Schema toOption(Schema schema) {
     if (schema.getType() == UNION) {
       Preconditions.checkArgument(isOptionSchema(schema),
           "Union schemas are not supported: %s", schema);
@@ -145,7 +145,7 @@ public class AvroSchemaUtil {
     }
   }
 
-  static Schema fromOption(Schema schema) {
+  public static Schema fromOption(Schema schema) {
     Preconditions.checkArgument(schema.getType() == UNION,
         "Expected union schema but was passed: %s", schema);
     Preconditions.checkArgument(schema.getTypes().size() == 2,
@@ -322,7 +322,7 @@ public class AvroSchemaUtil {
     throw new UnsupportedOperationException("Cannot coerce value to int: " + value);
   }
 
-  static Schema copyRecord(Schema record, List<Schema.Field> newFields, String newName) {
+  public static Schema copyRecord(Schema record, List<Schema.Field> newFields, String newName) {
     Schema copy;
     if (newName != null) {
       copy = Schema.createRecord(newName, record.getDoc(), null, record.isError(), newFields);
@@ -342,7 +342,7 @@ public class AvroSchemaUtil {
     return copy;
   }
 
-  static Schema.Field copyField(Schema.Field field, Schema newSchema, String newName) {
+  public static Schema.Field copyField(Schema.Field field, Schema newSchema, String newName) {
     Schema.Field copy = new Schema.Field(newName,
         newSchema, field.doc(), field.defaultVal(), field.order());
 
