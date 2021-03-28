@@ -236,7 +236,9 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
         return LogicalTypes.date().addToSchema(Schema.create(Schema.Type.INT));
 
       case TIMESTAMP:
-        return LogicalTypes.timestampMillis().addToSchema(Schema.create(Schema.Type.LONG));
+        Schema schema = Schema.create(Schema.Type.LONG);
+        schema.addProp(AvroSchemaUtil.ADJUST_TO_UTC_PROP, false);
+        return LogicalTypes.timestampMillis().addToSchema(schema);
 
       case DECIMAL:
         DecimalTypeInfo dti = (DecimalTypeInfo) primitive;
