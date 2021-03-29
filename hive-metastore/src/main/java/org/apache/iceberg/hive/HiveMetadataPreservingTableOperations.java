@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -38,6 +39,8 @@ import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.thrift.TException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -52,6 +55,8 @@ import org.apache.thrift.TException;
  * updated.
  */
 public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
+  private static final Logger LOG = LoggerFactory.getLogger(HiveMetadataPreservingTableOperations.class);
+
   private final HiveClientPool metaClients;
   private final String database;
   private final String tableName;
@@ -131,6 +136,15 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
       if (tableExists) {
         tbl = metaClients.run(client -> client.getTable(database, tableName));
+        String columns = "";
+        try {
+          columns = tbl.getSd().getCols().stream().map(column -> column.getName() + " " + column.getType())
+              .collect(Collectors.joining("\n"));
+        } catch (Throwable throwable) {
+          LOG.debug("Encountered {} while fetching columns for {}.{}", throwable.getMessage(),
+              tbl.getDbName(), tbl.getTableName(), throwable);
+        }
+        LOG.debug("Found table: {}.{} with columns: {}", tbl.getDbName(), tbl.getTableName(), columns);
       } else {
         final long currentTimeMillis = System.currentTimeMillis();
         tbl = new Table(tableName,
@@ -165,6 +179,16 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
           EnvironmentContext envContext = new EnvironmentContext(
               ImmutableMap.of(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE)
           );
+          String columns = "";
+          try {
+            columns = tbl.getSd().getCols().stream().map(column -> column.getName() + " " + column.getType())
+                .collect(Collectors.joining("\n"));
+          } catch (Throwable throwable) {
+            LOG.debug("Encountered {} while fetching columns for {}.{}", throwable.getMessage(),
+                tbl.getDbName(), tbl.getTableName(), throwable);
+          }
+          LOG.debug("Updating the metadata location for: {}.{} containing columns: {} with metadata location: {}",
+              tbl.getDbName(), tbl.getTableName(), columns, tbl.getParameters().get(METADATA_LOCATION_PROP));
           ALTER_TABLE.invoke(client, database, tableName, tbl, envContext);
           return null;
         });
