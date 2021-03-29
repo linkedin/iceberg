@@ -289,7 +289,7 @@ public class TestMergeHiveSchemaWithAvro {
     Assert.assertEquals("date",
             AvroSchemaUtil.fromOption(merged.getField("fa").schema()).getLogicalType().getName());
     // This last line should not throw any exception.
-    org.apache.iceberg.Schema iSchema = AvroSchemaUtil.toIceberg(merged);
+    AvroSchemaUtil.toIceberg(merged);
   }
 
   // TODO: tests to retain schema props
