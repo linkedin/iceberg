@@ -278,14 +278,18 @@ public class TestMergeHiveSchemaWithAvro {
             optional("fc", Schema.Type.BYTES));
     Schema merged = merge(hive, avro);
 
+    Schema expectedTimestampSchema = Schema.create(Schema.Type.LONG);
+    expectedTimestampSchema.addProp(AvroSchemaUtil.ADJUST_TO_UTC_PROP, false);
     Schema expected = struct("r1",
             optional("fa", LogicalTypes.date().addToSchema(Schema.create(Schema.Type.INT))),
-            optional("fb", LogicalTypes.timestampMillis().addToSchema(Schema.create(Schema.Type.LONG))),
+            optional("fb", LogicalTypes.timestampMillis().addToSchema(expectedTimestampSchema)),
             optional("fc", LogicalTypes.decimal(4, 2).addToSchema(Schema.create(Schema.Type.BYTES))));
 
     assertSchema(expected, merged);
     Assert.assertEquals("date",
             AvroSchemaUtil.fromOption(merged.getField("fa").schema()).getLogicalType().getName());
+    // This last line should not throw any exception.
+    AvroSchemaUtil.toIceberg(merged);
   }
 
   // TODO: tests to retain schema props
