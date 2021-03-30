@@ -75,6 +75,20 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
     this.tableName = table;
   }
 
+  private static void logTable(Table table) {
+    String columns = "";
+    try {
+      columns = table.getSd().getCols().stream().map(column -> column.getName() + " " + column.getType())
+          .collect(Collectors.joining("\n"));
+    } catch (Throwable throwable) {
+      LOG.debug("Encountered {} while fetching columns for {}.{}", throwable.getMessage(),
+          table.getDbName(), table.getTableName(), throwable);
+      return;
+    }
+    LOG.debug("Table: {}.{}", table.getDbName(), table.getTableName());
+    LOG.debug("Columns: \n{}", columns);
+  }
+
   @Override
   protected void doRefresh() {
     String metadataLocation = null;
@@ -136,15 +150,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
       if (tableExists) {
         tbl = metaClients.run(client -> client.getTable(database, tableName));
-        String columns = "";
-        try {
-          columns = tbl.getSd().getCols().stream().map(column -> column.getName() + " " + column.getType())
-              .collect(Collectors.joining("\n"));
-        } catch (Throwable throwable) {
-          LOG.debug("Encountered {} while fetching columns for {}.{}", throwable.getMessage(),
-              tbl.getDbName(), tbl.getTableName(), throwable);
-        }
-        LOG.debug("Found table: {}.{} with columns: {}", tbl.getDbName(), tbl.getTableName(), columns);
+        logTable(tbl);
       } else {
         final long currentTimeMillis = System.currentTimeMillis();
         tbl = new Table(tableName,
@@ -179,16 +185,8 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
           EnvironmentContext envContext = new EnvironmentContext(
               ImmutableMap.of(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE)
           );
-          String columns = "";
-          try {
-            columns = tbl.getSd().getCols().stream().map(column -> column.getName() + " " + column.getType())
-                .collect(Collectors.joining("\n"));
-          } catch (Throwable throwable) {
-            LOG.debug("Encountered {} while fetching columns for {}.{}", throwable.getMessage(),
-                tbl.getDbName(), tbl.getTableName(), throwable);
-          }
-          LOG.debug("Updating the metadata location for: {}.{} containing columns: {} with metadata location: {}",
-              tbl.getDbName(), tbl.getTableName(), columns, tbl.getParameters().get(METADATA_LOCATION_PROP));
+          logTable(tbl);
+          LOG.debug("Metadata Location: {}", tbl.getParameters().get(METADATA_LOCATION_PROP));
           ALTER_TABLE.invoke(client, database, tableName, tbl, envContext);
           return null;
         });
