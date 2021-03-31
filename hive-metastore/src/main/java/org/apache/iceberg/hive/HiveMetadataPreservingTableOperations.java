@@ -150,6 +150,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
       if (tableExists) {
         tbl = metaClients.run(client -> client.getTable(database, tableName));
+        LOG.debug("Following table has been fetched from metastore:");
         logTable(tbl);
       } else {
         final long currentTimeMillis = System.currentTimeMillis();
@@ -185,6 +186,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
           EnvironmentContext envContext = new EnvironmentContext(
               ImmutableMap.of(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE)
           );
+          LOG.debug("Updating the metadata location of the following table:");
           logTable(tbl);
           LOG.debug("Metadata Location: {}", tbl.getParameters().get(METADATA_LOCATION_PROP));
           ALTER_TABLE.invoke(client, database, tableName, tbl, envContext);
