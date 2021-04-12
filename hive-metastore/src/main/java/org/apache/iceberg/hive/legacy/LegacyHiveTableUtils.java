@@ -61,7 +61,8 @@ class LegacyHiveTableUtils {
     if (avroSchema != null) {
       String serde = table.getSd().getSerdeInfo().getSerializationLib();
       org.apache.avro.Schema finalAvroSchema;
-      if (serde.equals("org.apache.hadoop.hive.serde2.avro.AvroSerDe") || HasDuplicateLowercaseColumnNames.visit(avroSchema)) {
+      if (serde.equals("org.apache.hadoop.hive.serde2.avro.AvroSerDe") ||
+          HasDuplicateLowercaseColumnNames.visit(avroSchema)) {
         // Case 1: If serde == AVRO, early escape; Hive column info is not reliable and can be empty for these tables
         //         Hive itself uses avro.schema.literal as source of truth for these tables, so this should be fine
         // Case 2: If avro.schema.literal has duplicate column names when lowercased, that means we cannot do reliable
