@@ -27,6 +27,7 @@ import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.avro.io.DatumReader;
 import org.apache.avro.io.Decoder;
+import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.avro.AvroSchemaWithTypeVisitor;
 import org.apache.iceberg.avro.ValueReader;
 import org.apache.iceberg.avro.ValueReaders;
@@ -35,6 +36,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.util.SchemaUtils;
 
 
 public class SparkAvroReader implements DatumReader<InternalRow> {
@@ -79,7 +81,11 @@ public class SparkAvroReader implements DatumReader<InternalRow> {
 
     @Override
     public ValueReader<?> union(Type expected, Schema union, List<ValueReader<?>> options) {
-      return ValueReaders.union(options);
+      if (AvroSchemaUtil.isOptionSchema(union)) {
+        return ValueReaders.union(options);
+      } else {
+        return SparkValueReaders.union(options, expected, idToConstant);
+      }
     }
 
     @Override

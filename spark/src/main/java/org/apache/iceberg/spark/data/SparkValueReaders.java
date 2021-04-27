@@ -33,6 +33,7 @@ import org.apache.avro.util.Utf8;
 import org.apache.iceberg.avro.ValueReader;
 import org.apache.iceberg.avro.ValueReaders;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
@@ -78,6 +79,11 @@ public class SparkValueReaders {
   static ValueReader<InternalRow> struct(List<ValueReader<?>> readers, Types.StructType struct,
                                          Map<Integer, ?> idToConstant) {
     return new StructReader(readers, struct, idToConstant);
+  }
+
+  static ValueReader<InternalRow> union(List<ValueReader<?>> readers, Type expected,
+                                          Map<Integer, ?> idToConstant) {
+    return new UnionReader(readers, (Types.StructType) expected, idToConstant);
   }
 
   private static class StringReader implements ValueReader<UTF8String> {
@@ -283,6 +289,38 @@ public class SparkValueReaders {
       } else {
         struct.setNullAt(pos);
       }
+    }
+  }
+
+  static class UnionReader implements ValueReader<InternalRow> {
+    private final ValueReader[] readers;
+
+    // TODO: need to make use of structSchema
+    private final Types.StructType structType;
+    private final int numFields;
+
+    private UnionReader(List<ValueReader<?>> readers, Types.StructType structType, Map<Integer, ?> idToConstant) {
+      this.readers = new ValueReader[readers.size()];
+      for (int i = 0; i < this.readers.length; i += 1) {
+        this.readers[i] = readers.get(i);
+      }
+
+      this.structType = structType;
+      this.numFields = idToConstant.size();
+    }
+
+    @Override
+    public InternalRow read(Decoder decoder, Object reuse) throws IOException {
+      InternalRow struct = new GenericInternalRow(readers.length);
+      int index = decoder.readIndex();
+      Object value = this.readers[index].read(decoder, reuse);
+
+      struct.update(index, value);
+      for (int i = 0; i < readers.length && i != index; i += 1) {
+        struct.setNullAt(i);
+      }
+
+      return struct;
     }
   }
 }

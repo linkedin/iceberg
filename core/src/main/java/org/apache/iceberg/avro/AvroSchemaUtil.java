@@ -130,6 +130,18 @@ public class AvroSchemaUtil {
     return false;
   }
 
+  public static boolean isNonOptionalUnionOptional(Schema schema) {
+    if (schema.getType() == UNION && schema.getTypes().size() != 2) {
+      for (Schema type : schema.getTypes()) {
+        if (type.getType() == Schema.Type.NULL) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   public static Schema toOption(Schema schema) {
     if (schema.getType() == UNION) {
       Preconditions.checkArgument(isOptionSchema(schema),

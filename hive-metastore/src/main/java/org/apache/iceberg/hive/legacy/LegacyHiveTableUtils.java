@@ -71,6 +71,7 @@ class LegacyHiveTableUtils {
       } else {
         finalAvroSchema = MergeHiveSchemaWithAvro.visit(structTypeInfoFromCols(table.getSd().getCols()), avroSchema);
       }
+
       schema = AvroSchemaUtil.toIceberg(finalAvroSchema);
     } else {
       //TODO: Do we need to support column and column.types properties for ORC tables?

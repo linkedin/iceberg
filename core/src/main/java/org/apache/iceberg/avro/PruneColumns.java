@@ -105,25 +105,8 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
 
   @Override
   public Schema union(Schema union, List<Schema> options) {
-    Preconditions.checkState(AvroSchemaUtil.isOptionSchema(union),
-        "Invalid schema: non-option unions are not supported: %s", union);
-
-    // only unions with null are allowed, and a null schema results in null
-    Schema pruned = null;
-    if (options.get(0) != null) {
-      pruned = options.get(0);
-    } else if (options.get(1) != null) {
-      pruned = options.get(1);
-    }
-
-    if (pruned != null) {
-      if (pruned != AvroSchemaUtil.fromOption(union)) {
-        return AvroSchemaUtil.toOption(pruned);
-      }
-      return union;
-    }
-
-    return null;
+    // TODO: add validation
+    return union;
   }
 
   @Override
