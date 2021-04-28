@@ -49,8 +49,10 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
             visit(map != null ? map.valueType() : null, schema.getValueType(), visitor));
 
       default:
-        return visitor.primitive(null, schema);
-        // return visitor.primitive(iType != null ? iType.asPrimitiveType() : null, schema);
+        if (iType == null || iType.isStructType()) {
+          return visitor.primitive(null, schema);
+        }
+        return visitor.primitive(iType.asPrimitiveType(), schema);
     }
   }
 
