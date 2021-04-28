@@ -36,7 +36,6 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.spark.sql.catalyst.InternalRow;
-import org.apache.spark.sql.util.SchemaUtils;
 
 
 public class SparkAvroReader implements DatumReader<InternalRow> {
