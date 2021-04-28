@@ -105,8 +105,27 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
 
   @Override
   public Schema union(Schema union, List<Schema> options) {
-    // TODO: add validation
-    return union;
+    if (AvroSchemaUtil.isOptionSchema(union)) {
+      // case option union
+      Schema pruned = null;
+      if (options.get(0) != null) {
+        pruned = options.get(0);
+      } else if (options.get(1) != null) {
+        pruned = options.get(1);
+      }
+
+      if (pruned != null) {
+        if (pruned != AvroSchemaUtil.fromOption(union)) {
+          return AvroSchemaUtil.toOption(pruned);
+        }
+        return union;
+      }
+
+      return null;
+    } else {
+      // case non option union
+      return union;
+    }
   }
 
   @Override

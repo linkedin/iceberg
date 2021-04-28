@@ -148,7 +148,15 @@ class BuildAvroProjection extends AvroCustomOrderSchemaVisitor<Schema, Schema.Fi
 
   @Override
   public Schema union(Schema union, Iterable<Schema> options) {
-    // TODO: add validation
+    if (AvroSchemaUtil.isOptionSchema(union)) {
+      Schema nonNullOriginal = AvroSchemaUtil.fromOption(union);
+      Schema nonNullResult = AvroSchemaUtil.fromOptions(Lists.newArrayList(options));
+
+      if (nonNullOriginal != nonNullResult) {
+        return AvroSchemaUtil.toOption(nonNullResult);
+      }
+    }
+
     return union;
   }
 
