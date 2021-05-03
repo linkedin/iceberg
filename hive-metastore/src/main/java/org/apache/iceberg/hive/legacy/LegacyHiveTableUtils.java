@@ -186,10 +186,9 @@ class LegacyHiveTableUtils {
   }
 
   private static class HasDuplicateLowercaseColumnNames extends AvroSchemaVisitor<Boolean> {
-    private static final HasDuplicateLowercaseColumnNames INSTANCE = new HasDuplicateLowercaseColumnNames();
 
     private static boolean visit(org.apache.avro.Schema schema) {
-      return AvroSchemaVisitor.visit(schema, INSTANCE);
+      return AvroSchemaVisitor.visit(schema, new HasDuplicateLowercaseColumnNames());
     }
 
     @Override
