@@ -261,16 +261,22 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
 
   private static Schema.Field copyField(Schema.Field field, Schema newSchema, Integer fieldId) {
     Schema newSchemaReordered;
-    // if the newSchema is an optional schema, make sure the NULL option is always the first
-    if (isOptionSchemaWithNonNullFirstOption(newSchema)) {
+    // if the newSchema is an optional schema with no, or null, default value, then make sure the
+    // NULL option is the first
+    boolean hasNonNullDefaultValue = AvroSchemaUtil.hasNonNullDefaultValue(field);
+    if (isOptionSchemaWithNonNullFirstOption(newSchema) && !hasNonNullDefaultValue) {
       newSchemaReordered = AvroSchemaUtil.toOption(AvroSchemaUtil.fromOption(newSchema));
+    } else if (AvroSchemaUtil.isOptionSchema(newSchema) && hasNonNullDefaultValue) {
+      // o.w. if the newSchema is an optional that has a non-null default value, then make sure the
+      // NULL option is the second
+      newSchemaReordered = AvroSchemaUtil.toOption(AvroSchemaUtil.fromOption(newSchema), true);
     } else {
       newSchemaReordered = newSchema;
     }
-    // do not copy over default values as the file is expected to have values for fields already in the file schema
-    Schema.Field copy = new Schema.Field(field.name(),
-        newSchemaReordered, field.doc(),
-        AvroSchemaUtil.isOptionSchema(newSchemaReordered) ? JsonProperties.NULL_VALUE : null, field.order());
+    // copy over non-null default values
+    Object defaultValue = hasNonNullDefaultValue ? field.defaultVal() :
+        (AvroSchemaUtil.isOptionSchema(newSchemaReordered) ? JsonProperties.NULL_VALUE : null);
+    Schema.Field copy = new Schema.Field(field.name(), newSchemaReordered, field.doc(), defaultValue, field.order());
 
     for (Map.Entry<String, Object> prop : field.getObjectProps().entrySet()) {
       copy.addProp(prop.getKey(), prop.getValue());
