@@ -216,11 +216,30 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       throw new RuntimeException("Interrupted during commit", e);
 
     } finally {
-      if (threw) {
-        // if anything went wrong, clean up the uncommitted metadata file
+      if (threw && !metadataUpdatedSuccessfully(newMetadataLocation)) {
+        // if anything went wrong and meta store hasn't been updated, clean up the uncommitted metadata file
         io().deleteFile(newMetadataLocation);
       }
       unlock(lockId);
     }
+  }
+
+  private boolean metadataUpdatedSuccessfully(String newMetadataLocation) {
+    boolean metadataUpdatedSuccessfully = false;
+    try {
+      Table tbl;
+      boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
+      if (tableExists) {
+        tbl = metaClients.run(client -> client.getTable(database, tableName));
+        if (tbl.getParameters().get(METADATA_LOCATION_PROP).equals(newMetadataLocation)) {
+          metadataUpdatedSuccessfully = true;
+        }
+      }
+    } catch (Exception e) {
+      // This indicate the client might be closed and we cannout make sure whether the table has been updated, so
+      // assume it succeeds to avoid table pointing to non-exist location
+      metadataUpdatedSuccessfully = true;
+    }
+    return metadataUpdatedSuccessfully;
   }
 }
