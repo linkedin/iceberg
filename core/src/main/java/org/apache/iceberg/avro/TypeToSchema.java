@@ -101,9 +101,9 @@ class TypeToSchema extends TypeUtil.SchemaVisitor<Schema> {
       String origFieldName = structField.name();
       boolean isValidFieldName = AvroSchemaUtil.validAvroName(origFieldName);
       String fieldName =  isValidFieldName ? origFieldName : AvroSchemaUtil.sanitize(origFieldName);
-      Schema.Field field = new Schema.Field(
-          fieldName, fieldSchemas.get(i), null,
-          structField.isOptional() ? JsonProperties.NULL_VALUE : null);
+      Object defaultValue = structField.hasDefaultValue() ? structField.getDefaultValue() :
+          (structField.isOptional() ? JsonProperties.NULL_VALUE : null);
+      Schema.Field field = new Schema.Field(fieldName, fieldSchemas.get(i), null, defaultValue);
       if (!isValidFieldName) {
         field.addProp(AvroSchemaUtil.ICEBERG_FIELD_NAME_PROP, origFieldName);
       }

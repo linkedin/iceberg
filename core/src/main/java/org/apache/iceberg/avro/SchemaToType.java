@@ -20,6 +20,7 @@
 package org.apache.iceberg.avro;
 
 import java.util.List;
+import org.apache.avro.JsonProperties;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
@@ -92,8 +93,13 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       Type fieldType = fieldTypes.get(i);
       int fieldId = getId(field);
 
+      Object defaultValue = field.hasDefaultValue() && !(field.defaultVal() instanceof JsonProperties.Null) ?
+          field.defaultVal() : null;
+
       if (AvroSchemaUtil.isOptionSchema(field.schema())) {
-        newFields.add(Types.NestedField.optional(fieldId, field.name(), fieldType));
+        newFields.add(Types.NestedField.optional(fieldId, field.name(), fieldType, defaultValue, null));
+      } else if (defaultValue != null) {
+        newFields.add(Types.NestedField.required(fieldId, field.name(), fieldType, defaultValue, null));
       } else {
         newFields.add(Types.NestedField.required(fieldId, field.name(), fieldType));
       }
