@@ -435,7 +435,6 @@ public class Types {
     }
 
     public static NestedField required(int id, String name, Type type, Object defaultValue, String doc) {
-      validateDefaultValueForRequiredField(defaultValue, name);
       return new NestedField(false, id, name, type, defaultValue, doc);
     }
 
@@ -451,28 +450,24 @@ public class Types {
       return new NestedField(isOptional, id, name, type, defaultValue, doc);
     }
 
-    private static void validateDefaultValueForRequiredField(Object defaultValue, String fieldName) {
-      Preconditions.checkArgument(defaultValue != null,
-          "Cannot create NestedField with a null default for the required field: " +  fieldName);
-    }
-
     private static void validateDefaultValue(Object defaultValue, Type type) {
       if (defaultValue == null) {
         return;
       }
       switch (type.typeId()) {
         case STRUCT:
-          Preconditions.checkArgument(List.class.isInstance(defaultValue),
-              "defaultValue should be a List of Objects for StructType");
+          Preconditions.checkArgument(Map.class.isInstance(defaultValue),
+              "defaultValue should be a Map from fields names to values, for StructType");
           if (defaultValue == null) {
             return;
           }
-          List<Object> defaultList = (List) defaultValue;
-          Preconditions.checkArgument(defaultList.size() == type.asStructType().fields().size());
-          for (int i = 0; i < defaultList.size(); i++) {
-            NestedField.validateDefaultValue(defaultList.get(i), type.asStructType().fields().get(i).type);
+          Map<String, Object> defaultStruct = (Map<String, Object>) defaultValue;
+          Preconditions.checkArgument(defaultStruct.size() == type.asStructType().fields().size());
+          for (String fieldName : defaultStruct.keySet()) {
+            NestedField.validateDefaultValue(defaultStruct.get(fieldName), type.asStructType().field(fieldName).type);
           }
           break;
+
         case LIST:
           Preconditions.checkArgument(defaultValue instanceof ArrayList,
               "defaultValue should be an ArrayList of Objects, for ListType");
@@ -482,6 +477,7 @@ public class Types {
           }
           defaultArrayList.forEach(dv -> NestedField.validateDefaultValue(dv, type.asListType().elementField.type));
           break;
+
         case MAP:
           Preconditions.checkArgument(Map.class.isInstance(defaultValue),
               "defaultValue should be an instance of Map for MapType");
@@ -494,10 +490,18 @@ public class Types {
             NestedField.validateDefaultValue(e.getValue(), type.asMapType().valueField.type);
           }
           break;
+
+        case FIXED:
+        case BINARY:
+          Preconditions.checkArgument(byte[].class.isInstance(defaultValue),
+              "defaultValue should be an instance of byte[] for TypeId.%s, but defaultValue.class = %s",
+              type.typeId().name(), defaultValue.getClass().getCanonicalName());
+          break;
+
         default:
           Preconditions.checkArgument(type.typeId().javaClass().isInstance(defaultValue),
-              "defaultValue should be of same java class of the type, defaultValue class: " + defaultValue.getClass() +
-              ", type class: " + type.typeId().javaClass());
+              "defaultValue should be and instance of %s for TypeId.%s, but defaultValue.class = %s",
+              type.typeId().javaClass(), type.typeId().name(), defaultValue.getClass().getCanonicalName());
       }
     }
 

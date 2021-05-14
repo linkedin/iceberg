@@ -152,10 +152,15 @@ public class AvroSchemaUtil {
   }
 
   public static Schema toOption(Schema schema) {
+    return toOption(schema, false);
+  }
+
+  public static Schema toOption(Schema schema, boolean nullIsSecondElement) {
     if (schema.getType() == UNION) {
-      Preconditions.checkArgument(isOptionSchema(schema),
-          "Union schemas are not supported: %s", schema);
+      Preconditions.checkArgument(isOptionSchema(schema), "Union schemas are not supported: %s", schema);
       return schema;
+    } else if (nullIsSecondElement) {
+      return Schema.createUnion(schema, NULL);
     } else {
       return Schema.createUnion(NULL, schema);
     }
@@ -423,5 +428,13 @@ public class AvroSchemaUtil {
       return "_" + character;
     }
     return "_x" + Integer.toHexString(character).toUpperCase();
+  }
+
+  static boolean hasNonNullDefaultValue(Schema.Field field) {
+    // the schema should use JsonProperties.NULL_VALUE (i.e., null) as the null default
+    // value, but a user might also use "null" to indicate null while it is actually a String, so
+    // need to account for it.
+    return field.hasDefaultValue() && field.defaultVal() != JsonProperties.NULL_VALUE &&
+        !(field.defaultVal() instanceof String && ((String) field.defaultVal()).equalsIgnoreCase("null"));
   }
 }
