@@ -43,7 +43,7 @@ public class TestAvroNonOptionalUnion {
 
     org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
     String expectedIcebergSchema = "table {\n" +
-        "  0: unionCol: required struct<1: tag_1: optional int, 2: tag_2: optional string>\n" + "}";
+        "  0: unionCol: required struct<1: tag_0: optional int, 2: tag_1: optional string>\n" + "}";
 
     Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
   }
@@ -66,7 +66,7 @@ public class TestAvroNonOptionalUnion {
 
     org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
     String expectedIcebergSchema =
-        "table {\n" + "  0: unionCol: optional struct<1: tag_1: optional int, 2: tag_2: optional string>\n" + "}";
+        "table {\n" + "  0: unionCol: optional struct<1: tag_0: optional int, 2: tag_1: optional string>\n" + "}";
 
     Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
   }
@@ -84,7 +84,45 @@ public class TestAvroNonOptionalUnion {
         .endRecord();
 
     org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
-    String expectedIcebergSchema = "table {\n" + "  0: unionCol: required struct<1: tag_1: optional int>\n" + "}";
+    String expectedIcebergSchema = "table {\n" + "  0: unionCol: required struct<1: tag_0: optional int>\n" + "}";
+
+    Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
+  }
+
+  @Test
+  public void testOptionSchema() {
+    Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("optionCol")
+        .type()
+        .unionOf()
+        .nullType()
+        .and()
+        .intType()
+        .endUnion()
+        .nullDefault()
+        .endRecord();
+
+    org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
+    String expectedIcebergSchema = "table {\n" + "  0: optionCol: optional int\n" + "}";
+
+    Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
+  }
+
+  @Test
+  public void testNullUnionSchema() {
+    Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("nullUnionCol")
+        .type()
+        .unionOf()
+        .nullType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
+    String expectedIcebergSchema = "table {\n" + "  0: nullUnionCol: optional struct<>\n" + "}";
 
     Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
   }

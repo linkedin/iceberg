@@ -122,7 +122,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       // non-option union
       List<Types.NestedField> newFields = Lists.newArrayListWithExpectedSize(options.size());
 
-      int tagIndex = 1;
+      int tagIndex = 0;
       for (Type type : options) {
         if (type != null) {
           newFields.add(Types.NestedField.optional(allocateId(), "tag_" + tagIndex++, type));

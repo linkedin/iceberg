@@ -315,10 +315,10 @@ public class SparkValueReaders {
       int index = decoder.readIndex();
       Object value = this.readers[index].read(decoder, reuse);
 
-      struct.update(index, value);
-      for (int i = 0; i < readers.length && i != index; i += 1) {
+      for (int i = 0; i < readers.length; i += 1) {
         struct.setNullAt(i);
       }
+      struct.update(index, value);
 
       return struct;
     }
