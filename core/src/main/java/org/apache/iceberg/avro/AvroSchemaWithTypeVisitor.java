@@ -49,10 +49,7 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
             visit(map != null ? map.valueType() : null, schema.getValueType(), visitor));
 
       default:
-        if (iType == null || iType.isStructType()) {
-          return visitor.primitive(null, schema);
-        }
-        return visitor.primitive(iType.asPrimitiveType(), schema);
+        return visitor.primitive(iType != null ? iType.asPrimitiveType() : null, schema);
     }
   }
 
@@ -82,11 +79,18 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
   private static <T> T visitUnion(Type type, Schema union, AvroSchemaWithTypeVisitor<T> visitor) {
     List<Schema> types = union.getTypes();
     List<T> options = Lists.newArrayListWithExpectedSize(types.size());
+
+    int index = 0;
     for (Schema branch : types) {
       if (branch.getType() == Schema.Type.NULL) {
         options.add(visit((Type) null, branch, visitor));
       } else {
-        options.add(visit(type, branch, visitor));
+        if (type.isStructType()) {
+          options.add(visit(type.asStructType().fields().get(index).type(), branch, visitor));
+        } else {
+          options.add(visit(type, branch, visitor));
+        }
+        index++;
       }
     }
     return visitor.union(type, union, options);

@@ -81,9 +81,8 @@ public class SparkValueReaders {
     return new StructReader(readers, struct, idToConstant);
   }
 
-  static ValueReader<InternalRow> union(List<ValueReader<?>> readers, Type expected,
-                                          Map<Integer, ?> idToConstant) {
-    return new UnionReader(readers, (Types.StructType) expected, idToConstant);
+  static ValueReader<InternalRow> union(List<ValueReader<?>> readers) {
+    return new UnionReader(readers);
   }
 
   private static class StringReader implements ValueReader<UTF8String> {
@@ -295,18 +294,11 @@ public class SparkValueReaders {
   static class UnionReader implements ValueReader<InternalRow> {
     private final ValueReader[] readers;
 
-    // TODO: need to make use of structSchema
-    private final Types.StructType structType;
-    private final int numFields;
-
-    private UnionReader(List<ValueReader<?>> readers, Types.StructType structType, Map<Integer, ?> idToConstant) {
+    private UnionReader(List<ValueReader<?>> readers) {
       this.readers = new ValueReader[readers.size()];
       for (int i = 0; i < this.readers.length; i += 1) {
         this.readers[i] = readers.get(i);
       }
-
-      this.structType = structType;
-      this.numFields = idToConstant.size();
     }
 
     @Override
