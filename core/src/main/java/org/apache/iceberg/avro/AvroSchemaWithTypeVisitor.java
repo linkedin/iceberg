@@ -85,10 +85,10 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
       if (branch.getType() == Schema.Type.NULL) {
         options.add(visit((Type) null, branch, visitor));
       } else {
-        if (type.isStructType()) {
-          options.add(visit(type.asStructType().fields().get(index).type(), branch, visitor));
-        } else {
+        if (AvroSchemaUtil.isOptionSchema(union)) {
           options.add(visit(type, branch, visitor));
+        } else {
+          options.add(visit(type.asStructType().fields().get(index).type(), branch, visitor));
         }
         index++;
       }
