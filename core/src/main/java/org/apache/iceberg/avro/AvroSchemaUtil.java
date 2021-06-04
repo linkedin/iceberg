@@ -136,7 +136,7 @@ public class AvroSchemaUtil {
    * Complex union: the number of options in union not equals to 2
    * Optional: null is present in union
    *
-   * @param schema
+   * @param schema input schema
    * @return true if schema is complex union and it is optional
    */
   public static boolean isOptionalComplexUnion(Schema schema) {
