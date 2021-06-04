@@ -154,10 +154,9 @@ class BuildAvroProjection extends AvroCustomOrderSchemaVisitor<Schema, Schema.Fi
 
   @Override
   public Schema union(Schema union, Iterable<Schema> options) {
-    Preconditions.checkState(AvroSchemaUtil.isOptionSchema(union),
-        "Invalid schema: non-option unions are not supported: %s", union);
-    Schema nonNullOriginal = AvroSchemaUtil.fromOption(union);
-    Schema nonNullResult = AvroSchemaUtil.fromOptions(Lists.newArrayList(options));
+    if (AvroSchemaUtil.isOptionSchema(union)) {
+      Schema nonNullOriginal = AvroSchemaUtil.fromOption(union);
+      Schema nonNullResult = AvroSchemaUtil.fromOptions(Lists.newArrayList(options));
 
     if (!Objects.equals(nonNullOriginal, nonNullResult)) {
       return AvroSchemaUtil.toOption(nonNullResult);
