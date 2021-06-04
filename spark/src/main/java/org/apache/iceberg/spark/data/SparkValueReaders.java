@@ -80,6 +80,10 @@ public class SparkValueReaders {
     return new StructReader(readers, struct, idToConstant);
   }
 
+  static ValueReader<InternalRow> union(List<ValueReader<?>> readers) {
+    return new UnionReader(readers);
+  }
+
   private static class StringReader implements ValueReader<UTF8String> {
     private static final StringReader INSTANCE = new StringReader();
 
@@ -283,6 +287,31 @@ public class SparkValueReaders {
       } else {
         struct.setNullAt(pos);
       }
+    }
+  }
+
+  static class UnionReader implements ValueReader<InternalRow> {
+    private final ValueReader[] readers;
+
+    private UnionReader(List<ValueReader<?>> readers) {
+      this.readers = new ValueReader[readers.size()];
+      for (int i = 0; i < this.readers.length; i += 1) {
+        this.readers[i] = readers.get(i);
+      }
+    }
+
+    @Override
+    public InternalRow read(Decoder decoder, Object reuse) throws IOException {
+      InternalRow struct = new GenericInternalRow(readers.length);
+      int index = decoder.readIndex();
+      Object value = this.readers[index].read(decoder, reuse);
+
+      for (int i = 0; i < readers.length; i += 1) {
+        struct.setNullAt(i);
+      }
+      struct.update(index, value);
+
+      return struct;
     }
   }
 }
