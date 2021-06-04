@@ -45,7 +45,7 @@ public class TestSparkAvroUnions {
   public TemporaryFolder temp = new TemporaryFolder();
 
   @Test
-  public void writeAndValidateNonOptionUnionNonNullable() throws IOException {
+  public void writeAndValidateRequiredComplexUnion() throws IOException {
     org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("unionCol")
@@ -84,7 +84,7 @@ public class TestSparkAvroUnions {
   }
 
   @Test
-  public void writeAndValidateNonOptionUnionNullable() throws IOException {
+  public void writeAndValidateOptionalComplexUnion() throws IOException {
     org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("unionCol")
@@ -125,7 +125,7 @@ public class TestSparkAvroUnions {
   }
 
   @Test
-  public void writeAndValidateSingleOptionUnion() throws IOException {
+  public void writeAndValidateSingleComponentUnion() throws IOException {
     org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("unionCol")

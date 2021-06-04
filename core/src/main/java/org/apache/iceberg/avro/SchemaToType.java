@@ -96,7 +96,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       Object defaultValue = field.hasDefaultValue() && !(field.defaultVal() instanceof JsonProperties.Null) ?
           field.defaultVal() : null;
 
-      if (AvroSchemaUtil.isOptionSchema(field.schema()) || AvroSchemaUtil.isNonOptionalUnionOptional(field.schema())) {
+      if (AvroSchemaUtil.isOptionSchema(field.schema()) || AvroSchemaUtil.isOptionalComplexUnion(field.schema())) {
         newFields.add(Types.NestedField.optional(fieldId, field.name(), fieldType, defaultValue, null));
       } else if (defaultValue != null) {
         newFields.add(Types.NestedField.required(fieldId, field.name(), fieldType, defaultValue, null));
@@ -111,7 +111,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
   @Override
   public Type union(Schema union, List<Type> options) {
     if (AvroSchemaUtil.isOptionSchema(union)) {
-      // optional union
+      // Optional simple union
       // records, arrays, and maps will check nullability later
       if (options.get(0) == null) {
         return options.get(1);
@@ -119,7 +119,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
         return options.get(0);
       }
     } else {
-      // non-option union
+      // Complex union
       List<Types.NestedField> newFields = Lists.newArrayListWithExpectedSize(options.size());
 
       int tagIndex = 0;

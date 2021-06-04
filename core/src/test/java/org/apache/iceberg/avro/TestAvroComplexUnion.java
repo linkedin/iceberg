@@ -25,10 +25,10 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
-public class TestAvroNonOptionalUnion {
+public class TestAvroComplexUnion {
 
   @Test
-  public void testNonOptionUnionNonNullable() {
+  public void testRequiredComplexUnion() {
     Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("unionCol")
@@ -49,7 +49,7 @@ public class TestAvroNonOptionalUnion {
   }
 
   @Test
-  public void testNonOptionUnionNullable() {
+  public void testOptionalComplexUnion() {
     Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("unionCol")
@@ -72,7 +72,7 @@ public class TestAvroNonOptionalUnion {
   }
 
   @Test
-  public void testSingleOptionUnion() {
+  public void testSingleComponentUnion() {
     Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("unionCol")

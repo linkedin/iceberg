@@ -123,7 +123,7 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
 
       return null;
     } else {
-      // case non option union
+      // Complex union case
       return union;
     }
   }
