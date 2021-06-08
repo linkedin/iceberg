@@ -265,20 +265,25 @@ public final class ORCSchemaUtil {
 
     switch (type.typeId()) {
       case STRUCT:
-        orcType = TypeDescription.createStruct();
-        for (Types.NestedField nestedField : type.asStructType().fields()) {
-          // Using suffix _r to avoid potential underlying issues in ORC reader
-          // with reused column names between ORC and Iceberg;
-          // e.g. renaming column c -> d and adding new column d
-          if (mapping.get(nestedField.fieldId()) == null && nestedField.hasDefaultValue()) {
-            continue;
+        OrcField orcField = mapping.getOrDefault(fieldId, null);
+        if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
+          orcType = orcField.type;
+        } else {
+          orcType = TypeDescription.createStruct();
+          for (Types.NestedField nestedField : type.asStructType().fields()) {
+            // Using suffix _r to avoid potential underlying issues in ORC reader
+            // with reused column names between ORC and Iceberg;
+            // e.g. renaming column c -> d and adding new column d
+            if (mapping.get(nestedField.fieldId()) == null && nestedField.hasDefaultValue()) {
+              continue;
+            }
+            String name = Optional.ofNullable(mapping.get(nestedField.fieldId()))
+                .map(OrcField::name)
+                .orElseGet(() -> nestedField.name() + "_r" + nestedField.fieldId());
+            TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
+                isRequired && nestedField.isRequired(), mapping);
+            orcType.addField(name, childType);
           }
-          String name = Optional.ofNullable(mapping.get(nestedField.fieldId()))
-              .map(OrcField::name)
-              .orElseGet(() -> nestedField.name() + "_r" + nestedField.fieldId());
-          TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
-              isRequired && nestedField.isRequired(), mapping);
-          orcType.addField(name, childType);
         }
         break;
       case LIST:
@@ -328,6 +333,12 @@ public final class ORCSchemaUtil {
         List<TypeDescription> children = orcType.getChildren();
         for (int i = 0; i < children.size(); i++) {
           icebergToOrc.putAll(icebergToOrcMapping(childrenNames.get(i), children.get(i)));
+        }
+        break;
+      case UNION:
+        List<TypeDescription> options = orcType.getChildren();
+        for (int i = 0; i < options.size(); i++) {
+          icebergToOrc.putAll(icebergToOrcMapping("option" + i, options.get(i)));
         }
         break;
       case LIST:
