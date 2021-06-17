@@ -50,6 +50,7 @@ public class TestNestedFieldDefaultValues {
     // required constructors
     Assert.assertFalse(required(id, fieldName, fieldType).hasDefaultValue());
     Assert.assertFalse(required(id, fieldName, fieldType, doc).hasDefaultValue());
+    Assert.assertFalse(required(id, fieldName, fieldType, null, doc).hasDefaultValue());
     nestedFieldWithDefault = required(id, fieldName, fieldType, defaultValue, doc);
     Assert.assertTrue(nestedFieldWithDefault.hasDefaultValue());
     Assert.assertEquals(defaultValue, nestedFieldWithDefault.getDefaultValue());
@@ -65,22 +66,17 @@ public class TestNestedFieldDefaultValues {
     Assert.assertEquals(defaultValue, nestedFieldWithDefault.getDefaultValue());
   }
 
-  @Test (expected =  IllegalArgumentException.class)
-  public void testRequiredNullDefault() {
-    // illegal case (required with null defaultValue)
-    required(id, fieldName, fieldType, null, doc);
-  }
-
-  @Test (expected = IllegalArgumentException.class)
-  public void testRequiredWithDefaultNullDefault() {
-    // illegal case (required with null defaultValue)
-    required(id, fieldName, fieldType, null, null);
-  }
-
   @Test (expected = IllegalArgumentException.class)
   public void testOptionalWithInvalidDefaultValueClass() {
     // class of default value does not match class of type
     Long wrongClassDefaultValue = 100L;
     optional(id, fieldName, fieldType, wrongClassDefaultValue, doc);
+  }
+
+  @Test (expected = IllegalArgumentException.class)
+  public void testReqiredWithInvalidDefaultValueClass() {
+    // class of default value does not match class of type
+    Long wrongClassDefaultValue = 100L;
+    required(id, fieldName, fieldType, wrongClassDefaultValue, doc);
   }
 }

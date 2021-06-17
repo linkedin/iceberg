@@ -21,7 +21,9 @@ package org.apache.iceberg.types;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -44,9 +46,9 @@ public class TestDefaultValuesForContainerTypes {
 
   @Test
   public void testStructTypeDefault() {
-    List<Object> structDefaultvalue = new ArrayList<>();
-    structDefaultvalue.add(Integer.valueOf(1));
-    structDefaultvalue.add("two");
+    Map<String, Object> structDefaultvalue = new HashMap<>();
+    structDefaultvalue.put(intFieldType.name(), Integer.valueOf(1));
+    structDefaultvalue.put(stringFieldType.name(), "two");
     NestedField structField = NestedField.optional(2, "optionalStructField", structType, structDefaultvalue, "doc");
     Assert.assertTrue(structField.hasDefaultValue());
     Assert.assertEquals(structDefaultvalue, structField.getDefaultValue());
