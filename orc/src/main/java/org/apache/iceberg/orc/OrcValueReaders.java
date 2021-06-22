@@ -154,11 +154,7 @@ public class OrcValueReaders {
         } else if (field.equals(MetadataColumns.ROW_POSITION)) {
           this.isConstantOrMetadataField[pos] = true;
           this.readers[pos] = new RowPositionReader();
-        } else if (readers.get(readerIndex) instanceof ConstantReader) {
-          this.isConstantOrMetadataField[pos] = true;
-          this.readers[pos] = readers.get(readerIndex);
-        }
-        else {
+        } else {
           this.readers[pos] = readers.get(readerIndex);
           readerIndex++;
         }

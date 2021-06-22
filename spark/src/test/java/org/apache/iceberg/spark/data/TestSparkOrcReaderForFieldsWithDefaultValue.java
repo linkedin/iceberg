@@ -37,6 +37,7 @@ import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
+import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -61,6 +62,9 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
         final InternalRow expectedFirstRow = new GenericInternalRow(2);
         expectedFirstRow.update(0, 0);
         expectedFirstRow.update(1, "foo");
+
+        final InternalRow expectedFirstRowFromBatch = expectedFirstRow.copy();
+        expectedFirstRowFromBatch.update(1, UTF8String.fromString("foo"));
 
         TypeDescription orcSchema =
                 TypeDescription.fromString("struct<col1:int>");
@@ -98,7 +102,7 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
         // try to read the data using the readSchema, which is an evolved
         // schema that contains a new column with default value
 
-        // non-batch read
+        // non-vectorized read
         try (CloseableIterable<InternalRow> reader = ORC.read(Files.localInput(orcFile))
                 .project(readSchema)
                 .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema))
@@ -109,17 +113,17 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
             assertEquals(readSchema, expectedFirstRow, actualFirstRow);
         }
 
-        // batch-read
-//        try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
-//                .project(readSchema)
-//                .createBatchedReaderFunc(readOrcSchema ->
-//                        VectorizedSparkOrcReaders.buildReader(readSchema, readOrcSchema, ImmutableMap.of()))
-//                .build()) {
-//            final Iterator<InternalRow> actualRows = batchesToRows(reader.iterator());
-//            final InternalRow actualFirstRow = actualRows.next();
-//
-//            assertEquals(readSchema, expectedFirstRow, actualFirstRow);
-//        }
+        // vectorized-read
+        try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
+                .project(readSchema)
+                .createBatchedReaderFunc(readOrcSchema ->
+                        VectorizedSparkOrcReaders.buildReader(readSchema, readOrcSchema, ImmutableMap.of()))
+                .build()) {
+            final Iterator<InternalRow> actualRows = batchesToRows(reader.iterator());
+            final InternalRow actualFirstRow = actualRows.next();
+
+            assertEquals(readSchema, expectedFirstRowFromBatch, actualFirstRow);
+        }
     }
 
     private Iterator<InternalRow> batchesToRows(Iterator<ColumnarBatch> batches) {

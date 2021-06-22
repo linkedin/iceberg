@@ -109,6 +109,9 @@ class ConstantColumnVector extends ColumnVector {
 
   @Override
   public UTF8String getUTF8String(int rowId) {
+    if (constant instanceof String) {
+      return UTF8String.fromString((String) constant);
+    }
     return (UTF8String) constant;
   }
 

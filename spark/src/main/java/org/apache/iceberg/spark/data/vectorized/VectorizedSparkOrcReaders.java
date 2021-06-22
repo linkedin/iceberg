@@ -19,16 +19,16 @@
 
 package org.apache.iceberg.spark.data.vectorized;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.orc.OrcBatchReader;
-import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
-import org.apache.iceberg.orc.OrcValueReader;
-import org.apache.iceberg.orc.OrcValueReaders;
+import org.apache.iceberg.orc.*;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.spark.OrcSchemaWithTypeVisitorSpark;
 import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.iceberg.spark.data.SparkOrcValueReaders;
 import org.apache.iceberg.types.Type;
@@ -80,11 +80,10 @@ public class VectorizedSparkOrcReaders {
                          long batchOffsetInFile);
   }
 
-  private static class ReadBuilder extends OrcSchemaWithTypeVisitor<Converter> {
-    private final Map<Integer, ?> idToConstant;
+  private static class ReadBuilder extends OrcSchemaWithTypeVisitorSpark<Converter> {
 
     private ReadBuilder(Map<Integer, ?> idToConstant) {
-      this.idToConstant = idToConstant;
+      super(idToConstant);
     }
 
     @Override
