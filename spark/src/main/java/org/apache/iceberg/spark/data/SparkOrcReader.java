@@ -19,15 +19,13 @@
 
 package org.apache.iceberg.spark.data;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-
-import org.apache.iceberg.orc.*;
-import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.apache.iceberg.orc.OrcRowReader;
+import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
+import org.apache.iceberg.orc.OrcValueReader;
+import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
-import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.OrcSchemaWithTypeVisitorSpark;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
@@ -74,7 +72,7 @@ public class SparkOrcReader implements OrcRowReader<InternalRow> {
     @Override
     public OrcValueReader<?> record(
         Types.StructType expected, TypeDescription record, List<String> names, List<OrcValueReader<?>> fields) {
-      return SparkOrcValueReaders.struct(fields, expected, idToConstant);
+      return SparkOrcValueReaders.struct(fields, expected, getIdToConstant());
     }
 
     @Override
@@ -121,32 +119,5 @@ public class SparkOrcReader implements OrcRowReader<InternalRow> {
           throw new IllegalArgumentException("Unhandled type " + primitive);
       }
     }
-
-//    @Override
-//    protected OrcValueReader<?> visitRecord(
-//            Types.StructType struct, TypeDescription record, OrcSchemaWithTypeVisitor<OrcValueReader<?>> visitor) {
-//      Preconditions.checkState(
-//              checkIcebergAndOrcSchemaAlignment(struct, record),
-//              "Iceberg schema and ORC schema doesn't align, please call ORCSchemaUtil.buildOrcProjection" +
-//                      "to get an aligned ORC schema first!"
-//      );
-//      List<Types.NestedField> iFields = struct.fields();
-//      List<TypeDescription> fields = record.getChildren();
-//      List<String> names = record.getFieldNames();
-//      List<OrcValueReader<?>> results = Lists.newArrayListWithExpectedSize(fields.size());
-//
-//      for (int i = 0, j = 0; i < iFields.size(); i++) {
-//        Types.NestedField iField = iFields.get(i);
-//        TypeDescription field = j < fields.size() ? fields.get(j) : null;
-//        if (field == null || (iField.fieldId() != ORCSchemaUtil.fieldId(field))) {
-//          idToConstant.put(iField.fieldId(), iField.getDefaultValue());
-////          results.add(OrcValueReaders.constants(iField.getDefaultValue()));
-//        } else {
-//          results.add(visit(iField.type(), field, visitor));
-//          j++;
-//        }
-//      }
-//      return visitor.record(struct, record, names, results);
-//    }
   }
 }
