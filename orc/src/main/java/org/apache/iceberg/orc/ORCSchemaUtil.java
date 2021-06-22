@@ -270,6 +270,9 @@ public final class ORCSchemaUtil {
           // Using suffix _r to avoid potential underlying issues in ORC reader
           // with reused column names between ORC and Iceberg;
           // e.g. renaming column c -> d and adding new column d
+          if (mapping.get(nestedField.fieldId()) == null && nestedField.hasDefaultValue()) {
+            continue;
+          }
           String name = Optional.ofNullable(mapping.get(nestedField.fieldId()))
               .map(OrcField::name)
               .orElseGet(() -> nestedField.name() + "_r" + nestedField.fieldId());
@@ -387,7 +390,7 @@ public final class ORCSchemaUtil {
         .map(Integer::parseInt);
   }
 
-  static int fieldId(TypeDescription orcType) {
+  public static int fieldId(TypeDescription orcType) {
     String idStr = orcType.getAttributeValue(ICEBERG_ID_ATTRIBUTE);
     Preconditions.checkNotNull(idStr, "Missing expected '%s' property", ICEBERG_ID_ATTRIBUTE);
     return Integer.parseInt(idStr);

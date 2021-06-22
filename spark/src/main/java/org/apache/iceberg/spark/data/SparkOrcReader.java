@@ -21,11 +21,12 @@ package org.apache.iceberg.spark.data;
 
 import java.util.List;
 import java.util.Map;
-import org.apache.iceberg.orc.OrcRowReader;
-import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
-import org.apache.iceberg.orc.OrcValueReader;
-import org.apache.iceberg.orc.OrcValueReaders;
+import java.util.stream.Collectors;
+
+import org.apache.iceberg.orc.*;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
@@ -118,6 +119,62 @@ public class SparkOrcReader implements OrcRowReader<InternalRow> {
         default:
           throw new IllegalArgumentException("Unhandled type " + primitive);
       }
+    }
+
+    @Override
+    protected OrcValueReader<?> visitRecord(
+            Types.StructType struct, TypeDescription record, OrcSchemaWithTypeVisitor<OrcValueReader<?>> visitor) {
+      Preconditions.checkState(
+              checkIcebergAndOrcSchemaAlignment(struct, record),
+              "Iceberg schema and ORC schema doesn't align, please call ORCSchemaUtil.buildOrcProjection" +
+                      "to get an aligned ORC schema first!"
+      );
+      List<Types.NestedField> iFields = struct.fields();
+      List<TypeDescription> fields = record.getChildren();
+      List<String> names = record.getFieldNames();
+      List<OrcValueReader<?>> results = Lists.newArrayListWithExpectedSize(fields.size());
+
+      for (int i = 0, j = 0; i < iFields.size(); i++) {
+        Types.NestedField iField = iFields.get(i);
+        TypeDescription field = j < fields.size() ? fields.get(j) : null;
+        if (field == null || (iField.fieldId() != ORCSchemaUtil.fieldId(field))) {
+//          idToConstant.put(iField.fieldId(), iField.getDefaultValue());
+          results.add(OrcValueReaders.constants(iField.getDefaultValue()));
+        } else {
+          results.add(visit(iField.type(), field, visitor));
+          j++;
+        }
+      }
+      return visitor.record(struct, record, names, results);
+    }
+
+    private static boolean checkIcebergAndOrcSchemaAlignment(Types.StructType struct, TypeDescription record) {
+      List<Integer> icebergIDList = struct.fields().stream().map(Types.NestedField::fieldId).collect(Collectors.toList());
+      List<Integer> orcIDList = record.getChildren().stream().map(ORCSchemaUtil::fieldId).collect(Collectors.toList());
+
+      // icebergIDList should be a superset of orcIDList, and the overlapping ids should appear
+      // in the same order in these 2 lists
+      return checkTwoListAlignmentHelper(icebergIDList, orcIDList);
+    }
+
+    private static boolean checkTwoListAlignmentHelper(List<Integer> list1, List<Integer> list2) {
+      if (list1.size() < list2.size()) {
+        return false;
+      }
+
+      for (int i = 0, j = 0; j < list2.size(); j++) {
+        if (i >= list1.size()) {
+          return false;
+        }
+        while (!list1.get(i).equals(list2.get(j))) {
+          i++;
+          if (i >= list1.size()) {
+            return false;
+          }
+        }
+        i++;
+      }
+      return true;
     }
   }
 }
