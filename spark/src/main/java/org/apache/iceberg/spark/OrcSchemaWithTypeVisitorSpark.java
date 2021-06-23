@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.orc.ORCSchemaUtil;
 import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
@@ -60,7 +61,9 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
       Types.NestedField iField = iFields.get(i);
       TypeDescription field = j < fields.size() ? fields.get(j) : null;
       if (field == null || (iField.fieldId() != ORCSchemaUtil.fieldId(field))) {
-        idToConstant.put(iField.fieldId(), iField.getDefaultValue());
+        if (!iField.equals(MetadataColumns.ROW_POSITION)) {
+          idToConstant.put(iField.fieldId(), iField.getDefaultValue());
+        }
       } else {
         results.add(visit(iField.type(), field, visitor));
         j++;
