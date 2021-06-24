@@ -61,7 +61,14 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
       Types.NestedField iField = iFields.get(i);
       TypeDescription field = j < fields.size() ? fields.get(j) : null;
       if (field == null || (iField.fieldId() != ORCSchemaUtil.fieldId(field))) {
-        if (!iField.equals(MetadataColumns.ROW_POSITION)) {
+        // there are 3 cases where we need to use idToConstant for an iField
+        // 1. The field is MetadataColumns.ROW_POSITION, we build a RowPositionReader
+        // 2. The field is a partition column, we build a ConstantReader
+        // 3. The field should be read using the default value, where we build a ConstantReader
+        // Here we should only need to update idToConstant when it's the 3rd case,
+        // because the first 2 cases have been handled by logic elsewhere.
+        if (!iField.equals(MetadataColumns.ROW_POSITION) &&
+                !idToConstant.containsKey(iField.fieldId())) {
           idToConstant.put(iField.fieldId(), iField.getDefaultValue());
         }
       } else {
