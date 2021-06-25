@@ -36,7 +36,6 @@ import static org.apache.iceberg.expressions.Expressions.notIn;
 import static org.apache.iceberg.expressions.Expressions.notNull;
 import static org.apache.iceberg.expressions.Expressions.or;
 import static org.apache.iceberg.hive.legacy.HiveExpressions.simplifyPartitionFilter;
-import static org.apache.iceberg.hive.legacy.HiveExpressions.toPartitionFilterString;
 
 
 public class TestHiveExpressions {
@@ -117,11 +116,5 @@ public class TestHiveExpressions {
     Expression input = not(and(equal("nonpcol", "1"), equal("pcol", "1")));
     Expression expected = alwaysTrue();
     Assert.assertEquals(expected.toString(), simplifyPartitionFilter(input, ImmutableSet.of("pcol")).toString());
-  }
-
-  @Test
-  public void testToPartitionFilterStringEscapeStringLiterals() {
-    Expression input = equal("pcol", "s'1");
-    Assert.assertEquals("( pcol = 's\\'1' )", toPartitionFilterString(input));
   }
 }

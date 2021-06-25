@@ -19,6 +19,10 @@
 
 package org.apache.iceberg.hive.legacy;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,6 +33,7 @@ import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.expressions.UnboundPredicate;
 import org.apache.iceberg.expressions.UnboundTerm;
+import org.apache.iceberg.types.Type;
 
 
 class HiveExpressions {
@@ -238,6 +243,7 @@ class HiveExpressions {
   }
 
   private static class ExpressionToPartitionFilterString extends ExpressionVisitors.ExpressionVisitor<String> {
+    private static final OffsetDateTime EPOCH = Instant.ofEpochSecond(0).atOffset(ZoneOffset.UTC);
     private static final ExpressionToPartitionFilterString INSTANCE = new ExpressionToPartitionFilterString();
 
     private ExpressionToPartitionFilterString() {
@@ -274,11 +280,6 @@ class HiveExpressions {
 
     @Override
     public <T> String predicate(BoundPredicate<T> pred) {
-      throw new IllegalStateException("Bound predicate not expected: " + pred.getClass().getName());
-    }
-
-    @Override
-    public <T> String predicate(UnboundPredicate<T> pred) {
       switch (pred.op()) {
         case LT:
         case LT_EQ:
@@ -286,14 +287,22 @@ class HiveExpressions {
         case GT_EQ:
         case EQ:
         case NOT_EQ:
-          return getBinaryExpressionString(pred.ref().name(), pred.op(), pred.literal());
+          return getBinaryExpressionString(pred);
         default:
           throw new IllegalStateException("Unexpected operator in Hive partition filter string: " + pred.op());
       }
     }
 
-    private <T> String getBinaryExpressionString(String columnName, Expression.Operation op, Literal<T> lit) {
-      return String.format("( %s %s %s )", columnName, getOperationString(op), getLiteralValue(lit));
+    @Override
+    public <T> String predicate(UnboundPredicate<T> pred) {
+      throw new IllegalStateException("Unbound predicate not expected: " + pred.getClass().getName());
+    }
+
+    private <T> String getBinaryExpressionString(BoundPredicate<T> pred) {
+      String columnName = pred.ref().field().name();
+      String opName = getOperationString(pred.op());
+      String litValue = getLiteralValue(pred.asLiteralPredicate().literal(), pred.ref().type());
+      return String.format("( %s %s %s )", columnName, opName, litValue);
     }
 
     private String getOperationString(Expression.Operation op) {
@@ -315,8 +324,17 @@ class HiveExpressions {
       }
     }
 
-    private <T> String getLiteralValue(Literal<T> lit) {
+    private <T> String getLiteralValue(Literal<T> lit, Type type) {
       Object value = lit.value();
+      switch (type.typeId()) {
+        case DATE:
+          value = EPOCH.plus((Integer) value, ChronoUnit.DAYS).toLocalDate().toString();
+          break;
+        case TIMESTAMP:
+          // This format seems to be matching the hive timestamp column partition string literal value
+          value = EPOCH.plus((Long) value, ChronoUnit.MICROS).toLocalDateTime().toString().replace('T', ' ');
+          break;
+      }
       if (value instanceof String) {
         String escapedString = ((String) value).replace("'", "\\'");
         return String.format("'%s'", escapedString);

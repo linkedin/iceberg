@@ -36,6 +36,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
@@ -61,6 +62,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
   private final String databaseName;
   private final String tableName;
   private final Configuration conf;
+  private Schema schema;
 
   private FileIO fileIO;
 
@@ -69,6 +71,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     this.metaClients = metaClients;
     this.databaseName = database;
     this.tableName = table;
+    this.schema = null;
   }
 
   @Override
@@ -86,7 +89,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
       org.apache.hadoop.hive.metastore.api.Table hiveTable =
           metaClients.run(client -> client.getTable(databaseName, tableName));
 
-      Schema schema = LegacyHiveTableUtils.getSchema(hiveTable);
+      this.schema = LegacyHiveTableUtils.getSchema(hiveTable);
       PartitionSpec spec = LegacyHiveTableUtils.getPartitionSpec(hiveTable, schema);
 
       Map<String, String> tableProperties = Maps.newHashMap(LegacyHiveTableUtils.getTableProperties(hiveTable));
@@ -181,7 +184,8 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
         partitions = metaClients.run(client -> client.listPartitionsByFilter(
             databaseName, tableName, null, (short) -1));
       } else {
-        String partitionFilterString = HiveExpressions.toPartitionFilterString(simplified);
+        Expression boundExpression = Binder.bind(schema.asStruct(), simplified, false);
+        String partitionFilterString = HiveExpressions.toPartitionFilterString(boundExpression);
         LOG.info("Listing partitions for {}.{} with filter string: {}", databaseName, tableName, partitionFilterString);
         partitions = metaClients.run(
             client -> client.listPartitionsByFilter(databaseName, tableName, partitionFilterString, (short) -1));

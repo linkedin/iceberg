@@ -25,6 +25,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,6 @@ import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
-import org.apache.iceberg.AssertHelpers;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.avro.AvroSchemaUtil;
@@ -68,6 +68,11 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
   private static final List<FieldSchema> PARTITION_COLUMNS = ImmutableList.of(
       new FieldSchema("pcol", "string", ""),
       new FieldSchema("pIntCol", "int", ""));
+
+  private static final List<FieldSchema> PARTITION_COLUMNS_2 = ImmutableList.of(
+          new FieldSchema("pcol", "string", ""),
+          new FieldSchema("pIntCol", "int", ""),
+          new FieldSchema("pDateCol", "date", ""));
 
   private static HiveCatalog legacyCatalog;
   private static Path dbPath;
@@ -141,13 +146,25 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
   }
 
   @Test
+  public void testHiveScanMultiPartitionWithFilter2() throws Exception {
+    String tableName = "multi_partition_with_filter2";
+    Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS_2);
+    addPartition(table, ImmutableList.of("ds", 1, LocalDate.of(2019, 4, 14)), AVRO, "A");
+    addPartition(table, ImmutableList.of("ds", 1, LocalDate.of(2021, 6, 2)), AVRO, "B");
+    // 18000 is the # of days since epoch for 2019-04-14,
+    // this representation matches how Iceberg internally store the value in DateLiteral.
+    filesMatch(
+            ImmutableMap.of("pcol=ds/pIntCol=1/pDateCol=2019-04-14/A", AVRO),
+            hiveScan(table, Expressions.equal("pDateCol", 18000)));
+  }
+
+  @Test
   public void testHiveScanNonStringPartitionQuery() throws Exception {
     String tableName = "multi_partition_with_filter_on_non_string_partition_cols";
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
-    AssertHelpers.assertThrows(
-        "Filtering on non string partition is not supported by ORM layer and we can enable direct sql only on mysql",
-        RuntimeException.class, "Failed to get partition info",
-        () -> hiveScan(table, Expressions.and(Expressions.equal("pcol", "ds"), Expressions.equal("pIntCol", "1"))));
+    filesMatch(
+            ImmutableMap.of(),
+            hiveScan(table, Expressions.and(Expressions.equal("pcol", "ds"), Expressions.equal("pIntCol", 1))));
   }
 
   @Test
