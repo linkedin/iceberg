@@ -19,12 +19,19 @@
 
 package org.apache.iceberg.hive.legacy;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.iceberg.BaseMetastoreTableOperations;
 import org.apache.iceberg.DataFile;
@@ -36,7 +43,9 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.expressions.Binder;
+import org.apache.iceberg.expressions.Bound;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
@@ -49,6 +58,7 @@ import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
+import org.apache.iceberg.types.Types;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,7 +72,6 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
   private final String databaseName;
   private final String tableName;
   private final Configuration conf;
-  private Schema schema;
 
   private FileIO fileIO;
 
@@ -71,7 +80,6 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     this.metaClients = metaClients;
     this.databaseName = database;
     this.tableName = table;
-    this.schema = null;
   }
 
   @Override
@@ -89,7 +97,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
       org.apache.hadoop.hive.metastore.api.Table hiveTable =
           metaClients.run(client -> client.getTable(databaseName, tableName));
 
-      this.schema = LegacyHiveTableUtils.getSchema(hiveTable);
+      Schema schema = LegacyHiveTableUtils.getSchema(hiveTable);
       PartitionSpec spec = LegacyHiveTableUtils.getPartitionSpec(hiveTable, schema);
 
       Map<String, String> tableProperties = Maps.newHashMap(LegacyHiveTableUtils.getTableProperties(hiveTable));
@@ -112,7 +120,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
   /**
    * Returns an {@link Iterable} of {@link Iterable}s of {@link DataFile}s which belong to the current table and
    * match the partition predicates from the given expression.
-   *
+   * <p>
    * Each element in the outer {@link Iterable} maps to an {@link Iterable} of {@link DataFile}s originating from the
    * same directory
    */
@@ -173,9 +181,11 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
           .map(id -> current().schema().findColumnName(id))
           .collect(Collectors.toSet());
       Expression simplified = HiveExpressions.simplifyPartitionFilter(expression, partitionColumnNames);
+      Types.StructType partitionSchema = current().spec().partitionType();
       LOG.info("Simplified expression for {}.{} to {}", databaseName, tableName, simplified);
 
-      final List<Partition> partitions;
+      List<Partition> partitions;
+      Expression boundExpression;
       if (simplified.equals(Expressions.alwaysFalse())) {
         // If simplifyPartitionFilter returns FALSE, no partitions are going to match the filter expression
         partitions = ImmutableList.of();
@@ -184,11 +194,47 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
         partitions = metaClients.run(client -> client.listPartitionsByFilter(
             databaseName, tableName, null, (short) -1));
       } else {
-        Expression boundExpression = Binder.bind(schema.asStruct(), simplified, false);
+        boundExpression = Binder.bind(partitionSchema, simplified, false);
         String partitionFilterString = HiveExpressions.toPartitionFilterString(boundExpression);
         LOG.info("Listing partitions for {}.{} with filter string: {}", databaseName, tableName, partitionFilterString);
-        partitions = metaClients.run(
-            client -> client.listPartitionsByFilter(databaseName, tableName, partitionFilterString, (short) -1));
+        try {
+          // We first try to use HMS API call to get the filtered partitions.
+          partitions = metaClients.run(
+              client -> client.listPartitionsByFilter(databaseName, tableName, partitionFilterString, (short) -1));
+        } catch (MetaException e) {
+          // If the above HMS call fails, we here try to do the partition filtering ourselves,
+          // by evaluating all the partitions we got back from HMS against the boundExpression,
+          // if the evaluation results in true, we include such partition, if false, we filter.
+          List<Partition> allPartitions = metaClients.run(
+              client -> client.listPartitionsByFilter(databaseName, tableName, null, (short) -1));
+          partitions = allPartitions.stream().filter(partition -> {
+            GenericRecord record = GenericRecord.create(partitionSchema);
+            for (int i = 0; i < record.size(); i++) {
+              String value = partition.getValues().get(i);
+              switch (partitionSchema.fields().get(i).type().typeId()) {
+                case DATE:
+                  record.set(i,
+                      (int) LocalDate.parse(value).toEpochDay());
+                  break;
+                case TIMESTAMP:
+                  // This format seems to be matching the hive timestamp column partition string literal value
+                  record.set(i,
+                      LocalDateTime.parse(value,
+                          new DateTimeFormatterBuilder()
+                              .parseLenient()
+                              .append(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                              .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
+                              .toFormatter())
+                          .toInstant(ZoneOffset.UTC).toEpochMilli() * 1000);
+                  break;
+                default:
+                  record.set(i, partition.getValues().get(i));
+                  break;
+              }
+            }
+            return ((Bound<Boolean>) boundExpression).eval(record);
+          }).collect(Collectors.toList());
+        }
       }
 
       return LegacyHiveTableUtils.toDirectoryInfos(partitions, current().spec());
@@ -203,7 +249,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
   }
 
   private static DataFile createDataFile(FileStatus fileStatus, PartitionSpec partitionSpec, StructLike partitionData,
-      FileFormat format) {
+                                         FileFormat format) {
     DataFiles.Builder builder = DataFiles.builder(partitionSpec)
         .withPath(fileStatus.getPath().toString())
         .withFormat(format)

@@ -326,14 +326,8 @@ class HiveExpressions {
 
     private <T> String getLiteralValue(Literal<T> lit, Type type) {
       Object value = lit.value();
-      switch (type.typeId()) {
-        case DATE:
-          value = EPOCH.plus((Integer) value, ChronoUnit.DAYS).toLocalDate().toString();
-          break;
-        case TIMESTAMP:
-          // This format seems to be matching the hive timestamp column partition string literal value
-          value = EPOCH.plus((Long) value, ChronoUnit.MICROS).toLocalDateTime().toString().replace('T', ' ');
-          break;
+      if (type.typeId() == Type.TypeID.DATE) {
+        value = EPOCH.plus((Integer) value, ChronoUnit.DAYS).toLocalDate().toString();
       }
       if (value instanceof String) {
         String escapedString = ((String) value).replace("'", "\\'");

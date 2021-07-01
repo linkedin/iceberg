@@ -25,7 +25,12 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,17 +67,31 @@ import static org.apache.iceberg.FileFormat.ORC;
 
 
 public class TestLegacyHiveTableScan extends HiveMetastoreTest {
+  private static final OffsetDateTime EPOCH = Instant.ofEpochSecond(0).atOffset(ZoneOffset.UTC);
+
   private static final List<FieldSchema> DATA_COLUMNS = ImmutableList.of(
       new FieldSchema("strCol", "string", ""),
       new FieldSchema("intCol", "int", ""));
+
   private static final List<FieldSchema> PARTITION_COLUMNS = ImmutableList.of(
       new FieldSchema("pcol", "string", ""),
       new FieldSchema("pIntCol", "int", ""));
 
   private static final List<FieldSchema> PARTITION_COLUMNS_2 = ImmutableList.of(
-          new FieldSchema("pcol", "string", ""),
-          new FieldSchema("pIntCol", "int", ""),
-          new FieldSchema("pDateCol", "date", ""));
+      new FieldSchema("pcol", "string", ""),
+      new FieldSchema("pIntCol", "int", ""),
+      new FieldSchema("pDateCol", "date", ""));
+
+  private static final List<FieldSchema> PARTITION_COLUMNS_3 = ImmutableList.of(
+      new FieldSchema("pcol", "string", ""),
+      new FieldSchema("pTsCol", "timestamp", ""));
+
+  private static final List<FieldSchema> PARTITION_COLUMNS_4 = ImmutableList.of(
+      new FieldSchema("pStringCol", "string", ""),
+      new FieldSchema("pIntCol", "int", ""),
+      new FieldSchema("pCharCol", "char(1)", ""),
+      new FieldSchema("pVarcharCol", "varchar(10)", ""),
+      new FieldSchema("pDateCol", "date", ""));
 
   private static HiveCatalog legacyCatalog;
   private static Path dbPath;
@@ -146,16 +165,32 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
   }
 
   @Test
-  public void testHiveScanMultiPartitionWithFilter2() throws Exception {
-    String tableName = "multi_partition_with_filter2";
+  public void testHiveScanMultiPartitionWithFilterDate() throws Exception {
+    String tableName = "multi_partition_with_filter_date";
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS_2);
     addPartition(table, ImmutableList.of("ds", 1, LocalDate.of(2019, 4, 14)), AVRO, "A");
     addPartition(table, ImmutableList.of("ds", 1, LocalDate.of(2021, 6, 2)), AVRO, "B");
     // 18000 is the # of days since epoch for 2019-04-14,
     // this representation matches how Iceberg internally store the value in DateLiteral.
     filesMatch(
-            ImmutableMap.of("pcol=ds/pIntCol=1/pDateCol=2019-04-14/A", AVRO),
-            hiveScan(table, Expressions.equal("pDateCol", 18000)));
+        ImmutableMap.of("pcol=ds/pIntCol=1/pDateCol=2019-04-14/A", AVRO),
+        hiveScan(table, Expressions.equal("pDateCol", 18000)));
+  }
+
+  @Test
+  public void testHiveScanMultiPartitionWithFilterTs() throws Exception {
+    LocalDateTime ldt = EPOCH.plus(1000000000111000L, ChronoUnit.MICROS).toLocalDateTime();
+
+    String tableName = "multi_partition_with_filter_ts";
+    Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS_3);
+    addPartition(table, ImmutableList.of("foo", ldt), AVRO, "A");
+    addPartition(table, ImmutableList.of("bar", ldt), AVRO, "B");
+    // 1000000000111000L microseconds since epoch correspond to 2001-09-09T01:46:40.111,
+    // this representation matches how Iceberg internally store the value in TimeStampLiteral.
+    filesMatch(
+        ImmutableMap.of("pcol=foo/pTsCol=2001-09-09T01:46:40.111/A", AVRO),
+        hiveScan(table, Expressions.and(
+            Expressions.equal("pCol", "foo"), Expressions.equal("pTsCol", 1000000000111000L))));
   }
 
   @Test
@@ -163,8 +198,34 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
     String tableName = "multi_partition_with_filter_on_non_string_partition_cols";
     Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS);
     filesMatch(
-            ImmutableMap.of(),
-            hiveScan(table, Expressions.and(Expressions.equal("pcol", "ds"), Expressions.equal("pIntCol", 1))));
+        ImmutableMap.of(),
+        hiveScan(table, Expressions.and(
+            Expressions.equal("pcol", "ds"), Expressions.equal("pIntCol", 1))));
+  }
+
+  @Test
+  public void testHiveScanComplexNonStringPartitionQuery() throws Exception {
+    String tableName = "multi_partition_with_filter_on_complex_non_string_partition_cols";
+    Table table = createTable(tableName, DATA_COLUMNS, PARTITION_COLUMNS_4);
+    addPartition(table, ImmutableList.of("foo", 0, "a", "xy", LocalDate.of(2019, 4, 14)), AVRO, "A");
+    addPartition(table, ImmutableList.of("foo", 1, "a", "xy", LocalDate.of(2019, 4, 14)), AVRO, "B");
+    addPartition(table, ImmutableList.of("foo", 1, "b", "xy", LocalDate.of(2019, 4, 14)), AVRO, "C");
+    addPartition(table, ImmutableList.of("foo", 1, "b", "xyz", LocalDate.of(2019, 4, 14)), AVRO, "D");
+    addPartition(table, ImmutableList.of("foo", 1, "b", "xyz", LocalDate.of(2020, 4, 14)), AVRO, "E");
+    addPartition(table, ImmutableList.of("bar", 0, "a", "xy", LocalDate.of(2020, 4, 14)), AVRO, "F");
+
+    filesMatch(
+        ImmutableMap.of("pStringCol=bar/pIntCol=0/pCharCol=a/pVarcharCol=xy/pDateCol=2020-04-14/F", AVRO),
+        hiveScan(table, Expressions.equal("pstringcol", "bar")));
+    filesMatch(
+        ImmutableMap.of("pStringCol=foo/pIntCol=1/pCharCol=b/pVarcharCol=xyz/pDateCol=2019-04-14/D", AVRO,
+            "pStringCol=foo/pIntCol=1/pCharCol=b/pVarcharCol=xyz/pDateCol=2020-04-14/E", AVRO),
+        hiveScan(table, Expressions.and(Expressions.equal("pcharcol", "b"), Expressions.equal("pvarcharcol", "xyz"))));
+    filesMatch(
+        ImmutableMap.of(),
+        hiveScan(table, Expressions.and(
+            Expressions.equal("pdatecol", "2020-04-14"),
+            Expressions.and(Expressions.equal("pcharcol", "b"), Expressions.equal("pvarcharcol", "xy")))));
   }
 
   @Test
@@ -307,7 +368,11 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
     return StreamSupport
         .stream(fileScanTasks.spliterator(), false)
         .collect(Collectors.toMap(
-            f -> tableLocation.relativize(Paths.get(URI.create(f.file().path().toString()))).toString().split("\\.")[0],
+            f -> {
+              String fullPath = tableLocation.relativize(Paths.get(URI.create(f.file().path().toString()))).toString();
+              int idx = fullPath.lastIndexOf(".");
+              return fullPath.substring(0, idx);
+            },
             f -> f.file().format()));
   }
 
