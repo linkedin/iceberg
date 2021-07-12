@@ -46,6 +46,8 @@ import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.iceberg.spark.SparkUtil;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.TableScanUtil;
+import org.apache.iceberg.util.Tasks;
+import org.apache.iceberg.util.ThreadPools;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.RuntimeConfig;
 import org.apache.spark.sql.SparkSession;
@@ -145,11 +147,13 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
 
     List<CombinedScanTask> scanTasks = tasks();
     InputPartition[] readTasks = new InputPartition[scanTasks.size()];
-    for (int i = 0; i < scanTasks.size(); i++) {
-      readTasks[i] = new ReadTask(
-          scanTasks.get(i), tableSchemaString, expectedSchemaString, nameMappingString, io, encryptionManager,
-          caseSensitive, localityPreferred, ignoreFileFieldIds);
-    }
+
+    Tasks.range(readTasks.length)
+        .stopOnFailure()
+        .executeWith(localityPreferred ? ThreadPools.getWorkerPool() : null)
+        .run(index -> readTasks[index] = new ReadTask(
+            scanTasks.get(index), tableSchemaString, expectedSchemaString, nameMappingString, io, encryptionManager,
+            caseSensitive, localityPreferred, ignoreFileFieldIds));
 
     return readTasks;
   }

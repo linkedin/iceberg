@@ -21,6 +21,7 @@ package org.apache.iceberg.spark.source;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -57,6 +58,8 @@ import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.iceberg.spark.SparkUtil;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.TableScanUtil;
+import org.apache.iceberg.util.Tasks;
+import org.apache.iceberg.util.ThreadPools;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.RuntimeConfig;
 import org.apache.spark.sql.SparkSession;
@@ -233,15 +236,19 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
     ValidationException.check(tasks().stream().noneMatch(TableScanUtil::hasDeletes),
         "Cannot scan table %s: cannot apply required delete files", table);
 
-    List<InputPartition<ColumnarBatch>> readTasks = Lists.newArrayList();
-    for (CombinedScanTask task : tasks()) {
-      readTasks.add(new ReadTask<>(
-          task, tableSchemaString, expectedSchemaString, nameMappingString, io, encryptionManager, caseSensitive,
-          localityPreferred, new BatchReaderFactory(batchSize), ignoreFileFieldIds));
-    }
-    LOG.info("Batching input partitions with {} tasks.", readTasks.size());
+    List<CombinedScanTask> scanTasks = tasks();
+    InputPartition<ColumnarBatch>[] readTasks = new InputPartition[scanTasks.size()];
 
-    return readTasks;
+    Tasks.range(readTasks.length)
+        .stopOnFailure()
+        .executeWith(localityPreferred ? ThreadPools.getWorkerPool() : null)
+        .run(index -> readTasks[index] = new ReadTask<>(
+            scanTasks.get(index), tableSchemaString, expectedSchemaString, nameMappingString, io,
+            encryptionManager, caseSensitive,
+            localityPreferred, new BatchReaderFactory(batchSize), ignoreFileFieldIds));
+    LOG.info("Batching input partitions with {} tasks.", readTasks.length);
+
+    return Arrays.asList(readTasks);
   }
 
   /**
@@ -257,14 +264,18 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
         READ_ORC_IGNORE_FILE_FIELD_IDS,
         READ_ORC_IGNORE_FILE_FIELD_IDS_DEFAULT);
 
-    List<InputPartition<InternalRow>> readTasks = Lists.newArrayList();
-    for (CombinedScanTask task : tasks()) {
-      readTasks.add(new ReadTask<>(
-          task, tableSchemaString, expectedSchemaString, nameMappingString, io, encryptionManager, caseSensitive,
-          localityPreferred, InternalRowReaderFactory.INSTANCE, ignoreFileFieldIds));
-    }
+    List<CombinedScanTask> scanTasks = tasks();
+    InputPartition<InternalRow>[] readTasks = new InputPartition[scanTasks.size()];
 
-    return readTasks;
+    Tasks.range(readTasks.length)
+        .stopOnFailure()
+        .executeWith(localityPreferred ? ThreadPools.getWorkerPool() : null)
+        .run(index -> readTasks[index] = new ReadTask<>(
+            scanTasks.get(index), tableSchemaString, expectedSchemaString, nameMappingString, io,
+            encryptionManager, caseSensitive,
+            localityPreferred, InternalRowReaderFactory.INSTANCE, ignoreFileFieldIds));
+
+    return Arrays.asList(readTasks);
   }
 
   @Override
