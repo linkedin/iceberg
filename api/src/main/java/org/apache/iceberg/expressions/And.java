@@ -60,7 +60,7 @@ public class And implements Expression, Bound<Boolean> {
     Preconditions.checkNotNull(left, "Left expression cannot be null.");
     Preconditions.checkNotNull(right, "Right expression cannot be null.");
     if (!(left instanceof Bound) || !(right instanceof Bound)) {
-      throw new IllegalStateException("Bound predicate not expected");
+      throw new IllegalStateException("Unbound predicate not expected");
     }
     return ((Bound<Boolean>) left).eval(struct) && ((Bound<Boolean>) right).eval(struct);
   }
