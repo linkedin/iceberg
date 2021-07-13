@@ -19,7 +19,10 @@
 
 package org.apache.iceberg.expressions;
 
-public class Or implements Expression {
+import org.apache.iceberg.StructLike;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+
+public class Or implements Expression, Bound<Boolean> {
   private final Expression left;
   private final Expression right;
 
@@ -45,6 +48,21 @@ public class Or implements Expression {
   public Expression negate() {
     // not(or(a, b)) => and(not(a), not(b))
     return Expressions.and(left.negate(), right.negate());
+  }
+
+  @Override
+  public BoundReference<?> ref() {
+    return null;
+  }
+
+  @Override
+  public Boolean eval(StructLike struct) {
+    Preconditions.checkNotNull(left, "Left expression cannot be null.");
+    Preconditions.checkNotNull(right, "Right expression cannot be null.");
+    if (!(left instanceof Bound) || !(right instanceof Bound)) {
+      throw new IllegalStateException("Unbound predicate not expected");
+    }
+    return ((Bound<Boolean>) left).eval(struct) || ((Bound<Boolean>) right).eval(struct);
   }
 
   @Override

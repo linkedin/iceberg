@@ -71,6 +71,8 @@ public class Conversions {
         return new BigDecimal(asString);
       case DATE:
         return Literal.of(asString).to(Types.DateType.get()).value();
+      case TIMESTAMP:
+        return Literal.of(asString).to(Types.TimestampType.withoutZone()).value();
       default:
         throw new UnsupportedOperationException(
             "Unsupported type for fromPartitionString: " + type);
