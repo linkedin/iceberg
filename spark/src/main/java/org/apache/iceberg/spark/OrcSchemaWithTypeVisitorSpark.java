@@ -28,6 +28,7 @@ import org.apache.iceberg.orc.ORCSchemaUtil;
 import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.spark.source.BaseDataReader;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
 
@@ -48,7 +49,7 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
   protected T visitRecord(
           Types.StructType struct, TypeDescription record, OrcSchemaWithTypeVisitor<T> visitor) {
     Preconditions.checkState(
-            checkIcebergAndOrcSchemaAlignment(struct, record),
+            icebergFiledIdsContainOrcFieldIdsInOrder(struct, record),
             "Iceberg schema and ORC schema doesn't align, please call ORCSchemaUtil.buildOrcProjection" +
                     "to get an aligned ORC schema first!"
     );
@@ -66,10 +67,10 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
         // 2. The field is a partition column, we build a ConstantReader
         // 3. The field should be read using the default value, where we build a ConstantReader
         // Here we should only need to update idToConstant when it's the 3rd case,
-        // because the first 2 cases have been handled by logic elsewhere.
+        // because the first 2 cases have been handled by logic in PartitionUtil.constantsMap
         if (!iField.equals(MetadataColumns.ROW_POSITION) &&
                 !idToConstant.containsKey(iField.fieldId())) {
-          idToConstant.put(iField.fieldId(), iField.getDefaultValue());
+          idToConstant.put(iField.fieldId(), BaseDataReader.convertConstant(iField.type(), iField.getDefaultValue()));
         }
       } else {
         results.add(visit(iField.type(), field, visitor));
@@ -79,16 +80,25 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
     return visitor.record(struct, record, names, results);
   }
 
-  private static boolean checkIcebergAndOrcSchemaAlignment(Types.StructType struct, TypeDescription record) {
+  private static boolean icebergFiledIdsContainOrcFieldIdsInOrder(Types.StructType struct, TypeDescription record) {
     List<Integer> icebergIDList = struct.fields().stream().map(Types.NestedField::fieldId).collect(Collectors.toList());
     List<Integer> orcIDList = record.getChildren().stream().map(ORCSchemaUtil::fieldId).collect(Collectors.toList());
 
-    // icebergIDList should be a superset of orcIDList, and the overlapping ids should appear
-    // in the same order in these 2 lists
-    return checkTwoListAlignmentHelper(icebergIDList, orcIDList);
+    return containsInOrder(icebergIDList, orcIDList);
   }
 
-  private static boolean checkTwoListAlignmentHelper(List<Integer> list1, List<Integer> list2) {
+  /**
+   * Checks whether the first list contains all the integers
+   * in the same order as regarding to the second list, the first
+   * list can contain extra integers that the second list doesn't,
+   * but the ones that exist in the second list should occur in the
+   * same relative order in the first list.
+   *
+   * @param  list1  the first list
+   * @param  list2  the second list
+   * @return the condition check result
+   */
+  private static boolean containsInOrder(List<Integer> list1, List<Integer> list2) {
     if (list1.size() < list2.size()) {
       return false;
     }
