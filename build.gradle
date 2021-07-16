@@ -23,7 +23,6 @@ buildscript {
   repositories {
     jcenter()
     gradlePluginPortal()
-    maven { url "http://palantir.bintray.com/releases" }
     maven { url "https://plugins.gradle.org/m2/" }
   }
   dependencies {
@@ -64,7 +63,6 @@ allprojects {
   group = "org.apache.iceberg"
   version = getProjectVersion()
   repositories {
-    maven { url  "http://palantir.bintray.com/releases" }
     mavenCentral()
     mavenLocal()
   }
@@ -629,7 +627,7 @@ project(':iceberg-hive-runtime') {
       exclude group: 'com.github.stephenc.findbugs'
       exclude group: 'commons-pool'
       exclude group: 'javax.annotation'
-      exclude group: 'javax.xml.bind'      
+      exclude group: 'javax.xml.bind'
       exclude group: 'org.apache.commons'
       exclude group: 'org.slf4j'
       exclude group: 'org.xerial.snappy'
@@ -642,7 +640,7 @@ project(':iceberg-hive-runtime') {
       compile project(':iceberg-hive3')
     }
   }
-  
+
   shadowJar {
     configurations = [project.configurations.compile]
 
@@ -656,7 +654,7 @@ project(':iceberg-hive-runtime') {
 
     // Relocate dependencies to avoid conflicts
     relocate 'org.apache.avro', 'org.apache.iceberg.shaded.org.apache.avro'
-    relocate 'org.apache.parquet', 'org.apache.iceberg.shaded.org.apache.parquet'  
+    relocate 'org.apache.parquet', 'org.apache.iceberg.shaded.org.apache.parquet'
     relocate 'com.google', 'org.apache.iceberg.shaded.com.google'
     relocate 'com.fasterxml', 'org.apache.iceberg.shaded.com.fasterxml'
     relocate 'com.github.benmanes', 'org.apache.iceberg.shaded.com.github.benmanes'

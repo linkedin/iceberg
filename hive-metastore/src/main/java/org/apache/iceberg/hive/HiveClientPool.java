@@ -45,6 +45,11 @@ public class HiveClientPool extends ClientPool<HiveMetaStoreClient, TException> 
   public HiveClientPool(int poolSize, Configuration conf) {
     super(poolSize, TTransportException.class);
     this.hiveConf = new HiveConf(conf, HiveClientPool.class);
+    // hiveConf currently overwrites all things that are defaults in configuration so we need it again
+    // current codebase in hive doesn't run into this because they do Hive x = new Hive(); x.addResource() and
+    // don't use copy constructor
+    // there is value in using copying constructor because it keeps more debugging information in the reference
+    this.hiveConf.addResource(conf);
   }
 
   @Override
