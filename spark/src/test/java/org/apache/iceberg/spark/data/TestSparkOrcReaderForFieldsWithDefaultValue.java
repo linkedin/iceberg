@@ -61,13 +61,16 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
   public void testOrcDefaultValues() throws IOException {
     final int numRows = 10;
 
-    final InternalRow expectedFirstRow = new GenericInternalRow(4);
+    final InternalRow expectedFirstRow = new GenericInternalRow(5);
     expectedFirstRow.update(0, 0);
     expectedFirstRow.update(1, UTF8String.fromString("foo"));
     expectedFirstRow.update(2, new GenericArrayData(ImmutableList.of(1, 2).toArray()));
     expectedFirstRow.update(3, new ArrayBasedMapData(
         new GenericArrayData(Arrays.asList(UTF8String.fromString("foo"))),
         new GenericArrayData(Arrays.asList(1))));
+    final InternalRow nestedStructData = new GenericInternalRow(1);
+    nestedStructData.update(0, 1);
+    expectedFirstRow.update(4, nestedStructData);
 
     TypeDescription orcSchema =
             TypeDescription.fromString("struct<col1:int>");
@@ -78,7 +81,10 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
             Types.NestedField.required(3, "col3", Types.ListType.ofRequired(10, Types.IntegerType.get()),
                 ImmutableList.of(1, 2), null),
             Types.NestedField.required(4, "col4", Types.MapType.ofRequired(11, 12, Types.StringType.get(),
-                Types.IntegerType.get()), ImmutableMap.of("foo", 1), null)
+                Types.IntegerType.get()), ImmutableMap.of("foo", 1), null),
+            Types.NestedField.required(5, "col5", Types.StructType.of(
+                Types.NestedField.required(13, "nested_col1", Types.IntegerType.get())),
+                ImmutableMap.of("nested_col1", 1), null)
     );
 
     Configuration conf = new Configuration();
@@ -119,51 +125,6 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
 
       assertEquals(readSchema, expectedFirstRow, actualFirstRow);
     }
-  }
-
-  @Test
-  public void testOrcDefaultValuesVectorized() throws IOException {
-    final int numRows = 10;
-
-    final InternalRow expectedFirstRow = new GenericInternalRow(4);
-    expectedFirstRow.update(0, 0);
-    expectedFirstRow.update(1, UTF8String.fromString("foo"));
-
-    TypeDescription orcSchema =
-        TypeDescription.fromString("struct<col1:int>");
-
-    Schema readSchema = new Schema(
-        Types.NestedField.required(1, "col1", Types.IntegerType.get()),
-        Types.NestedField.required(2, "col2", Types.StringType.get(), "foo", null)
-    );
-
-    Configuration conf = new Configuration();
-
-    File orcFile = temp.newFile();
-    Path orcFilePath = new Path(orcFile.getPath());
-
-    Writer writer = OrcFile.createWriter(orcFilePath,
-        OrcFile.writerOptions(conf).setSchema(orcSchema).overwrite(true));
-
-    VectorizedRowBatch batch = orcSchema.createRowBatch();
-    LongColumnVector firstCol = (LongColumnVector) batch.cols[0];
-    for (int r = 0; r < numRows; ++r) {
-      int row = batch.size++;
-      firstCol.vector[row] = r;
-      // If the batch is full, write it out and start over.
-      if (batch.size == batch.getMaxSize()) {
-        writer.addRowBatch(batch);
-        batch.reset();
-      }
-    }
-    if (batch.size != 0) {
-      writer.addRowBatch(batch);
-      batch.reset();
-    }
-    writer.close();
-
-    // try to read the data using the readSchema, which is an evolved
-    // schema that contains a new column with default value
 
     // vectorized-read
     try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
