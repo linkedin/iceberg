@@ -51,6 +51,10 @@ class ConstantColumnVector extends ColumnVector {
     this.batchSize = batchSize;
   }
 
+  protected int getBatchSize() {
+    return batchSize;
+  }
+
   @Override
   public void close() {
   }

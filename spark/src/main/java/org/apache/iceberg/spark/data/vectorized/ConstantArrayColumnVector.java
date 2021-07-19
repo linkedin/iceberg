@@ -19,8 +19,15 @@
 
 package org.apache.iceberg.spark.data.vectorized;
 
+import java.util.Arrays;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.sql.types.ArrayType;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.sql.types.MapType;
+import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
@@ -71,16 +78,6 @@ public class ConstantArrayColumnVector extends ConstantColumnVector {
   }
 
   @Override
-  public ColumnarArray getArray(int rowId) {
-    return null;
-  }
-
-  @Override
-  public ColumnarMap getMap(int ordinal) {
-    return null;
-  }
-
-  @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
     return (Decimal) constantArray[rowId];
   }
@@ -96,7 +93,27 @@ public class ConstantArrayColumnVector extends ConstantColumnVector {
   }
 
   @Override
+  public ColumnarArray getArray(int rowId) {
+    return new ColumnarArray(
+        new ConstantArrayColumnVector(((ArrayType) type).elementType(), getBatchSize(),
+            ((ArrayData) constantArray[rowId]).array()),
+        0,
+        ((ArrayData) constantArray[rowId]).numElements());
+  }
+
+  @Override
+  public ColumnarMap getMap(int rowId) {
+    ColumnVector keys = new ConstantArrayColumnVector(((MapType) type).keyType(), getBatchSize(),
+        ((MapData) constantArray[rowId]).keyArray().array());
+    ColumnVector values = new ConstantArrayColumnVector(((MapType) type).valueType(), getBatchSize(),
+        ((MapData) constantArray[rowId]).valueArray().array());
+    return new ColumnarMap(keys, values, 0, ((MapData) constantArray[rowId]).numElements());
+  }
+
+  @Override
   protected ColumnVector getChild(int ordinal) {
-    return null;
+    DataType fieldType = ((StructType) type).fields()[ordinal].dataType();
+    return new ConstantArrayColumnVector(fieldType, getBatchSize(),
+        Arrays.stream(constantArray).map(row -> ((InternalRow) row).get(ordinal, fieldType)).toArray());
   }
 }

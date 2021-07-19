@@ -61,16 +61,25 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
   public void testOrcDefaultValues() throws IOException {
     final int numRows = 10;
 
-    final InternalRow expectedFirstRow = new GenericInternalRow(5);
+    final InternalRow expectedFirstRow = new GenericInternalRow(6);
     expectedFirstRow.update(0, 0);
     expectedFirstRow.update(1, UTF8String.fromString("foo"));
     expectedFirstRow.update(2, new GenericArrayData(ImmutableList.of(1, 2).toArray()));
     expectedFirstRow.update(3, new ArrayBasedMapData(
         new GenericArrayData(Arrays.asList(UTF8String.fromString("foo"))),
         new GenericArrayData(Arrays.asList(1))));
+
     final InternalRow nestedStructData = new GenericInternalRow(1);
     nestedStructData.update(0, 1);
     expectedFirstRow.update(4, nestedStructData);
+
+    // test deeply nested data: array of structs
+    final InternalRow deepNestedStructData1 = new GenericInternalRow(1);
+    deepNestedStructData1.update(0, 1);
+    final InternalRow deepNestedStructData2 = new GenericInternalRow(1);
+    deepNestedStructData2.update(0, 2);
+    expectedFirstRow.update(5,
+        new GenericArrayData(ImmutableList.of(deepNestedStructData1, deepNestedStructData2).toArray()));
 
     TypeDescription orcSchema =
             TypeDescription.fromString("struct<col1:int>");
@@ -84,7 +93,10 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
                 Types.IntegerType.get()), ImmutableMap.of("foo", 1), null),
             Types.NestedField.required(5, "col5", Types.StructType.of(
                 Types.NestedField.required(13, "nested_col1", Types.IntegerType.get())),
-                ImmutableMap.of("nested_col1", 1), null)
+                ImmutableMap.of("nested_col1", 1), null),
+            Types.NestedField.required(6, "col6", Types.ListType.ofRequired(14, Types.StructType.of(
+                Types.NestedField.required(15, "nested_col2", Types.IntegerType.get()))),
+                ImmutableList.of(ImmutableMap.of("nested_col2", 1), ImmutableMap.of("nested_col2", 2)), null)
     );
 
     Configuration conf = new Configuration();
