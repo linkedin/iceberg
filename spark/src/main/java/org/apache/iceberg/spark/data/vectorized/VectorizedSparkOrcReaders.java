@@ -94,6 +94,11 @@ public class VectorizedSparkOrcReaders {
     }
 
     @Override
+    public Converter union(Type iType, TypeDescription union, List<Converter> options) {
+      return new UnionConverter(iType, options);
+    }
+
+    @Override
     public Converter list(Types.ListType iList, TypeDescription array, Converter element) {
       return new ArrayConverter(iList, element);
     }
@@ -420,6 +425,23 @@ public class VectorizedSparkOrcReaders {
           return fieldVectors.get(ordinal);
         }
       };
+    }
+  }
+
+  private static class UnionConverter implements Converter {
+    private final Type unionType;
+    private final List<Converter> optionConverters;
+
+    private UnionConverter(Type type, List<Converter> optionConverters) {
+      this.unionType = type;
+      this.optionConverters = optionConverters;
+    }
+
+    @Override
+    public ColumnVector convert(org.apache.orc.storage.ql.exec.vector.ColumnVector columnVector, int batchSize,
+        long batchOffsetInFile) {
+      // TODO: implementation this method
+      return null;
     }
   }
 }

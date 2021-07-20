@@ -39,10 +39,14 @@ import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
 import org.apache.orc.storage.ql.exec.vector.UnionColumnVector;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+
+import static org.apache.iceberg.spark.data.TestHelpers.assertEquals;
 
 
 public class TestSparkOrcUnions {
@@ -62,20 +66,32 @@ public class TestSparkOrcUnions {
             Types.NestedField.optional(2, "tag_1", Types.StringType.get())))
     );
 
+    final InternalRow expectedFirstRow = new GenericInternalRow(1);
+    final InternalRow field1 = new GenericInternalRow(2);
+    field1.update(0, 0);
+    field1.update(1, null);
+    expectedFirstRow.update(0, field1);
+
+    final InternalRow expectedSecondRow = new GenericInternalRow(1);
+    final InternalRow field2 = new GenericInternalRow(2);
+    field2.update(0, null);
+    field2.update(1, UTF8String.fromString("stringtype1"));
+    expectedSecondRow.update(0, field2);
+
     Configuration conf = new Configuration();
 
-    temp.delete();
-    String basePath = temp.getRoot().getAbsolutePath();
-    Path path = new Path(basePath + "/test.orc");
+    File orcFile = temp.newFile();
+    Path orcFilePath = new Path(orcFile.getPath());
 
-    Writer writer = OrcFile.createWriter(path,
+    Writer writer = OrcFile.createWriter(orcFilePath,
         OrcFile.writerOptions(conf)
-            .setSchema(orcSchema));
+            .setSchema(orcSchema).overwrite(true));
 
     VectorizedRowBatch batch = orcSchema.createRowBatch();
     LongColumnVector longColumnVector = new LongColumnVector(NUM_OF_ROWS);
     BytesColumnVector bytesColumnVector = new BytesColumnVector(NUM_OF_ROWS);
     UnionColumnVector complexUnion = new UnionColumnVector(NUM_OF_ROWS, longColumnVector, bytesColumnVector);
+
     complexUnion.init();
 
     for (int i = 0; i < NUM_OF_ROWS; i += 1) {
@@ -94,16 +110,18 @@ public class TestSparkOrcUnions {
 
     List<InternalRow> internalRows = Lists.newArrayList();
     try (CloseableIterable<InternalRow> reader = ORC
-        .read(Files.localInput(new File(path.getParent() + "/" + path.getName())))
+        .read(Files.localInput(orcFile))
         .project(expectedSchema)
         .createReaderFunc(readOrcSchema -> new SparkOrcReader(expectedSchema, readOrcSchema))
         .build()) {
       reader.forEach(internalRows::add);
 
       Assert.assertEquals(internalRows.size(), NUM_OF_ROWS);
-    } finally {
-      temp.delete();
+      assertEquals(expectedSchema, expectedFirstRow, internalRows.get(0));
+      assertEquals(expectedSchema, expectedSecondRow, internalRows.get(1));
     }
+
+    // TODO: add vectorized read test
   }
 
   @Test
@@ -116,15 +134,24 @@ public class TestSparkOrcUnions {
             Types.NestedField.optional(1, "tag_0", Types.IntegerType.get())))
     );
 
+    final InternalRow expectedFirstRow = new GenericInternalRow(1);
+    final InternalRow field1 = new GenericInternalRow(1);
+    field1.update(0, 0);
+    expectedFirstRow.update(0, field1);
+
+    final InternalRow expectedSecondRow = new GenericInternalRow(1);
+    final InternalRow field2 = new GenericInternalRow(1);
+    field2.update(0, 3);
+    expectedSecondRow.update(0, field2);
+
     Configuration conf = new Configuration();
 
-    temp.delete();
-    String basePath = temp.getRoot().getAbsolutePath();
-    Path path = new Path(basePath + "/test.orc");
+    File orcFile = temp.newFile();
+    Path orcFilePath = new Path(orcFile.getPath());
 
-    Writer writer = OrcFile.createWriter(path,
+    Writer writer = OrcFile.createWriter(orcFilePath,
         OrcFile.writerOptions(conf)
-            .setSchema(orcSchema));
+            .setSchema(orcSchema).overwrite(true));
 
     VectorizedRowBatch batch = orcSchema.createRowBatch();
     LongColumnVector longColumnVector = new LongColumnVector(NUM_OF_ROWS);
@@ -145,15 +172,17 @@ public class TestSparkOrcUnions {
 
     List<InternalRow> internalRows = Lists.newArrayList();
     try (CloseableIterable<InternalRow> reader = ORC
-        .read(Files.localInput(new File(path.getParent() + "/" + path.getName())))
+        .read(Files.localInput(orcFile))
         .project(expectedSchema)
         .createReaderFunc(readOrcSchema -> new SparkOrcReader(expectedSchema, readOrcSchema))
         .build()) {
       reader.forEach(internalRows::add);
 
       Assert.assertEquals(internalRows.size(), NUM_OF_ROWS);
-    } finally {
-      temp.delete();
+      assertEquals(expectedSchema, expectedFirstRow, internalRows.get(0));
+      assertEquals(expectedSchema, expectedSecondRow, internalRows.get(1));
     }
+
+    // TODO: add vectorized read test
   }
 }
