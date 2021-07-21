@@ -34,6 +34,7 @@ import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
 
+
 /**
  * Utilities for mapping Iceberg to ORC schemas.
  */
@@ -265,26 +266,7 @@ public final class ORCSchemaUtil {
 
     switch (type.typeId()) {
       case STRUCT:
-        OrcField orcField = mapping.getOrDefault(fieldId, null);
-        if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
-          orcType = orcField.type;
-        } else {
-          orcType = TypeDescription.createStruct();
-          for (Types.NestedField nestedField : type.asStructType().fields()) {
-            // Using suffix _r to avoid potential underlying issues in ORC reader
-            // with reused column names between ORC and Iceberg;
-            // e.g. renaming column c -> d and adding new column d
-            if (mapping.get(nestedField.fieldId()) == null && nestedField.hasDefaultValue()) {
-              continue;
-            }
-            String name = Optional.ofNullable(mapping.get(nestedField.fieldId()))
-                .map(OrcField::name)
-                .orElseGet(() -> nestedField.name() + "_r" + nestedField.fieldId());
-            TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
-                isRequired && nestedField.isRequired(), mapping);
-            orcType.addField(name, childType);
-          }
-        }
+        orcType = buildOrcProjectForStructType(fieldId, type, isRequired, mapping);
         break;
       case LIST:
         Types.ListType list = (Types.ListType) type;
@@ -325,6 +307,32 @@ public final class ORCSchemaUtil {
     return orcType;
   }
 
+  private static TypeDescription buildOrcProjectForStructType(Integer fieldId, Type type, boolean isRequired,
+      Map<Integer, OrcField> mapping) {
+    TypeDescription orcType;
+    OrcField orcField = mapping.getOrDefault(fieldId, null);
+    if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
+      orcType = orcField.type;
+    } else {
+      orcType = TypeDescription.createStruct();
+      for (Types.NestedField nestedField : type.asStructType().fields()) {
+        // Using suffix _r to avoid potential underlying issues in ORC reader
+        // with reused column names between ORC and Iceberg;
+        // e.g. renaming column c -> d and adding new column d
+        if (mapping.get(nestedField.fieldId()) == null && nestedField.hasDefaultValue()) {
+          continue;
+        }
+        String name = Optional.ofNullable(mapping.get(nestedField.fieldId()))
+            .map(OrcField::name)
+            .orElseGet(() -> nestedField.name() + "_r" + nestedField.fieldId());
+        TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
+            isRequired && nestedField.isRequired(), mapping);
+        orcType.addField(name, childType);
+      }
+    }
+    return orcType;
+  }
+
   private static Map<Integer, OrcField> icebergToOrcMapping(String name, TypeDescription orcType) {
     Map<Integer, OrcField> icebergToOrc = Maps.newHashMap();
     switch (orcType.getCategory()) {
@@ -336,6 +344,7 @@ public final class ORCSchemaUtil {
         }
         break;
       case UNION:
+        // This is part of building orc read schema in file level. orcType has union type inside it.
         List<TypeDescription> options = orcType.getChildren();
         for (int i = 0; i < options.size(); i++) {
           icebergToOrc.putAll(icebergToOrcMapping("option" + i, options.get(i)));
