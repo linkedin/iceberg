@@ -19,9 +19,11 @@
 
 package org.apache.iceberg.spark.data;
 
+import com.google.common.collect.ImmutableMap;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -30,6 +32,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.orc.ORC;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.spark.data.vectorized.VectorizedSparkOrcReaders;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.OrcFile;
 import org.apache.orc.TypeDescription;
@@ -40,6 +43,7 @@ import org.apache.orc.storage.ql.exec.vector.UnionColumnVector;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.Assert;
 import org.junit.Rule;
@@ -108,9 +112,9 @@ public class TestSparkOrcUnions {
     batch.reset();
     writer.close();
 
+    // Test non-vectorized reader
     List<InternalRow> internalRows = Lists.newArrayList();
-    try (CloseableIterable<InternalRow> reader = ORC
-        .read(Files.localInput(orcFile))
+    try (CloseableIterable<InternalRow> reader = ORC.read(Files.localInput(orcFile))
         .project(expectedSchema)
         .createReaderFunc(readOrcSchema -> new SparkOrcReader(expectedSchema, readOrcSchema))
         .build()) {
@@ -121,7 +125,20 @@ public class TestSparkOrcUnions {
       assertEquals(expectedSchema, expectedSecondRow, internalRows.get(1));
     }
 
-    // TODO: add vectorized read test
+    // Test vectorized reader
+    List<ColumnarBatch> columnarBatches = Lists.newArrayList();
+    try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
+        .project(expectedSchema)
+        .createBatchedReaderFunc(readOrcSchema ->
+            VectorizedSparkOrcReaders.buildReader(expectedSchema, readOrcSchema, ImmutableMap.of()))
+        .build()) {
+      reader.forEach(columnarBatches::add);
+      Iterator<InternalRow> rowIterator = columnarBatches.get(0).rowIterator();
+
+      Assert.assertEquals(columnarBatches.get(0).numRows(), NUM_OF_ROWS);
+      assertEquals(expectedSchema, expectedFirstRow, rowIterator.next());
+      assertEquals(expectedSchema, expectedSecondRow, rowIterator.next());
+    }
   }
 
   @Test
@@ -170,9 +187,9 @@ public class TestSparkOrcUnions {
     batch.reset();
     writer.close();
 
+    // Test non-vectorized reader
     List<InternalRow> internalRows = Lists.newArrayList();
-    try (CloseableIterable<InternalRow> reader = ORC
-        .read(Files.localInput(orcFile))
+    try (CloseableIterable<InternalRow> reader = ORC.read(Files.localInput(orcFile))
         .project(expectedSchema)
         .createReaderFunc(readOrcSchema -> new SparkOrcReader(expectedSchema, readOrcSchema))
         .build()) {
@@ -183,6 +200,19 @@ public class TestSparkOrcUnions {
       assertEquals(expectedSchema, expectedSecondRow, internalRows.get(1));
     }
 
-    // TODO: add vectorized read test
+    // Test vectorized reader
+    List<ColumnarBatch> columnarBatches = Lists.newArrayList();
+    try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
+        .project(expectedSchema)
+        .createBatchedReaderFunc(readOrcSchema ->
+            VectorizedSparkOrcReaders.buildReader(expectedSchema, readOrcSchema, ImmutableMap.of()))
+        .build()) {
+      reader.forEach(columnarBatches::add);
+      Iterator<InternalRow> rowIterator = columnarBatches.get(0).rowIterator();
+
+      Assert.assertEquals(columnarBatches.get(0).numRows(), NUM_OF_ROWS);
+      assertEquals(expectedSchema, expectedFirstRow, rowIterator.next());
+      assertEquals(expectedSchema, expectedSecondRow, rowIterator.next());
+    }
   }
 }

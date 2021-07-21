@@ -38,6 +38,7 @@ import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.ListColumnVector;
 import org.apache.orc.storage.ql.exec.vector.MapColumnVector;
 import org.apache.orc.storage.ql.exec.vector.StructColumnVector;
+import org.apache.orc.storage.ql.exec.vector.UnionColumnVector;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.vectorized.ColumnVector;
@@ -429,19 +430,33 @@ public class VectorizedSparkOrcReaders {
   }
 
   private static class UnionConverter implements Converter {
-    private final Type unionType;
+    private final Types.StructType structType;
     private final List<Converter> optionConverters;
 
     private UnionConverter(Type type, List<Converter> optionConverters) {
-      this.unionType = type;
+      this.structType = type.asStructType();
       this.optionConverters = optionConverters;
     }
 
     @Override
-    public ColumnVector convert(org.apache.orc.storage.ql.exec.vector.ColumnVector columnVector, int batchSize,
+    public ColumnVector convert(org.apache.orc.storage.ql.exec.vector.ColumnVector vector, int batchSize,
         long batchOffsetInFile) {
-      // TODO: implementation this method
-      return null;
+      UnionColumnVector unionColumnVector = (UnionColumnVector) vector;
+      List<Types.NestedField> fields = structType.fields();
+      assert fields.size() == unionColumnVector.fields.length;
+      assert fields.size() == optionConverters.size();
+
+      List<ColumnVector> fieldVectors = Lists.newArrayListWithExpectedSize(fields.size());
+      for (int i = 0; i < fields.size(); i += 1) {
+        fieldVectors.add(optionConverters.get(i).convert(unionColumnVector.fields[i], batchSize, batchOffsetInFile));
+      }
+
+      return new BaseOrcColumnVector(structType, batchSize, vector) {
+        @Override
+        public ColumnVector getChild(int ordinal) {
+          return fieldVectors.get(ordinal);
+        }
+      };
     }
   }
 }
