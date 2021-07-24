@@ -38,7 +38,7 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
         return visitor.visitRecord(iType != null ? iType.asStructType() : null, schema, visitor);
 
       case UNION:
-        throw new UnsupportedOperationException("Cannot handle " + schema);
+        return visitUnion(iType, schema, visitor);
 
       case LIST:
         Types.ListType list = iType != null ? iType.asListType() : null;
@@ -71,7 +71,22 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
     return visitor.record(struct, record, names, results);
   }
 
+  private static <T> T visitUnion(Type type, TypeDescription union, OrcSchemaWithTypeVisitor<T> visitor) {
+    List<TypeDescription> types = union.getChildren();
+    List<T> options = Lists.newArrayListWithCapacity(types.size());
+
+    for (int i = 0; i < types.size(); i += 1) {
+      options.add(visit(type.asStructType().fields().get(i).type(), types.get(i), visitor));
+    }
+
+    return visitor.union(type, union, options);
+  }
+
   public T record(Types.StructType iStruct, TypeDescription record, List<String> names, List<T> fields) {
+    return null;
+  }
+
+  public T union(Type iUnion, TypeDescription union, List<T> options) {
     return null;
   }
 
