@@ -25,12 +25,14 @@ import org.apache.hadoop.hive.serde2.typeinfo.ListTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.UnionTypeInfo;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 
 
 public class HiveTypeToIcebergType extends HiveTypeUtil.HiveSchemaVisitor<Type> {
+  private static final String UNION_TO_STRUCT_CONVERSION_PREFIX = "tag_";
   private int nextId = 1;
 
   @Override
@@ -50,6 +52,16 @@ public class HiveTypeToIcebergType extends HiveTypeUtil.HiveSchemaVisitor<Type> 
   @Override
   public Type list(ListTypeInfo list, Type elementResult) {
     return Types.ListType.ofOptional(allocateId(), elementResult);
+  }
+
+  // Mimic the struct call behavior to construct a union converted struct type
+  @Override
+  public Type union(UnionTypeInfo union, List<Type> unionResults) {
+    List<Types.NestedField> fields = Lists.newArrayListWithExpectedSize(unionResults.size());
+    for (int i = 0; i < unionResults.size(); i++) {
+      fields.add(Types.NestedField.optional(allocateId(), UNION_TO_STRUCT_CONVERSION_PREFIX + i, unionResults.get(i)));
+    }
+    return Types.StructType.of(fields);
   }
 
   @Override

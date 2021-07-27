@@ -19,6 +19,7 @@
 
 package org.apache.iceberg.avro;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -153,6 +154,29 @@ public class AvroSchemaUtil {
       }
     }
 
+    return false;
+  }
+
+  public static Schema discardNullFromUnionIfExist(Schema schema) {
+    Preconditions.checkArgument(schema.getType() == UNION,
+        "Expected union schema but was passed: %s", schema);
+    List<Schema> result = new ArrayList<>();
+    for (Schema nested : schema.getTypes()) {
+      if (!(nested.getType() == Schema.Type.NULL)) {
+        result.add(nested);
+      }
+    }
+    return Schema.createUnion(result);
+  }
+
+  public static boolean nullExistInUnion(Schema schema) {
+    Preconditions.checkArgument(schema.getType() == UNION,
+        "Expected union schema but was passed: %s", schema);
+    for (Schema nested : schema.getTypes()) {
+      if (nested.getType() == Schema.Type.NULL) {
+        return true;
+      }
+    }
     return false;
   }
 

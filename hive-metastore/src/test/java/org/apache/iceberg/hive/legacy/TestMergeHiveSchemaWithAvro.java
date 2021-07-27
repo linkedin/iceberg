@@ -23,6 +23,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.avro.util.internal.JacksonUtils;
@@ -227,6 +228,25 @@ public class TestMergeHiveSchemaWithAvro {
   }
 
   @Test
+  public void shouldHandleUnions() {
+    String hive = "struct<fa:uniontype<string,int>,fb:uniontype<string,int>,fc:uniontype<string,int>>";
+    Schema avro = struct("r1",
+        required("fA", union(Schema.Type.NULL, Schema.Type.STRING, Schema.Type.INT)),
+        required("fB", union(Schema.Type.STRING, Schema.Type.INT)),
+        required("fC", union(Schema.Type.STRING, Schema.Type.INT, Schema.Type.NULL))
+    );
+
+    Schema expected = struct("r1",
+        required("fA", union(Schema.Type.NULL, Schema.Type.STRING, Schema.Type.INT)),
+        required("fB", union(Schema.Type.STRING, Schema.Type.INT)),
+        // our merge logic always put the NULL alternative in the front
+        required("fC", union(Schema.Type.NULL, Schema.Type.STRING, Schema.Type.INT))
+    );
+
+    assertSchema(expected, merge(hive, avro));
+  }
+
+  @Test
   public void shouldSanitizeIncompatibleFieldNames() {
     StructTypeInfo typeInfo = (StructTypeInfo) TypeInfoFactory.getStructTypeInfo(
         Lists.newArrayList("a.b.c", "$#@%!"),
@@ -334,6 +354,10 @@ public class TestMergeHiveSchemaWithAvro {
 
   private Schema map(Schema.Type valueType) {
     return map(Schema.create(valueType));
+  }
+
+  private Schema union(Schema.Type... types) {
+    return Schema.createUnion(Arrays.stream(types).map(Schema::create).collect(Collectors.toList()));
   }
 
   private Schema.Field nullable(Schema.Field field) {

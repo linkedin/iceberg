@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.UnionTypeInfo;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Type;
 
@@ -49,7 +50,12 @@ public class HiveTypeUtil {
         return visitor.struct(structTypeInfo, names, results);
 
       case UNION:
-        throw new UnsupportedOperationException("Union data type not supported : " + typeInfo);
+        final UnionTypeInfo unionTypeInfo = (UnionTypeInfo) typeInfo;
+        List<T> unionResults = Lists.newArrayListWithExpectedSize(unionTypeInfo.getAllUnionObjectTypeInfos().size());
+        for (TypeInfo unionObjectTypeInfo : unionTypeInfo.getAllUnionObjectTypeInfos()) {
+          unionResults.add(visit(unionObjectTypeInfo, visitor));
+        }
+        return visitor.union(unionTypeInfo, unionResults);
 
       case LIST:
         ListTypeInfo listTypeInfo = (ListTypeInfo) typeInfo;
@@ -77,6 +83,10 @@ public class HiveTypeUtil {
     }
 
     public T map(MapTypeInfo map, T keyResult, T valueResult) {
+      return null;
+    }
+
+    public T union(UnionTypeInfo union, List<T> unionResults) {
       return null;
     }
 

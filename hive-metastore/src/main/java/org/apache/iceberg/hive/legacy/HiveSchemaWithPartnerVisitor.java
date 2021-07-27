@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.UnionTypeInfo;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 
 /**
@@ -60,6 +61,8 @@ public abstract class HiveSchemaWithPartnerVisitor<P, FP, R, FR> {
     P mapValuePartner(P partnerMap);
 
     P listElementPartner(P partnerList);
+
+    P unionObjectPartner(P partnerUnion, int ordinal);
   }
 
   @SuppressWarnings("MethodTypeParameterName")
@@ -98,7 +101,15 @@ public abstract class HiveSchemaWithPartnerVisitor<P, FP, R, FR> {
         return visitor.primitive((PrimitiveTypeInfo) typeInfo, partner);
 
       case UNION:
-        throw new UnsupportedOperationException("Union data type not supported: " + typeInfo);
+        UnionTypeInfo unionTypeInfo = (UnionTypeInfo) typeInfo;
+        List<TypeInfo> allAlternatives = unionTypeInfo.getAllUnionObjectTypeInfos();
+        List<R> unionResults = Lists.newArrayListWithExpectedSize(allAlternatives.size());
+        for (int i = 0; i < allAlternatives.size(); i++) {
+          P unionObjectPartner = partner != null ? accessor.unionObjectPartner(partner, i) : null;
+          R result = visit(allAlternatives.get(i), unionObjectPartner, visitor, accessor);
+          unionResults.add(result);
+        }
+        return visitor.union(unionTypeInfo, partner, unionResults);
 
       default:
         throw new UnsupportedOperationException(typeInfo + " not supported");
@@ -118,6 +129,10 @@ public abstract class HiveSchemaWithPartnerVisitor<P, FP, R, FR> {
   }
 
   public R map(MapTypeInfo map, P partner, R keyResult, R valueResult) {
+    return null;
+  }
+
+  public R union(UnionTypeInfo union, P partner, List<R> results) {
     return null;
   }
 
