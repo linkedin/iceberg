@@ -19,6 +19,7 @@
 
 package org.apache.iceberg.hive.legacy;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.avro.JsonProperties;
@@ -30,6 +31,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.UnionTypeInfo;
 import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 
@@ -125,6 +127,17 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
   }
 
   @Override
+  public Schema union(UnionTypeInfo union, Schema partner, List<Schema> results) {
+    if (AvroSchemaUtil.nullExistInUnion(partner)) {
+      List<Schema> toAddNull = new ArrayList<>();
+      toAddNull.add(Schema.create(Schema.Type.NULL));
+      toAddNull.addAll(results);
+      return Schema.createUnion(toAddNull);
+    }
+    return Schema.createUnion(results);
+  }
+
+  @Override
   public Schema primitive(PrimitiveTypeInfo primitive, Schema partner) {
     boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
     Schema hivePrimitive = hivePrimitiveToAvro(primitive);
@@ -175,6 +188,15 @@ class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schem
     public Schema listElementPartner(Schema partner) {
       Schema schema = extractIfOption(partner);
       return (schema.getType() == Schema.Type.ARRAY) ? schema.getElementType() : null;
+    }
+
+    @Override
+    public Schema unionObjectPartner(Schema partner, int ordinal) {
+      if (partner.getType() != Schema.Type.UNION) {
+        return null;
+      }
+      Schema schema = AvroSchemaUtil.discardNullFromUnionIfExist(partner);
+      return schema.getTypes().get(ordinal);
     }
 
     private Schema.Field findCaseInsensitive(Schema struct, String fieldName) {
