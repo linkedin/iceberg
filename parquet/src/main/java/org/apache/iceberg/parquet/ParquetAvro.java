@@ -169,12 +169,16 @@ class ParquetAvro {
 
     @Override
     public BigDecimal fromFixed(GenericFixed value, Schema schema, LogicalType type) {
-      return super.fromFixed(value, schema, decimalsByScale[((ParquetDecimal) type).scale()]);
+      // return super.fromFixed(value, schema, decimalsByScale[((ParquetDecimal) type).scale()]);
+      return super.fromFixed(value, schema,
+          LogicalTypes.decimal(((ParquetDecimal) type).precision, ((ParquetDecimal) type).scale));
     }
 
     @Override
     public GenericFixed toFixed(BigDecimal value, Schema schema, LogicalType type) {
-      return super.toFixed(value, schema, decimalsByScale[((ParquetDecimal) type).scale()]);
+      // return super.toFixed(value, schema, decimalsByScale[((ParquetDecimal) type).scale()]);
+      return super.toFixed(value, schema,
+          LogicalTypes.decimal(((ParquetDecimal) type).precision, ((ParquetDecimal) type).scale));
     }
   }
 

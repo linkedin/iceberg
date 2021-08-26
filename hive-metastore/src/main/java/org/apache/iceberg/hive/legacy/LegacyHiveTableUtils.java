@@ -56,7 +56,11 @@ class LegacyHiveTableUtils {
   static Schema getSchema(org.apache.hadoop.hive.metastore.api.Table table) {
     Map<String, String> props = getTableProperties(table);
     String schemaStr = props.get("avro.schema.literal");
-    org.apache.avro.Schema avroSchema = schemaStr != null ? new org.apache.avro.Schema.Parser().parse(schemaStr) : null;
+    // at linkedin, avro 1.7 has been used heavily where no default value validation took place, which
+    // led to having a lot of production schemata with malformed defaults. Therefore, we disable
+    // the default value validation
+    org.apache.avro.Schema avroSchema =
+        schemaStr != null ? new org.apache.avro.Schema.Parser().setValidateDefaults(false).parse(schemaStr) : null;
     Schema schema;
     if (avroSchema != null) {
       String serde = table.getSd().getSerdeInfo().getSerializationLib();
