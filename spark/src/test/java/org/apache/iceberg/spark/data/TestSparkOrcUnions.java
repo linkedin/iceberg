@@ -31,6 +31,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.orc.ORC;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.Iterators;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.data.vectorized.VectorizedSparkOrcReaders;
 import org.apache.iceberg.types.Types;
@@ -233,7 +234,7 @@ public class TestSparkOrcUnions {
 
     final InternalRow expectedFirstRow = new GenericInternalRow(1);
     final InternalRow inner1 = new GenericInternalRow(2);
-    inner1.update(0,  null);
+    inner1.update(0, null);
     final InternalRow inner2 = new GenericInternalRow(2);
     inner2.update(0, UTF8String.fromString("foo0"));
     final InternalRow inner3 = new GenericInternalRow(2);
@@ -283,6 +284,7 @@ public class TestSparkOrcUnions {
     }
     writer.close();
 
+    // test non-vectorized reader
     List<InternalRow> results = Lists.newArrayList();
     try (CloseableIterable<InternalRow> reader = ORC.read(Files.localInput(orcFile))
         .project(expectedSchema)
@@ -294,5 +296,21 @@ public class TestSparkOrcUnions {
       Assert.assertEquals(results.size(), NUM_OF_ROWS);
       assertEquals(expectedSchema, expectedFirstRow, actualFirstRow);
     }
+
+    // test vectorized reader
+    try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
+        .project(expectedSchema)
+        .createBatchedReaderFunc(readOrcSchema ->
+            VectorizedSparkOrcReaders.buildReader(expectedSchema, readOrcSchema, ImmutableMap.of()))
+        .build()) {
+      final Iterator<InternalRow> actualRows = batchesToRows(reader.iterator());
+      final InternalRow actualFirstRow = actualRows.next();
+
+      assertEquals(expectedSchema, expectedFirstRow, actualFirstRow);
+    }
+  }
+
+  private Iterator<InternalRow> batchesToRows(Iterator<ColumnarBatch> batches) {
+    return Iterators.concat(Iterators.transform(batches, ColumnarBatch::rowIterator));
   }
 }
