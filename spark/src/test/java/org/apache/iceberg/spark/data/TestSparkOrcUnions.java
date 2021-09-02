@@ -39,6 +39,7 @@ import org.apache.orc.TypeDescription;
 import org.apache.orc.Writer;
 import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
 import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
+import org.apache.orc.storage.ql.exec.vector.StructColumnVector;
 import org.apache.orc.storage.ql.exec.vector.UnionColumnVector;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -213,6 +214,85 @@ public class TestSparkOrcUnions {
       Assert.assertEquals(columnarBatches.get(0).numRows(), NUM_OF_ROWS);
       assertEquals(expectedSchema, expectedFirstRow, rowIterator.next());
       assertEquals(expectedSchema, expectedSecondRow, rowIterator.next());
+    }
+  }
+
+  @Test
+  public void testDeeplyNestedUnion() throws IOException {
+    TypeDescription orcSchema =
+        TypeDescription.fromString("struct<c1:uniontype<int,struct<c2:string,c3:uniontype<int,string>>>>");
+
+    Schema expectedSchema = new Schema(
+        Types.NestedField.optional(0, "c1", Types.StructType.of(
+            Types.NestedField.optional(1, "tag_0", Types.IntegerType.get()),
+            Types.NestedField.optional(2, "tag_1",
+                Types.StructType.of(Types.NestedField.optional(3, "c2", Types.StringType.get()),
+                    Types.NestedField.optional(4, "c3", Types.StructType.of(
+                        Types.NestedField.optional(5, "tag_0", Types.IntegerType.get()),
+                        Types.NestedField.optional(6, "tag_1", Types.StringType.get()))))))));
+
+    final InternalRow expectedFirstRow = new GenericInternalRow(1);
+    final InternalRow inner1 = new GenericInternalRow(2);
+    inner1.update(0,  null);
+    final InternalRow inner2 = new GenericInternalRow(2);
+    inner2.update(0, UTF8String.fromString("foo0"));
+    final InternalRow inner3 = new GenericInternalRow(2);
+    inner3.update(0, 0);
+    inner3.update(1, null);
+    inner2.update(1, inner3);
+    inner1.update(1, inner2);
+    expectedFirstRow.update(0, inner1);
+
+    Configuration conf = new Configuration();
+
+    File orcFile = temp.newFile();
+    Path orcFilePath = new Path(orcFile.getPath());
+
+    Writer writer = OrcFile.createWriter(orcFilePath,
+        OrcFile.writerOptions(conf)
+            .setSchema(orcSchema).overwrite(true));
+
+    VectorizedRowBatch batch = orcSchema.createRowBatch();
+    UnionColumnVector innerUnion1 = (UnionColumnVector) batch.cols[0];
+    LongColumnVector innerInt1 = (LongColumnVector) innerUnion1.fields[0];
+    innerInt1.fillWithNulls();
+    StructColumnVector innerStruct2 = (StructColumnVector) innerUnion1.fields[1];
+    BytesColumnVector innerString2 = (BytesColumnVector) innerStruct2.fields[0];
+    UnionColumnVector innerUnion3 = (UnionColumnVector) innerStruct2.fields[1];
+    LongColumnVector innerInt3 = (LongColumnVector) innerUnion3.fields[0];
+    BytesColumnVector innerString3 = (BytesColumnVector) innerUnion3.fields[1];
+    innerString3.fillWithNulls();
+
+    for (int r = 0; r < NUM_OF_ROWS; ++r) {
+      int row = batch.size++;
+      innerUnion1.tags[row] = 1;
+      innerString2.setVal(row, ("foo" + row).getBytes(StandardCharsets.UTF_8));
+      innerUnion3.tags[row] = 0;
+      innerInt3.vector[row] = r;
+      // If the batch is full, write it out and start over.
+      if (batch.size == batch.getMaxSize()) {
+        writer.addRowBatch(batch);
+        batch.reset();
+        innerInt1.fillWithNulls();
+        innerString3.fillWithNulls();
+      }
+    }
+    if (batch.size != 0) {
+      writer.addRowBatch(batch);
+      batch.reset();
+    }
+    writer.close();
+
+    List<InternalRow> results = Lists.newArrayList();
+    try (CloseableIterable<InternalRow> reader = ORC.read(Files.localInput(orcFile))
+        .project(expectedSchema)
+        .createReaderFunc(readOrcSchema -> new SparkOrcReader(expectedSchema, readOrcSchema))
+        .build()) {
+      reader.forEach(results::add);
+      final InternalRow actualFirstRow = results.get(0);
+
+      Assert.assertEquals(results.size(), NUM_OF_ROWS);
+      assertEquals(expectedSchema, expectedFirstRow, actualFirstRow);
     }
   }
 }
