@@ -312,7 +312,12 @@ public final class ORCSchemaUtil {
     TypeDescription orcType;
     OrcField orcField = mapping.getOrDefault(fieldId, null);
     if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
-      orcType = orcField.type;
+      orcType = TypeDescription.createUnion();
+      for (Types.NestedField nestedField : type.asStructType().fields()) {
+        TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
+            isRequired && nestedField.isRequired(), mapping);
+        orcType.addUnionChild(childType);
+      }
     } else {
       orcType = TypeDescription.createStruct();
       for (Types.NestedField nestedField : type.asStructType().fields()) {
