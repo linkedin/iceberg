@@ -49,15 +49,14 @@ public abstract class OrcSchemaVisitor<T> {
       case UNION:
         List<TypeDescription> types = schema.getChildren();
         List<T> options = Lists.newArrayListWithExpectedSize(types.size());
-        for (TypeDescription type : types) {
-          visitor.beforeUnionOption(type);
+        for (int i = 0; i < types.size(); i++) {
+          visitor.beforeUnionOption(types.get(i), i);
           try {
-            options.add(visit(type, visitor));
+            options.add(visit(types.get(i), visitor));
           } finally {
-            visitor.afterUnionOption(type);
+            visitor.afterUnionOption(types.get(i), i);
           }
         }
-
         return visitor.union(schema, options);
 
       case LIST:
@@ -123,8 +122,8 @@ public abstract class OrcSchemaVisitor<T> {
     return visitor.record(record, names, visitFields(fields, names, visitor));
   }
 
-  public String optionName() {
-    return "_option";
+  public String optionName(int ordinal) {
+    return "tag_" + ordinal;
   }
 
   public String elementName() {
@@ -151,12 +150,12 @@ public abstract class OrcSchemaVisitor<T> {
     fieldNames.pop();
   }
 
-  public void beforeUnionOption(TypeDescription option) {
-    beforeField(optionName(), option);
+  public void beforeUnionOption(TypeDescription option, int ordinal) {
+    beforeField(optionName(ordinal), option);
   }
 
-  public void afterUnionOption(TypeDescription option) {
-    afterField(optionName(), option);
+  public void afterUnionOption(TypeDescription option, int ordinal) {
+    afterField(optionName(ordinal), option);
   }
 
   public void beforeElementField(TypeDescription element) {
