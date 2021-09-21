@@ -95,6 +95,7 @@ subprojects {
         force 'com.fasterxml.jackson.module:jackson-module-scala_2.11:2.10.2'
         force 'com.fasterxml.jackson.module:jackson-module-scala_2.12:2.10.2'
         force 'com.fasterxml.jackson.module:jackson-module-paranamer:2.10.2'
+        force 'com.fasterxml.jackson.core:jackson-databind:2.10.2'
       }
     }
 
@@ -532,10 +533,11 @@ project(':iceberg-mr') {
     testCompile project(path: ':iceberg-core', configuration: 'testArtifacts')
     testCompile project(path: ':iceberg-hive-metastore', configuration: 'testArtifacts')
 
-    testCompile("org.apache.avro:avro:1.9.2")
+    testCompile("org.apache.avro:avro:1.10.2")
     testCompile("org.apache.calcite:calcite-core")
     testCompile("com.esotericsoftware:kryo-shaded:4.0.2")
-    testCompile("com.fasterxml.jackson.core:jackson-annotations:2.6.5")
+    testCompile("com.fasterxml.jackson.core:jackson-annotations:2.10.2")
+    testCompile("com.fasterxml.jackson.core:jackson-databind:2.10.2")
     testCompile("org.apache.hive:hive-service") {
       exclude group: 'org.apache.hive', module: 'hive-exec'
     }
@@ -602,7 +604,7 @@ if (jdkVersion == '8') {
       testCompile("org.apache.avro:avro:1.9.2")
       testCompile("org.apache.calcite:calcite-core")
       testCompile("com.esotericsoftware:kryo-shaded:4.0.2")
-      testCompile("com.fasterxml.jackson.core:jackson-annotations:2.6.5")
+      testCompile("com.fasterxml.jackson.core:jackson-annotations:2.10.2")
       testCompile("org.apache.hive:hive-service:3.1.2") {
         exclude group: 'org.apache.hive', module: 'hive-exec'
       }
