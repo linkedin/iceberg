@@ -86,9 +86,10 @@ public class TestHelpers {
 
   public static void assertEqualsBatch(Types.StructType struct, Iterator<Record> expected, ColumnarBatch batch,
                                        boolean checkArrowValidityVector) {
+    List<Types.NestedField> fields = struct.fields();
     for (int rowId = 0; rowId < batch.numRows(); rowId++) {
-      List<Types.NestedField> fields = struct.fields();
       InternalRow row = batch.getRow(rowId);
+      Assert.assertEquals("struct number of fields should equal row number of fields", fields.size(), row.numFields());
       Record rec = expected.next();
       for (int i = 0; i < fields.size(); i += 1) {
         Type fieldType = fields.get(i).type();
