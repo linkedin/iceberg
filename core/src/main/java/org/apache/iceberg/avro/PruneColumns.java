@@ -125,7 +125,6 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
       return null;
     } else {
       // Complex union case
-//      return Schema.createUnion(options);
       return copyUnion(union, options);
     }
   }
