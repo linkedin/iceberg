@@ -57,12 +57,12 @@ public abstract class AvroSchemaVisitor<T> {
             options.add(visit(type, visitor));
           }
         } else {
-          int i = 0;
           // complex union case
+          int idx = 0;
           for (Schema type : types) {
             if (type.getType() != Schema.Type.NULL) {
-              options.add(visitWithName("tag_"+i, type, visitor));
-              i += 1;
+              options.add(visitWithName("tag_" + idx, type, visitor));
+              idx += 1;
             } else {
               options.add(visit(type, visitor));
             }

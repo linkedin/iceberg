@@ -21,7 +21,6 @@ package org.apache.iceberg.spark.data;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.apache.avro.SchemaBuilder;
@@ -108,7 +107,6 @@ public class TestSparkAvroUnions {
     unionRecord1.put("unionCol", "foo");
     GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
     unionRecord2.put("unionCol", 1);
-    List<GenericData.Record> expectedRows = new ArrayList<>();
 
     File testFile = temp.newFile();
     Assert.assertTrue("Delete should succeed", testFile.delete());
@@ -196,7 +194,7 @@ public class TestSparkAvroUnions {
     GenericData.Record unionRecord1 = new GenericData.Record(avroSchema);
     unionRecord1.put("col1", Arrays.asList("foo", 1));
     GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
-    unionRecord2.put("col1",  Arrays.asList(2, "bar"));
+    unionRecord2.put("col1", Arrays.asList(2, "bar"));
 
     File testFile = temp.newFile();
     Assert.assertTrue("Delete should succeed", testFile.delete());
@@ -250,10 +248,11 @@ public class TestSparkAvroUnions {
         .endRecord();
 
     GenericData.Record outer = new GenericData.Record(avroSchema);
-    GenericData.Record inner = new GenericData.Record(avroSchema.getFields().get(0).schema().getElementType().getTypes().get(0));
+    GenericData.Record inner = new GenericData.Record(avroSchema.getFields().get(0).schema()
+        .getElementType().getTypes().get(0));
 
     inner.put("id", 1);
-    outer.put("col1",  Arrays.asList(inner));
+    outer.put("col1", Arrays.asList(inner));
 
     File testFile = temp.newFile();
     Assert.assertTrue("Delete should succeed", testFile.delete());
@@ -272,7 +271,7 @@ public class TestSparkAvroUnions {
       rows = Lists.newArrayList(reader);
 
       // making sure it reads the correctly nested structured data, based on the transformation from union to struct
-      Assert.assertEquals(1, rows.get(0).getArray(0).getStruct(0, 2).getStruct(0,1).getInt(0));
+      Assert.assertEquals(1, rows.get(0).getArray(0).getStruct(0, 2).getStruct(0, 1).getInt(0));
     }
   }
 }
