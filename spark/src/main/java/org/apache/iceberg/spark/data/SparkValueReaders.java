@@ -27,6 +27,9 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+
+import org.apache.avro.Schema;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.util.Utf8;
 import org.apache.iceberg.avro.ValueReader;
@@ -81,8 +84,8 @@ public class SparkValueReaders {
     return new StructReader(readers, struct, idToConstant);
   }
 
-  static ValueReader<InternalRow> union(List<ValueReader<?>> readers) {
-    return new UnionReader(readers);
+  static ValueReader<InternalRow> union(Schema schema, List<ValueReader<?>> readers) {
+    return new UnionReader(schema, readers);
   }
 
   private static class StringReader implements ValueReader<UTF8String> {
@@ -291,9 +294,11 @@ public class SparkValueReaders {
   }
 
   static class UnionReader implements ValueReader<InternalRow> {
+    private final Schema schema;
     private final ValueReader[] readers;
 
-    private UnionReader(List<ValueReader<?>> readers) {
+    private UnionReader(Schema schema, List<ValueReader<?>> readers) {
+      this.schema = schema;
       this.readers = new ValueReader[readers.size()];
       for (int i = 0; i < this.readers.length; i += 1) {
         this.readers[i] = readers.get(i);
@@ -302,15 +307,28 @@ public class SparkValueReaders {
 
     @Override
     public InternalRow read(Decoder decoder, Object reuse) throws IOException {
-      InternalRow struct = new GenericInternalRow(readers.length);
-      int index = decoder.readIndex();
-      Object value = this.readers[index].read(decoder, reuse);
-
-      for (int i = 0; i < readers.length; i += 1) {
+      // first we need to filter out NULL alternative if it exists in the union schema
+      int nullIndex = -1;
+      List<Schema> alts = schema.getTypes();
+      for (int i = 0; i < alts.size(); i++) {
+        Schema alt = alts.get(i);
+        if (Objects.equals(alt.getType(), Schema.Type.NULL)) {
+          nullIndex = i;
+          break;
+        }
+      }
+      InternalRow struct = new GenericInternalRow(nullIndex >= 0 ? alts.size() - 1 : alts.size());
+      for (int i = 0; i < struct.numFields(); i += 1) {
         struct.setNullAt(i);
       }
-      struct.update(index, value);
 
+      int index = decoder.readIndex();
+      Object value = this.readers[index].read(decoder, reuse);
+      if (nullIndex >= 0 && index > nullIndex) {
+        struct.update(index - 1, value);
+      } else {
+        struct.update(index, value);
+      }
       return struct;
     }
   }
