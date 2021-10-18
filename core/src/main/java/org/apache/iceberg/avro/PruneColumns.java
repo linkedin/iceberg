@@ -125,9 +125,11 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
       return null;
     } else {
       // Complex union case
-      return union;
+//      return Schema.createUnion(options);
+      return copyUnion(union, options);
     }
   }
+
 
   @Override
   @SuppressWarnings("checkstyle:CyclomaticComplexity")
@@ -296,5 +298,17 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
 
   private static boolean isOptionSchemaWithNonNullFirstOption(Schema schema) {
     return AvroSchemaUtil.isOptionSchema(schema) && schema.getTypes().get(0).getType() != Schema.Type.NULL;
+  }
+
+  private static Schema copyUnion(Schema record, List<Schema> visitResults) {
+    List<Schema> alts = Lists.newArrayListWithExpectedSize(visitResults.size());
+    for (int i = 0; i < visitResults.size(); i++) {
+      if (visitResults.get(0) == null) {
+        alts.add(record.getTypes().get(i));
+      } else {
+        alts.add(visitResults.get(i));
+      }
+    }
+    return Schema.createUnion(alts);
   }
 }

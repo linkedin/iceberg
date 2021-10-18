@@ -176,7 +176,7 @@ public class TestSparkAvroUnions {
   }
 
   @Test
-  public void testNestedComplexSchema() throws IOException {
+  public void testDeeplyNestedUnionSchema1() throws IOException {
     org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("col1")
@@ -215,10 +215,64 @@ public class TestSparkAvroUnions {
         .project(expectedSchema)
         .build()) {
       rows = Lists.newArrayList(reader);
-      System.out.println(rows);
 
-      // making sure it reads the correctly nested structured data, which is array of union-structs
+      // making sure it reads the correctly nested structured data, based on the transformation from union to struct
       Assert.assertEquals("foo", rows.get(0).getArray(0).getStruct(0, 2).getString(1));
+    }
+  }
+
+  @Test
+  public void testDeeplyNestedUnionSchema2() throws IOException {
+    org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("col1")
+        .type()
+        .array()
+        .items()
+        .unionOf()
+        .record("r1")
+        .fields()
+        .name("id")
+        .type()
+        .intType()
+        .noDefault()
+        .endRecord()
+        .and()
+        .record("r2")
+        .fields()
+        .name("id")
+        .type()
+        .intType()
+        .noDefault()
+        .endRecord()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    GenericData.Record outer = new GenericData.Record(avroSchema);
+    GenericData.Record inner = new GenericData.Record(avroSchema.getFields().get(0).schema().getElementType().getTypes().get(0));
+
+    inner.put("id", 1);
+    outer.put("col1",  Arrays.asList(inner));
+
+    File testFile = temp.newFile();
+    Assert.assertTrue("Delete should succeed", testFile.delete());
+
+    try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+      writer.create(avroSchema, testFile);
+      writer.append(outer);
+    }
+
+    Schema expectedSchema = AvroSchemaUtil.toIceberg(avroSchema);
+    List<InternalRow> rows;
+    try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
+        .createReaderFunc(SparkAvroReader::new)
+        .project(expectedSchema)
+        .build()) {
+      rows = Lists.newArrayList(reader);
+
+      // making sure it reads the correctly nested structured data, based on the transformation from union to struct
+      Assert.assertEquals(1, rows.get(0).getArray(0).getStruct(0, 2).getStruct(0,1).getInt(0));
     }
   }
 }

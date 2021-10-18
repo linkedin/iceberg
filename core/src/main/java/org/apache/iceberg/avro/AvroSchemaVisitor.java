@@ -52,8 +52,21 @@ public abstract class AvroSchemaVisitor<T> {
       case UNION:
         List<Schema> types = schema.getTypes();
         List<T> options = Lists.newArrayListWithExpectedSize(types.size());
-        for (Schema type : types) {
-          options.add(visit(type, visitor));
+        if (AvroSchemaUtil.isOptionSchema(schema)) {
+          for (Schema type : types) {
+            options.add(visit(type, visitor));
+          }
+        } else {
+          int i = 0;
+          // complex union case
+          for (Schema type : types) {
+            if (type.getType() != Schema.Type.NULL) {
+              options.add(visitWithName("tag_"+i, type, visitor));
+              i += 1;
+            } else {
+              options.add(visit(type, visitor));
+            }
+          }
         }
         return visitor.union(schema, options);
 
