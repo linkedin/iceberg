@@ -82,8 +82,13 @@ public class TestSparkAvroUnions {
         .build()) {
       rows = Lists.newArrayList(reader);
 
+      Assert.assertEquals(2, rows.get(0).getStruct(0, 2).numFields());
+      Assert.assertTrue(rows.get(0).getStruct(0, 2).isNullAt(0));
       Assert.assertEquals("foo", rows.get(0).getStruct(0, 2).getString(1));
+
+      Assert.assertEquals(2, rows.get(1).getStruct(0, 2).numFields());
       Assert.assertEquals(1, rows.get(1).getStruct(0, 2).getInt(0));
+      Assert.assertTrue(rows.get(1).getStruct(0, 2).isNullAt(1));
     }
   }
 
@@ -107,6 +112,8 @@ public class TestSparkAvroUnions {
     unionRecord1.put("unionCol", "foo");
     GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
     unionRecord2.put("unionCol", 1);
+    GenericData.Record unionRecord3 = new GenericData.Record(avroSchema);
+    unionRecord3.put("unionCol", null);
 
     File testFile = temp.newFile();
     Assert.assertTrue("Delete should succeed", testFile.delete());
@@ -115,6 +122,7 @@ public class TestSparkAvroUnions {
       writer.create(avroSchema, testFile);
       writer.append(unionRecord1);
       writer.append(unionRecord2);
+      writer.append(unionRecord3);
     }
 
     Schema expectedSchema = AvroSchemaUtil.toIceberg(avroSchema);
@@ -128,6 +136,8 @@ public class TestSparkAvroUnions {
 
       Assert.assertEquals("foo", rows.get(0).getStruct(0, 2).getString(1));
       Assert.assertEquals(1, rows.get(1).getStruct(0, 2).getInt(0));
+      Assert.assertTrue(rows.get(2).getStruct(0, 2).isNullAt(0));
+      Assert.assertTrue(rows.get(2).getStruct(0, 2).isNullAt(1));
     }
   }
 
