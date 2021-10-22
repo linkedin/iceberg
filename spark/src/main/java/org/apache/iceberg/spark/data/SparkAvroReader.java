@@ -83,7 +83,7 @@ public class SparkAvroReader implements DatumReader<InternalRow> {
       if (AvroSchemaUtil.isOptionSchema(union)) {
         return ValueReaders.union(options);
       } else {
-        return SparkValueReaders.union(options);
+        return SparkValueReaders.union(union, options);
       }
     }
 

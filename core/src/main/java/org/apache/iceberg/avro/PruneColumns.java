@@ -125,9 +125,10 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
       return null;
     } else {
       // Complex union case
-      return union;
+      return copyUnion(union, options);
     }
   }
+
 
   @Override
   @SuppressWarnings("checkstyle:CyclomaticComplexity")
@@ -296,5 +297,20 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
 
   private static boolean isOptionSchemaWithNonNullFirstOption(Schema schema) {
     return AvroSchemaUtil.isOptionSchema(schema) && schema.getTypes().get(0).getType() != Schema.Type.NULL;
+  }
+
+  // for primitive types, the visitResult will be null, we want to reuse the primitive types from the original
+  // schema, while for nested types, we want to use the visitResult because they have content from the previous
+  // recursive calls.
+  private static Schema copyUnion(Schema record, List<Schema> visitResults) {
+    List<Schema> alts = Lists.newArrayListWithExpectedSize(visitResults.size());
+    for (int i = 0; i < visitResults.size(); i++) {
+      if (visitResults.get(i) == null) {
+        alts.add(record.getTypes().get(i));
+      } else {
+        alts.add(visitResults.get(i));
+      }
+    }
+    return Schema.createUnion(alts);
   }
 }
