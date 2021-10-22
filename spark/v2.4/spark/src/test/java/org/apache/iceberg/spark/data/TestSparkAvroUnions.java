@@ -21,6 +21,7 @@ package org.apache.iceberg.spark.data;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import org.apache.avro.SchemaBuilder;
 import org.apache.avro.file.DataFileWriter;
@@ -59,7 +60,7 @@ public class TestSparkAvroUnions {
         .endRecord();
 
     GenericData.Record unionRecord1 = new GenericData.Record(avroSchema);
-    unionRecord1.put("unionCol", "StringType1");
+    unionRecord1.put("unionCol", "foo");
     GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
     unionRecord2.put("unionCol", 1);
 
@@ -80,6 +81,14 @@ public class TestSparkAvroUnions {
         .project(expectedSchema)
         .build()) {
       rows = Lists.newArrayList(reader);
+
+      Assert.assertEquals(2, rows.get(0).getStruct(0, 2).numFields());
+      Assert.assertTrue(rows.get(0).getStruct(0, 2).isNullAt(0));
+      Assert.assertEquals("foo", rows.get(0).getStruct(0, 2).getString(1));
+
+      Assert.assertEquals(2, rows.get(1).getStruct(0, 2).numFields());
+      Assert.assertEquals(1, rows.get(1).getStruct(0, 2).getInt(0));
+      Assert.assertTrue(rows.get(1).getStruct(0, 2).isNullAt(1));
     }
   }
 
@@ -96,11 +105,58 @@ public class TestSparkAvroUnions {
         .and()
         .stringType()
         .endUnion()
-        .noDefault()
+        .nullDefault()
         .endRecord();
 
     GenericData.Record unionRecord1 = new GenericData.Record(avroSchema);
-    unionRecord1.put("unionCol", "StringType1");
+    unionRecord1.put("unionCol", "foo");
+    GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
+    unionRecord2.put("unionCol", 1);
+    GenericData.Record unionRecord3 = new GenericData.Record(avroSchema);
+    unionRecord3.put("unionCol", null);
+
+    File testFile = temp.newFile();
+    Assert.assertTrue("Delete should succeed", testFile.delete());
+
+    try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+      writer.create(avroSchema, testFile);
+      writer.append(unionRecord1);
+      writer.append(unionRecord2);
+      writer.append(unionRecord3);
+    }
+
+    Schema expectedSchema = AvroSchemaUtil.toIceberg(avroSchema);
+
+    List<InternalRow> rows;
+    try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
+        .createReaderFunc(SparkAvroReader::new)
+        .project(expectedSchema)
+        .build()) {
+      rows = Lists.newArrayList(reader);
+
+      Assert.assertEquals("foo", rows.get(0).getStruct(0, 2).getString(1));
+      Assert.assertEquals(1, rows.get(1).getStruct(0, 2).getInt(0));
+      Assert.assertTrue(rows.get(2).getStruct(0, 2).isNullAt(0));
+      Assert.assertTrue(rows.get(2).getStruct(0, 2).isNullAt(1));
+    }
+  }
+
+  @Test
+  public void writeAndValidateSingleTypeUnion() throws IOException {
+    org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("unionCol")
+        .type()
+        .unionOf()
+        .nullType()
+        .and()
+        .intType()
+        .endUnion()
+        .nullDefault()
+        .endRecord();
+
+    GenericData.Record unionRecord1 = new GenericData.Record(avroSchema);
+    unionRecord1.put("unionCol", 0);
     GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
     unionRecord2.put("unionCol", 1);
 
@@ -121,25 +177,34 @@ public class TestSparkAvroUnions {
         .project(expectedSchema)
         .build()) {
       rows = Lists.newArrayList(reader);
+
+      Assert.assertEquals(0, rows.get(0).getInt(0));
+      Assert.assertEquals(1, rows.get(1).getInt(0));
     }
   }
 
   @Test
-  public void writeAndValidateSingleComponentUnion() throws IOException {
+  public void testDeeplyNestedUnionSchema1() throws IOException {
     org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
         .fields()
-        .name("unionCol")
+        .name("col1")
         .type()
+        .array()
+        .items()
         .unionOf()
+        .nullType()
+        .and()
         .intType()
+        .and()
+        .stringType()
         .endUnion()
         .noDefault()
         .endRecord();
 
     GenericData.Record unionRecord1 = new GenericData.Record(avroSchema);
-    unionRecord1.put("unionCol", 1);
+    unionRecord1.put("col1", Arrays.asList("foo", 1));
     GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
-    unionRecord2.put("unionCol", 2);
+    unionRecord2.put("col1", Arrays.asList(2, "bar"));
 
     File testFile = temp.newFile();
     Assert.assertTrue("Delete should succeed", testFile.delete());
@@ -158,6 +223,65 @@ public class TestSparkAvroUnions {
         .project(expectedSchema)
         .build()) {
       rows = Lists.newArrayList(reader);
+
+      // making sure it reads the correctly nested structured data, based on the transformation from union to struct
+      Assert.assertEquals("foo", rows.get(0).getArray(0).getStruct(0, 2).getString(1));
+    }
+  }
+
+  @Test
+  public void testDeeplyNestedUnionSchema2() throws IOException {
+    org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("col1")
+        .type()
+        .array()
+        .items()
+        .unionOf()
+        .record("r1")
+        .fields()
+        .name("id")
+        .type()
+        .intType()
+        .noDefault()
+        .endRecord()
+        .and()
+        .record("r2")
+        .fields()
+        .name("id")
+        .type()
+        .intType()
+        .noDefault()
+        .endRecord()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    GenericData.Record outer = new GenericData.Record(avroSchema);
+    GenericData.Record inner = new GenericData.Record(avroSchema.getFields().get(0).schema()
+        .getElementType().getTypes().get(0));
+
+    inner.put("id", 1);
+    outer.put("col1", Arrays.asList(inner));
+
+    File testFile = temp.newFile();
+    Assert.assertTrue("Delete should succeed", testFile.delete());
+
+    try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+      writer.create(avroSchema, testFile);
+      writer.append(outer);
+    }
+
+    Schema expectedSchema = AvroSchemaUtil.toIceberg(avroSchema);
+    List<InternalRow> rows;
+    try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
+        .createReaderFunc(SparkAvroReader::new)
+        .project(expectedSchema)
+        .build()) {
+      rows = Lists.newArrayList(reader);
+
+      // making sure it reads the correctly nested structured data, based on the transformation from union to struct
+      Assert.assertEquals(1, rows.get(0).getArray(0).getStruct(0, 2).getStruct(0, 1).getInt(0));
     }
   }
 }
