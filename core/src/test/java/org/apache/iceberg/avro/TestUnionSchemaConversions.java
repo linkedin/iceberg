@@ -25,7 +25,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
-public class TestAvroComplexUnion {
+public class TestUnionSchemaConversions {
 
   @Test
   public void testRequiredComplexUnion() {
@@ -43,7 +43,8 @@ public class TestAvroComplexUnion {
 
     org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
     String expectedIcebergSchema = "table {\n" +
-        "  0: unionCol: required struct<1: tag_0: optional int, 2: tag_1: optional string>\n" + "}";
+        "  0: unionCol: required struct<1: tag: required int, 2: field0: optional int, 3: field1: optional string>\n" +
+        "}";
 
     Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
   }
@@ -65,32 +66,15 @@ public class TestAvroComplexUnion {
         .endRecord();
 
     org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
-    String expectedIcebergSchema =
-        "table {\n" + "  0: unionCol: optional struct<1: tag_0: optional int, 2: tag_1: optional string>\n" + "}";
+    String expectedIcebergSchema = "table {\n" +
+        "  0: unionCol: optional struct<1: tag: required int, 2: field0: optional int, 3: field1: optional string>\n" +
+        "}";
 
     Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
   }
 
   @Test
-  public void testSingleComponentUnion() {
-    Schema avroSchema = SchemaBuilder.record("root")
-        .fields()
-        .name("unionCol")
-        .type()
-        .unionOf()
-        .intType()
-        .endUnion()
-        .noDefault()
-        .endRecord();
-
-    org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
-    String expectedIcebergSchema = "table {\n" + "  0: unionCol: required struct<1: tag_0: optional int>\n" + "}";
-
-    Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
-  }
-
-  @Test
-  public void testOptionSchema() {
+  public void testSimpleUnionSchema() {
     Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("optionCol")
@@ -105,24 +89,6 @@ public class TestAvroComplexUnion {
 
     org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
     String expectedIcebergSchema = "table {\n" + "  0: optionCol: optional int\n" + "}";
-
-    Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
-  }
-
-  @Test
-  public void testNullUnionSchema() {
-    Schema avroSchema = SchemaBuilder.record("root")
-        .fields()
-        .name("nullUnionCol")
-        .type()
-        .unionOf()
-        .nullType()
-        .endUnion()
-        .noDefault()
-        .endRecord();
-
-    org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
-    String expectedIcebergSchema = "table {\n" + "  0: nullUnionCol: optional struct<>\n" + "}";
 
     Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
   }

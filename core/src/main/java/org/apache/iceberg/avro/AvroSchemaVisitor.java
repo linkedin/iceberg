@@ -61,7 +61,7 @@ public abstract class AvroSchemaVisitor<T> {
           int idx = 0;
           for (Schema type : types) {
             if (type.getType() != Schema.Type.NULL) {
-              options.add(visitWithName("tag_" + idx, type, visitor));
+              options.add(visitWithName("field" + idx, type, visitor));
               idx += 1;
             } else {
               options.add(visit(type, visitor));

@@ -65,8 +65,6 @@ public class TestSparkAvroUnions {
     unionRecord2.put("unionCol", 1);
 
     File testFile = temp.newFile();
-    Assert.assertTrue("Delete should succeed", testFile.delete());
-
     try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
       writer.create(avroSchema, testFile);
       writer.append(unionRecord1);
@@ -82,13 +80,15 @@ public class TestSparkAvroUnions {
         .build()) {
       rows = Lists.newArrayList(reader);
 
-      Assert.assertEquals(2, rows.get(0).getStruct(0, 2).numFields());
-      Assert.assertTrue(rows.get(0).getStruct(0, 2).isNullAt(0));
-      Assert.assertEquals("foo", rows.get(0).getStruct(0, 2).getString(1));
+      Assert.assertEquals(3, rows.get(0).getStruct(0, 3).numFields());
+      Assert.assertEquals(1, rows.get(0).getStruct(0, 3).getInt(0));
+      Assert.assertTrue(rows.get(0).getStruct(0, 3).isNullAt(1));
+      Assert.assertEquals("foo", rows.get(0).getStruct(0, 3).getString(2));
 
-      Assert.assertEquals(2, rows.get(1).getStruct(0, 2).numFields());
-      Assert.assertEquals(1, rows.get(1).getStruct(0, 2).getInt(0));
-      Assert.assertTrue(rows.get(1).getStruct(0, 2).isNullAt(1));
+      Assert.assertEquals(3, rows.get(1).getStruct(0, 3).numFields());
+      Assert.assertEquals(0, rows.get(1).getStruct(0, 3).getInt(0));
+      Assert.assertEquals(1, rows.get(1).getStruct(0, 3).getInt(1));
+      Assert.assertTrue(rows.get(1).getStruct(0, 3).isNullAt(2));
     }
   }
 
@@ -116,8 +116,6 @@ public class TestSparkAvroUnions {
     unionRecord3.put("unionCol", null);
 
     File testFile = temp.newFile();
-    Assert.assertTrue("Delete should succeed", testFile.delete());
-
     try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
       writer.create(avroSchema, testFile);
       writer.append(unionRecord1);
@@ -134,10 +132,9 @@ public class TestSparkAvroUnions {
         .build()) {
       rows = Lists.newArrayList(reader);
 
-      Assert.assertEquals("foo", rows.get(0).getStruct(0, 2).getString(1));
-      Assert.assertEquals(1, rows.get(1).getStruct(0, 2).getInt(0));
-      Assert.assertTrue(rows.get(2).getStruct(0, 2).isNullAt(0));
-      Assert.assertTrue(rows.get(2).getStruct(0, 2).isNullAt(1));
+      Assert.assertEquals("foo", rows.get(0).getStruct(0, 3).getString(2));
+      Assert.assertEquals(1, rows.get(1).getStruct(0, 3).getInt(1));
+      Assert.assertTrue(rows.get(2).isNullAt(0));
     }
   }
 
@@ -161,8 +158,6 @@ public class TestSparkAvroUnions {
     unionRecord2.put("unionCol", 1);
 
     File testFile = temp.newFile();
-    Assert.assertTrue("Delete should succeed", testFile.delete());
-
     try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
       writer.create(avroSchema, testFile);
       writer.append(unionRecord1);
@@ -207,8 +202,6 @@ public class TestSparkAvroUnions {
     unionRecord2.put("col1", Arrays.asList(2, "bar"));
 
     File testFile = temp.newFile();
-    Assert.assertTrue("Delete should succeed", testFile.delete());
-
     try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
       writer.create(avroSchema, testFile);
       writer.append(unionRecord1);
@@ -225,7 +218,7 @@ public class TestSparkAvroUnions {
       rows = Lists.newArrayList(reader);
 
       // making sure it reads the correctly nested structured data, based on the transformation from union to struct
-      Assert.assertEquals("foo", rows.get(0).getArray(0).getStruct(0, 2).getString(1));
+      Assert.assertEquals("foo", rows.get(0).getArray(0).getStruct(0, 3).getString(2));
     }
   }
 
@@ -265,8 +258,6 @@ public class TestSparkAvroUnions {
     outer.put("col1", Arrays.asList(inner));
 
     File testFile = temp.newFile();
-    Assert.assertTrue("Delete should succeed", testFile.delete());
-
     try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
       writer.create(avroSchema, testFile);
       writer.append(outer);
@@ -281,7 +272,7 @@ public class TestSparkAvroUnions {
       rows = Lists.newArrayList(reader);
 
       // making sure it reads the correctly nested structured data, based on the transformation from union to struct
-      Assert.assertEquals(1, rows.get(0).getArray(0).getStruct(0, 2).getStruct(0, 1).getInt(0));
+      Assert.assertEquals(1, rows.get(0).getArray(0).getStruct(0, 3).getStruct(1, 1).getInt(0));
     }
   }
 }
