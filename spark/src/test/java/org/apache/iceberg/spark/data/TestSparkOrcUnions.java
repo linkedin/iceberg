@@ -68,20 +68,23 @@ public class TestSparkOrcUnions {
 
     Schema expectedSchema = new Schema(
         Types.NestedField.optional(0, "unionCol", Types.StructType.of(
-            Types.NestedField.optional(1, "tag_0", Types.IntegerType.get()),
-            Types.NestedField.optional(2, "tag_1", Types.StringType.get())))
+            Types.NestedField.optional(3, "tag", Types.IntegerType.get()),
+            Types.NestedField.optional(1, "field0", Types.IntegerType.get()),
+            Types.NestedField.optional(2, "field1", Types.StringType.get())))
     );
 
     final InternalRow expectedFirstRow = new GenericInternalRow(1);
-    final InternalRow field1 = new GenericInternalRow(2);
+    final InternalRow field1 = new GenericInternalRow(3);
     field1.update(0, 0);
-    field1.update(1, null);
+    field1.update(1, 0);
+    field1.update(2, null);
     expectedFirstRow.update(0, field1);
 
     final InternalRow expectedSecondRow = new GenericInternalRow(1);
-    final InternalRow field2 = new GenericInternalRow(2);
-    field2.update(0, null);
-    field2.update(1, UTF8String.fromString("stringtype1"));
+    final InternalRow field2 = new GenericInternalRow(3);
+    field2.update(0, 1);
+    field2.update(1, null);
+    field2.update(2, UTF8String.fromString("foo-1"));
     expectedSecondRow.update(0, field2);
 
     Configuration conf = new Configuration();
@@ -103,7 +106,7 @@ public class TestSparkOrcUnions {
     for (int i = 0; i < NUM_OF_ROWS; i += 1) {
       complexUnion.tags[i] = i % 2;
       longColumnVector.vector[i] = i;
-      String stringValue = "stringtype" + i;
+      String stringValue = "foo-" + i;
       bytesColumnVector.setVal(i, stringValue.getBytes(StandardCharsets.UTF_8));
     }
 
@@ -115,106 +118,28 @@ public class TestSparkOrcUnions {
     writer.close();
 
     // Test non-vectorized reader
-    List<InternalRow> internalRows = Lists.newArrayList();
+    List<InternalRow> actualRows = Lists.newArrayList();
     try (CloseableIterable<InternalRow> reader = ORC.read(Files.localInput(orcFile))
         .project(expectedSchema)
         .createReaderFunc(readOrcSchema -> new SparkOrcReader(expectedSchema, readOrcSchema))
         .build()) {
-      reader.forEach(internalRows::add);
+      reader.forEach(actualRows::add);
 
-      Assert.assertEquals(internalRows.size(), NUM_OF_ROWS);
-      assertEquals(expectedSchema, expectedFirstRow, internalRows.get(0));
-      assertEquals(expectedSchema, expectedSecondRow, internalRows.get(1));
+      Assert.assertEquals(actualRows.size(), NUM_OF_ROWS);
+      assertEquals(expectedSchema, expectedFirstRow, actualRows.get(0));
+      assertEquals(expectedSchema, expectedSecondRow, actualRows.get(1));
     }
 
     // Test vectorized reader
-    List<ColumnarBatch> columnarBatches = Lists.newArrayList();
     try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
         .project(expectedSchema)
         .createBatchedReaderFunc(readOrcSchema ->
             VectorizedSparkOrcReaders.buildReader(expectedSchema, readOrcSchema, ImmutableMap.of()))
         .build()) {
-      reader.forEach(columnarBatches::add);
-      Iterator<InternalRow> rowIterator = columnarBatches.get(0).rowIterator();
+      final Iterator<InternalRow> actualRowsIt = batchesToRows(reader.iterator());
 
-      Assert.assertEquals(columnarBatches.get(0).numRows(), NUM_OF_ROWS);
-      assertEquals(expectedSchema, expectedFirstRow, rowIterator.next());
-      assertEquals(expectedSchema, expectedSecondRow, rowIterator.next());
-    }
-  }
-
-  @Test
-  public void testSingleComponentUnion() throws IOException {
-    TypeDescription orcSchema =
-        TypeDescription.fromString("struct<unionCol:uniontype<int>>");
-
-    Schema expectedSchema = new Schema(
-        Types.NestedField.optional(0, "unionCol", Types.StructType.of(
-            Types.NestedField.optional(1, "tag_0", Types.IntegerType.get())))
-    );
-
-    final InternalRow expectedFirstRow = new GenericInternalRow(1);
-    final InternalRow field1 = new GenericInternalRow(1);
-    field1.update(0, 0);
-    expectedFirstRow.update(0, field1);
-
-    final InternalRow expectedSecondRow = new GenericInternalRow(1);
-    final InternalRow field2 = new GenericInternalRow(1);
-    field2.update(0, 3);
-    expectedSecondRow.update(0, field2);
-
-    Configuration conf = new Configuration();
-
-    File orcFile = temp.newFile();
-    Path orcFilePath = new Path(orcFile.getPath());
-
-    Writer writer = OrcFile.createWriter(orcFilePath,
-        OrcFile.writerOptions(conf)
-            .setSchema(orcSchema).overwrite(true));
-
-    VectorizedRowBatch batch = orcSchema.createRowBatch();
-    LongColumnVector longColumnVector = new LongColumnVector(NUM_OF_ROWS);
-    UnionColumnVector complexUnion = new UnionColumnVector(NUM_OF_ROWS, longColumnVector);
-    complexUnion.init();
-
-    for (int i = 0; i < NUM_OF_ROWS; i += 1) {
-      complexUnion.tags[i] = 0;
-      longColumnVector.vector[i] = 3 * i;
-    }
-
-    batch.size = NUM_OF_ROWS;
-    batch.cols[0] = complexUnion;
-
-    writer.addRowBatch(batch);
-    batch.reset();
-    writer.close();
-
-    // Test non-vectorized reader
-    List<InternalRow> internalRows = Lists.newArrayList();
-    try (CloseableIterable<InternalRow> reader = ORC.read(Files.localInput(orcFile))
-        .project(expectedSchema)
-        .createReaderFunc(readOrcSchema -> new SparkOrcReader(expectedSchema, readOrcSchema))
-        .build()) {
-      reader.forEach(internalRows::add);
-
-      Assert.assertEquals(internalRows.size(), NUM_OF_ROWS);
-      assertEquals(expectedSchema, expectedFirstRow, internalRows.get(0));
-      assertEquals(expectedSchema, expectedSecondRow, internalRows.get(1));
-    }
-
-    // Test vectorized reader
-    List<ColumnarBatch> columnarBatches = Lists.newArrayList();
-    try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
-        .project(expectedSchema)
-        .createBatchedReaderFunc(readOrcSchema ->
-            VectorizedSparkOrcReaders.buildReader(expectedSchema, readOrcSchema, ImmutableMap.of()))
-        .build()) {
-      reader.forEach(columnarBatches::add);
-      Iterator<InternalRow> rowIterator = columnarBatches.get(0).rowIterator();
-
-      Assert.assertEquals(columnarBatches.get(0).numRows(), NUM_OF_ROWS);
-      assertEquals(expectedSchema, expectedFirstRow, rowIterator.next());
-      assertEquals(expectedSchema, expectedSecondRow, rowIterator.next());
+      assertEquals(expectedSchema, expectedFirstRow, actualRowsIt.next());
+      assertEquals(expectedSchema, expectedSecondRow, actualRowsIt.next());
     }
   }
 
@@ -225,23 +150,27 @@ public class TestSparkOrcUnions {
 
     Schema expectedSchema = new Schema(
         Types.NestedField.optional(0, "c1", Types.StructType.of(
-            Types.NestedField.optional(1, "tag_0", Types.IntegerType.get()),
-            Types.NestedField.optional(2, "tag_1",
+            Types.NestedField.optional(100, "tag", Types.IntegerType.get()),
+            Types.NestedField.optional(1, "field0", Types.IntegerType.get()),
+            Types.NestedField.optional(2, "field1",
                 Types.StructType.of(Types.NestedField.optional(3, "c2", Types.StringType.get()),
                     Types.NestedField.optional(4, "c3", Types.StructType.of(
-                        Types.NestedField.optional(5, "tag_0", Types.IntegerType.get()),
-                        Types.NestedField.optional(6, "tag_1", Types.StringType.get()))))))));
+                        Types.NestedField.optional(101, "tag", Types.IntegerType.get()),
+                        Types.NestedField.optional(5, "field0", Types.IntegerType.get()),
+                        Types.NestedField.optional(6, "field1", Types.StringType.get()))))))));
 
     final InternalRow expectedFirstRow = new GenericInternalRow(1);
-    final InternalRow inner1 = new GenericInternalRow(2);
-    inner1.update(0, null);
+    final InternalRow inner1 = new GenericInternalRow(3);
+    inner1.update(0, 1);
+    inner1.update(1, null);
     final InternalRow inner2 = new GenericInternalRow(2);
     inner2.update(0, UTF8String.fromString("foo0"));
-    final InternalRow inner3 = new GenericInternalRow(2);
+    final InternalRow inner3 = new GenericInternalRow(3);
     inner3.update(0, 0);
-    inner3.update(1, null);
+    inner3.update(1, 0);
+    inner3.update(2, null);
     inner2.update(1, inner3);
-    inner1.update(1, inner2);
+    inner1.update(2, inner2);
     expectedFirstRow.update(0, inner1);
 
     Configuration conf = new Configuration();
@@ -303,10 +232,9 @@ public class TestSparkOrcUnions {
         .createBatchedReaderFunc(readOrcSchema ->
             VectorizedSparkOrcReaders.buildReader(expectedSchema, readOrcSchema, ImmutableMap.of()))
         .build()) {
-      final Iterator<InternalRow> actualRows = batchesToRows(reader.iterator());
-      final InternalRow actualFirstRow = actualRows.next();
+      final Iterator<InternalRow> actualRowsIt = batchesToRows(reader.iterator());
 
-      assertEquals(expectedSchema, expectedFirstRow, actualFirstRow);
+      assertEquals(expectedSchema, expectedFirstRow, actualRowsIt.next());
     }
   }
 

@@ -123,7 +123,7 @@ public abstract class OrcSchemaVisitor<T> {
   }
 
   public String optionName(int ordinal) {
-    return "tag_" + ordinal;
+    return "field" + ordinal;
   }
 
   public String elementName() {
