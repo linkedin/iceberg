@@ -83,7 +83,7 @@ public class SparkValueReaders {
     return new StructReader(readers, struct, idToConstant);
   }
 
-  static ValueReader<Object> union(Schema schema, List<ValueReader<?>> readers) {
+  static ValueReader<InternalRow> union(Schema schema, List<ValueReader<?>> readers) {
     return new UnionReader(schema, readers);
   }
 
@@ -292,7 +292,7 @@ public class SparkValueReaders {
     }
   }
 
-  private static class UnionReader implements ValueReader<Object> {
+  private static class UnionReader implements ValueReader<InternalRow> {
     private final Schema schema;
     private final ValueReader[] readers;
 
@@ -305,7 +305,7 @@ public class SparkValueReaders {
     }
 
     @Override
-    public Object read(Decoder decoder, Object reuse) throws IOException {
+    public InternalRow read(Decoder decoder, Object reuse) throws IOException {
       // first we need to filter out NULL alternative if it exists in the union schema
       int nullIndex = -1;
       List<Schema> alts = schema.getTypes();
@@ -320,7 +320,7 @@ public class SparkValueReaders {
       int index = decoder.readIndex();
       if (index == nullIndex) {
         // if it is a null data, directly return null as the whole union result
-        return readers[index].read(decoder, reuse);
+        return null;
       }
 
       // otherwise, we need to return an InternalRow as a struct data
