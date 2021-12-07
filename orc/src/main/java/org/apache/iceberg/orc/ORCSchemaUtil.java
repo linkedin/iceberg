@@ -311,9 +311,11 @@ public final class ORCSchemaUtil {
       Map<Integer, OrcField> mapping) {
     TypeDescription orcType;
     OrcField orcField = mapping.getOrDefault(fieldId, null);
+    // this branch means the iceberg struct schema actually correspond to an underlying union
     if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
       orcType = TypeDescription.createUnion();
-      for (Types.NestedField nestedField : type.asStructType().fields()) {
+      List<Types.NestedField> nestedFields = type.asStructType().fields();
+      for (Types.NestedField nestedField : nestedFields.subList(1, nestedFields.size())) {
         TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
             isRequired && nestedField.isRequired(), mapping);
         orcType.addUnionChild(childType);

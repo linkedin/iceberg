@@ -176,16 +176,17 @@ public class SparkOrcValueReaders {
 
     @Override
     public InternalRow nonNullRead(ColumnVector vector, int row) {
-      InternalRow struct = new GenericInternalRow(readers.length);
+      InternalRow struct = new GenericInternalRow(readers.length + 1);
       UnionColumnVector unionColumnVector = (UnionColumnVector) vector;
 
       int fieldIndex = unionColumnVector.tags[row];
       Object value = this.readers[fieldIndex].read(unionColumnVector.fields[fieldIndex], row);
 
       for (int i = 0; i < readers.length; i += 1) {
-        struct.setNullAt(i);
+        struct.setNullAt(i + 1);
       }
-      struct.update(fieldIndex, value);
+      struct.update(0, fieldIndex);
+      struct.update(fieldIndex + 1, value);
 
       return struct;
     }

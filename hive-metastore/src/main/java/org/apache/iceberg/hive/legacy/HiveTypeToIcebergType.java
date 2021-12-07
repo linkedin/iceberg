@@ -32,7 +32,7 @@ import org.apache.iceberg.types.Types;
 
 
 public class HiveTypeToIcebergType extends HiveTypeUtil.HiveSchemaVisitor<Type> {
-  private static final String UNION_TO_STRUCT_CONVERSION_PREFIX = "tag_";
+  private static final String UNION_TO_STRUCT_CONVERSION_PREFIX = "field";
   private int nextId = 1;
 
   @Override
@@ -57,7 +57,8 @@ public class HiveTypeToIcebergType extends HiveTypeUtil.HiveSchemaVisitor<Type> 
   // Mimic the struct call behavior to construct a union converted struct type
   @Override
   public Type union(UnionTypeInfo union, List<Type> unionResults) {
-    List<Types.NestedField> fields = Lists.newArrayListWithExpectedSize(unionResults.size());
+    List<Types.NestedField> fields = Lists.newArrayListWithExpectedSize(unionResults.size() + 1);
+    fields.add(Types.NestedField.required(allocateId(), "tag", Types.IntegerType.get()));
     for (int i = 0; i < unionResults.size(); i++) {
       fields.add(Types.NestedField.optional(allocateId(), UNION_TO_STRUCT_CONVERSION_PREFIX + i, unionResults.get(i)));
     }
