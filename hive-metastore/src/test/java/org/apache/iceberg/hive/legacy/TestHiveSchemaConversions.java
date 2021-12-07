@@ -80,7 +80,7 @@ public class TestHiveSchemaConversions {
           "struct<" +
               "length:int,count:int,list:array<struct<lastword:string,lastwordlength:int>>," +
               "wordcounts:map<string,int>>");
-    check("struct<1: tag_0: optional int, 2: tag_1: optional string>", "uniontype<int,string>");
+    check("struct<1: tag: required int, 2: field0: optional int, 3: field1: optional string>", "uniontype<int,string>");
   }
 
   private static void check(String icebergTypeStr, String hiveTypeStr) {

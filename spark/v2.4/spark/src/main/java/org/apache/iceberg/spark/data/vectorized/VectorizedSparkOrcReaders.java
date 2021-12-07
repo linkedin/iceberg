@@ -19,6 +19,7 @@
 
 package org.apache.iceberg.spark.data.vectorized;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
@@ -36,6 +37,7 @@ import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.ListColumnVector;
+import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
 import org.apache.orc.storage.ql.exec.vector.MapColumnVector;
 import org.apache.orc.storage.ql.exec.vector.StructColumnVector;
 import org.apache.orc.storage.ql.exec.vector.UnionColumnVector;
@@ -445,11 +447,14 @@ public class VectorizedSparkOrcReaders {
         long batchOffsetInFile) {
       UnionColumnVector unionColumnVector = (UnionColumnVector) vector;
       List<Types.NestedField> fields = structType.fields();
-      assert fields.size() == unionColumnVector.fields.length;
-      assert fields.size() == optionConverters.size();
-
       List<ColumnVector> fieldVectors = Lists.newArrayListWithExpectedSize(fields.size());
-      for (int i = 0; i < fields.size(); i += 1) {
+
+      LongColumnVector longColumnVector = new LongColumnVector();
+      longColumnVector.vector = Arrays.stream(unionColumnVector.tags).asLongStream().toArray();
+
+      fieldVectors.add(new PrimitiveOrcColumnVector(Types.IntegerType.get(), batchSize, longColumnVector,
+          OrcValueReaders.ints(), batchOffsetInFile));
+      for (int i = 0; i < fields.size() - 1; i += 1) {
         fieldVectors.add(optionConverters.get(i).convert(unionColumnVector.fields[i], batchSize, batchOffsetInFile));
       }
 
