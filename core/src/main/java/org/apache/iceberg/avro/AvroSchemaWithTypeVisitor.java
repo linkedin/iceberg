@@ -80,17 +80,24 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
     List<Schema> types = union.getTypes();
     List<T> options = Lists.newArrayListWithExpectedSize(types.size());
 
-    int index = 0;
-    for (Schema branch : types) {
-      if (branch.getType() == Schema.Type.NULL) {
-        options.add(visit((Type) null, branch, visitor));
-      } else {
-        if (AvroSchemaUtil.isOptionSchema(union)) {
+    // simple union case
+    if (AvroSchemaUtil.isOptionSchema(union)) {
+      for (Schema branch : types) {
+        if (branch.getType() == Schema.Type.NULL) {
+          options.add(visit((Type) null, branch, visitor));
+        } else {
           options.add(visit(type, branch, visitor));
+        }
+      }
+    } else { // complex union case
+      int index = 1;
+      for (Schema branch : types) {
+        if (branch.getType() == Schema.Type.NULL) {
+          options.add(visit((Type) null, branch, visitor));
         } else {
           options.add(visit(type.asStructType().fields().get(index).type(), branch, visitor));
+          index += 1;
         }
-        index++;
       }
     }
     return visitor.union(type, union, options);

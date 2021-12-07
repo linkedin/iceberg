@@ -292,7 +292,7 @@ public class SparkValueReaders {
     }
   }
 
-  static class UnionReader implements ValueReader<InternalRow> {
+  private static class UnionReader implements ValueReader<InternalRow> {
     private final Schema schema;
     private final ValueReader[] readers;
 
@@ -316,20 +316,30 @@ public class SparkValueReaders {
           break;
         }
       }
-      InternalRow struct = new GenericInternalRow(nullIndex >= 0 ? alts.size() - 1 : alts.size());
+
+      int index = decoder.readIndex();
+      if (index == nullIndex) {
+        // if it is a null data, directly return null as the whole union result
+        return null;
+      }
+
+      // otherwise, we need to return an InternalRow as a struct data
+      InternalRow struct = new GenericInternalRow(nullIndex >= 0 ? alts.size() : alts.size() + 1);
       for (int i = 0; i < struct.numFields(); i += 1) {
         struct.setNullAt(i);
       }
 
-      int index = decoder.readIndex();
-      Object value = this.readers[index].read(decoder, reuse);
+      Object value = readers[index].read(decoder, reuse);
 
       if (nullIndex < 0) {
-        struct.update(index, value);
+        struct.update(index + 1, value);
+        struct.setInt(0, index);
       } else if (index < nullIndex) {
+        struct.update(index + 1, value);
+        struct.setInt(0, index);
+      } else {
         struct.update(index, value);
-      } else if (index > nullIndex) {
-        struct.update(index - 1, value);
+        struct.setInt(0, index - 1);
       }
 
       return struct;
