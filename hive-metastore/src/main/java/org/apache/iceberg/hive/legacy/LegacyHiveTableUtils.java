@@ -126,9 +126,9 @@ class LegacyHiveTableUtils {
 
   static Map<String, String> getTableProperties(org.apache.hadoop.hive.metastore.api.Table table) {
     Map<String, String> props = new HashMap<>();
-    props.putAll(table.getSd().getSerdeInfo().getParameters());
     props.putAll(table.getSd().getParameters());
     props.putAll(table.getParameters());
+    props.putAll(table.getSd().getSerdeInfo().getParameters());
     return props;
   }
 
