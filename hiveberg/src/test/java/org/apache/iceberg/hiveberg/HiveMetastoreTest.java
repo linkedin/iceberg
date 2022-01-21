@@ -29,6 +29,7 @@ import org.junit.BeforeClass;
 
 
 /**
+ * Hiveberg refactoring:
  * This class is copied from iceberg-hive-metastore module test code
  */
 public abstract class HiveMetastoreTest {

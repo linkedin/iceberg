@@ -48,10 +48,12 @@ import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportFactory;
 
-import static java.nio.file.Files.*;
-import static java.nio.file.attribute.PosixFilePermissions.*;
+import static java.nio.file.Files.createTempDirectory;
+import static java.nio.file.attribute.PosixFilePermissions.asFileAttribute;
+import static java.nio.file.attribute.PosixFilePermissions.fromString;
 
 /**
+ * Hiveberg refactoring:
  * This class is copied from iceberg-hive-metastore module test code
  */
 public class TestHiveMetastore {
