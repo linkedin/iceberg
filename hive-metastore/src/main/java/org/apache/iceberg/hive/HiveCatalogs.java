@@ -23,7 +23,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.iceberg.hive.legacy.LegacyHiveCatalog;
+import org.apache.iceberg.hiveberg.LegacyHiveCatalog;
 
 public final class HiveCatalogs {
 
