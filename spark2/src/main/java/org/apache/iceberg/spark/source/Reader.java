@@ -24,7 +24,6 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.OptionalLong;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -44,7 +43,6 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hadoop.Util;
-import org.apache.iceberg.hiveberg.LegacyHiveTable;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.orc.OrcRowFilterUtils;
@@ -80,7 +78,7 @@ import scala.Option;
 
 import static org.apache.iceberg.TableProperties.DEFAULT_NAME_MAPPING;
 
-class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPushDownFilters,
+public class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPushDownFilters,
     SupportsPushDownRequiredColumns, SupportsReportStatistics {
   private static final Logger LOG = LoggerFactory.getLogger(Reader.class);
 
@@ -112,7 +110,7 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
   private List<CombinedScanTask> tasks = null; // lazy cache of tasks
   private Boolean readUsingBatch = null;
 
-  Reader(Table table, Broadcast<FileIO> io, Broadcast<EncryptionManager> encryptionManager,
+  protected Reader(Table table, Broadcast<FileIO> io, Broadcast<EncryptionManager> encryptionManager,
       boolean caseSensitive, DataSourceOptions options) {
     this.table = table;
     this.snapshotId = options.get(SparkReadOptions.SNAPSHOT_ID).map(Long::parseLong).orElse(null);
@@ -202,14 +200,14 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
     return schema;
   }
 
-  private Expression filterExpression() {
+  protected Expression filterExpression() {
     if (filterExpressions != null) {
       return filterExpressions.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
     }
     return Expressions.alwaysTrue();
   }
 
-  private StructType lazyType() {
+  protected StructType lazyType() {
     if (type == null) {
       Preconditions.checkArgument(readTimestampWithoutZone || !hasTimestampWithoutZone(lazySchema()),
           "Spark does not support timestamp without time zone fields");
@@ -310,11 +308,6 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
   @Override
   public Statistics estimateStatistics() {
-    if (table instanceof LegacyHiveTable) {
-      // We currently don't have reliable stats for Hive tables
-      return EMPTY_STATS;
-    }
-
     // its a fresh table, no data
     if (table.currentSnapshot() == null) {
       return new Stats(0L, 0L);
@@ -339,18 +332,6 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
     return new Stats(sizeInBytes, numRows);
   }
-
-  private static final Statistics EMPTY_STATS = new Statistics() {
-    @Override
-    public OptionalLong sizeInBytes() {
-      return OptionalLong.empty();
-    }
-
-    @Override
-    public OptionalLong numRows() {
-      return OptionalLong.empty();
-    }
-  };
 
   @Override
   public boolean enableBatchRead() {
@@ -402,7 +383,7 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
         .forEach(key -> baseConf.set(key.replaceFirst("hadoop.", ""), options.get(key)));
   }
 
-  private List<CombinedScanTask> tasks() {
+  protected List<CombinedScanTask> tasks() {
     if (tasks == null) {
       TableScan scan = table
           .newScan()
@@ -587,5 +568,9 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
                        EncryptionManager encryptionManager, boolean caseSensitive, int size) {
       super(task, expectedSchema, nameMapping, io, encryptionManager, caseSensitive, size);
     }
+  }
+
+  public Table getTable() {
+    return table;
   }
 }

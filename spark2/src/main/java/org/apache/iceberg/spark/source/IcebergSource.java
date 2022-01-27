@@ -139,29 +139,28 @@ public class IcebergSource implements DataSourceV2, ReadSupport, WriteSupport, D
     }
   }
 
-  private SparkSession lazySparkSession() {
+  protected SparkSession lazySparkSession() {
     if (lazySpark == null) {
       this.lazySpark = SparkSession.builder().getOrCreate();
     }
     return lazySpark;
   }
 
-  private JavaSparkContext lazySparkContext() {
+  protected JavaSparkContext lazySparkContext() {
     if (lazySparkContext == null) {
       this.lazySparkContext = new JavaSparkContext(lazySparkSession().sparkContext());
     }
     return lazySparkContext;
   }
 
-  private Configuration lazyBaseConf() {
+  protected Configuration lazyBaseConf() {
     if (lazyConf == null) {
       this.lazyConf = lazySparkSession().sessionState().newHadoopConf();
     }
     return lazyConf;
   }
 
-  private Table getTableAndResolveHadoopConfiguration(
-      DataSourceOptions options, Configuration conf) {
+  protected Table getTableAndResolveHadoopConfiguration(DataSourceOptions options, Configuration conf) {
     // Overwrite configurations from the Spark Context with configurations from the options.
     mergeIcebergHadoopConfs(conf, options.asMap());
     Table table = findTable(options, conf);
