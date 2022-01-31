@@ -191,7 +191,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
             baseMetadataLocation, metadataLocation, database, tableName);
       }
 
-      setParameters(newMetadataLocation, tbl, hiveEngineEnabled);
+      setHmsTableParameters(newMetadataLocation, tbl, metadata.properties(), hiveEngineEnabled);
 
       persistTable(tbl, updateHiveTable);
       threw = false;
@@ -262,12 +262,16 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return newTable;
   }
 
-  void setParameters(String newMetadataLocation, Table tbl, boolean hiveEngineEnabled) {
+  private void setHmsTableParameters(String newMetadataLocation, Table tbl, Map<String, String> icebergTableProps,
+      boolean hiveEngineEnabled) {
     Map<String, String> parameters = tbl.getParameters();
 
     if (parameters == null) {
       parameters = new HashMap<>();
     }
+
+    // push all Iceberg table properties into HMS
+    icebergTableProps.forEach(parameters::put);
 
     parameters.put(TABLE_TYPE_PROP, ICEBERG_TABLE_TYPE_VALUE.toUpperCase(Locale.ENGLISH));
     parameters.put(METADATA_LOCATION_PROP, newMetadataLocation);
