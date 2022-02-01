@@ -24,6 +24,8 @@ import java.util.regex.Pattern
 buildscript {
   repositories {
     gradlePluginPortal()
+    maven { url "http://palantir.bintray.com/releases" }
+    maven { url "https://plugins.gradle.org/m2/" }
   }
   dependencies {
     classpath 'gradle.plugin.com.github.jengelman.gradle.plugins:shadow:7.0.0'
