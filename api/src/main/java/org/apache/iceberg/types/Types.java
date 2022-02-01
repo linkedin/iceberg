@@ -20,7 +20,6 @@
 package org.apache.iceberg.types;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -457,7 +456,7 @@ public class Types {
       }
       switch (type.typeId()) {
         case STRUCT:
-          Preconditions.checkArgument(Map.class.isInstance(defaultValue),
+          Preconditions.checkArgument(defaultValue instanceof Map,
               "defaultValue should be a Map from fields names to values, for StructType");
           Map<String, Object> defaultStruct = (Map<String, Object>) defaultValue;
           if (defaultStruct.isEmpty()) {
@@ -470,17 +469,17 @@ public class Types {
           break;
 
         case LIST:
-          Preconditions.checkArgument(defaultValue instanceof ArrayList,
-              "defaultValue should be an ArrayList of Objects, for ListType");
-          List<Object> defaultArrayList = (ArrayList<Object>) defaultValue;
-          if (defaultArrayList.size() == 0) {
+          Preconditions.checkArgument(defaultValue instanceof List,
+              "defaultValue should be an List of Objects, for ListType");
+          List<Object> defaultList = (List<Object>) defaultValue;
+          if (defaultList.size() == 0) {
             return;
           }
-          defaultArrayList.forEach(dv -> NestedField.validateDefaultValue(dv, type.asListType().elementField.type));
+          defaultList.forEach(dv -> NestedField.validateDefaultValue(dv, type.asListType().elementField.type));
           break;
 
         case MAP:
-          Preconditions.checkArgument(Map.class.isInstance(defaultValue),
+          Preconditions.checkArgument(defaultValue instanceof Map,
               "defaultValue should be an instance of Map for MapType");
           Map<Object, Object> defaultMap = (Map<Object, Object>) defaultValue;
           if (defaultMap.isEmpty()) {
@@ -494,7 +493,7 @@ public class Types {
 
         case FIXED:
         case BINARY:
-          Preconditions.checkArgument(byte[].class.isInstance(defaultValue),
+          Preconditions.checkArgument(defaultValue instanceof byte[],
               "defaultValue should be an instance of byte[] for TypeId.%s, but defaultValue.class = %s",
               type.typeId().name(), defaultValue.getClass().getCanonicalName());
           break;

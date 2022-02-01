@@ -23,7 +23,6 @@ buildscript {
   repositories {
     jcenter()
     gradlePluginPortal()
-    maven { url "http://palantir.bintray.com/releases" }
     maven { url "https://plugins.gradle.org/m2/" }
   }
   dependencies {
@@ -64,7 +63,6 @@ allprojects {
   group = "org.apache.iceberg"
   version = getProjectVersion()
   repositories {
-    maven { url "http://palantir.bintray.com/releases" }
     mavenCentral()
     mavenLocal()
   }
