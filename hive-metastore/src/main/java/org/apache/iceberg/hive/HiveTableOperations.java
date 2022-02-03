@@ -99,7 +99,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     }
   }
 
-  private enum CommitStatus {
+  protected enum CommitStatus {
     FAILURE,
     SUCCESS,
     UNKNOWN
@@ -271,7 +271,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
    * @param config metadata to use for configuration
    * @return Commit Status of Success, Failure or Unknown
    */
-  private CommitStatus checkCommitStatus(String newMetadataLocation, TableMetadata config) {
+  CommitStatus checkCommitStatus(String newMetadataLocation, TableMetadata config) {
     int maxAttempts = PropertyUtil.propertyAsInt(config.properties(), COMMIT_NUM_STATUS_CHECKS,
         COMMIT_NUM_STATUS_CHECKS_DEFAULT);
 
@@ -352,7 +352,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return newTable;
   }
 
-  private void setHmsTableParameters(String newMetadataLocation, Table tbl, Map<String, String> icebergTableProps,
+  void setHmsTableParameters(String newMetadataLocation, Table tbl, Map<String, String> icebergTableProps,
                                      Set<String> obsoleteProps, boolean hiveEngineEnabled,
                                      Map<String, String> summary) {
     Map<String, String> parameters = tbl.getParameters();
@@ -482,7 +482,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return lockId;
   }
 
-  private void cleanupMetadataAndUnlock(CommitStatus commitStatus, String metadataLocation, Optional<Long> lockId) {
+  void cleanupMetadataAndUnlock(CommitStatus commitStatus, String metadataLocation, Optional<Long> lockId) {
     try {
       if (commitStatus == CommitStatus.FAILURE) {
         // If we are sure the commit failed, clean up the uncommitted metadata file

@@ -36,9 +36,11 @@ import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.common.DynMethods;
 import org.apache.iceberg.exceptions.AlreadyExistsException;
 import org.apache.iceberg.exceptions.CommitFailedException;
+import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +48,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * A {@link HiveTableOperations} that does not override any existing Hive metadata.
+ * TODO: This extension should be removed once dual-publish of iceberg+hive is stopped.
  *
  * The behaviour of this class differs from {@link HiveTableOperations} in the following ways:
  * 1. Does not modify serde information of existing Hive table, this means that if Iceberg schema is updated
@@ -139,7 +142,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
   protected void doCommit(TableMetadata base, TableMetadata metadata) {
     String newMetadataLocation = writeNewMetadata(metadata, currentVersion() + 1);
 
-    boolean threw = true;
+    CommitStatus commitStatus = CommitStatus.FAILURE;
     Optional<Long> lockId = Optional.empty();
     try {
       lockId = Optional.of(acquireLock());
@@ -180,26 +183,27 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
             baseMetadataLocation, metadataLocation, database, tableName);
       }
 
-      setParameters(newMetadataLocation, tbl, false);
+      // [LINKEDIN] comply to the new signature of setting Hive table's properties by
+      // setting newly added parameters as empty container.
+      setHmsTableParameters(newMetadataLocation, tbl, ImmutableMap.of(),
+          ImmutableSet.of(), false, ImmutableMap.of());
 
-      if (tableExists) {
-        metaClients.run(client -> {
-          EnvironmentContext envContext = new EnvironmentContext(
-              ImmutableMap.of(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE)
-          );
-          LOG.debug("Updating the metadata location of the following table:");
-          logTable(tbl);
-          LOG.debug("Metadata Location: {}", tbl.getParameters().get(METADATA_LOCATION_PROP));
-          ALTER_TABLE.invoke(client, database, tableName, tbl, envContext);
-          return null;
-        });
-      } else {
-        metaClients.run(client -> {
-          client.createTable(tbl);
-          return null;
-        });
+      try {
+        persistTableVerbal(tbl, tableExists);
+        commitStatus = CommitStatus.SUCCESS;
+      } catch (Throwable persistFailure) {
+        LOG.error("Cannot tell if commit to {}.{} succeeded, attempting to reconnect and check.",
+            database, tableName, persistFailure);
+        commitStatus = checkCommitStatus(newMetadataLocation, metadata);
+        switch (commitStatus) {
+          case SUCCESS:
+            break;
+          case FAILURE:
+            throw persistFailure;
+          case UNKNOWN:
+            throw new CommitStateUnknownException(persistFailure);
+        }
       }
-      threw = false;
     } catch (org.apache.hadoop.hive.metastore.api.AlreadyExistsException e) {
       throw new AlreadyExistsException("Table already exists: %s.%s", database, tableName);
 
@@ -216,30 +220,31 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       throw new RuntimeException("Interrupted during commit", e);
 
     } finally {
-      if (threw && !metadataUpdatedSuccessfully(newMetadataLocation)) {
-        // if anything went wrong and meta store hasn't been updated, clean up the uncommitted metadata file
-        io().deleteFile(newMetadataLocation);
-      }
-      unlock(lockId);
+      cleanupMetadataAndUnlock(commitStatus, newMetadataLocation, lockId);
     }
   }
 
-  private boolean metadataUpdatedSuccessfully(String newMetadataLocation) {
-    boolean metadataUpdatedSuccessfully = false;
-    try {
-      Table tbl;
-      boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
-      if (tableExists) {
-        tbl = metaClients.run(client -> client.getTable(database, tableName));
-        if (tbl.getParameters().get(METADATA_LOCATION_PROP).equals(newMetadataLocation)) {
-          metadataUpdatedSuccessfully = true;
-        }
-      }
-    } catch (Exception e) {
-      // This indicate the client might be closed and we cannout make sure whether the table has been updated, so
-      // assume it succeeds to avoid table pointing to non-exist location
-      metadataUpdatedSuccessfully = true;
+  /**
+   * [LINKEDIN] a log-enhanced persistTable as a refactoring inspired by
+   * org.apache.iceberg.hive.HiveTableOperations#persistTable
+   */
+  void persistTableVerbal(Table tbl, boolean tableExists) throws TException, InterruptedException {
+    if (tableExists) {
+      metaClients.run(client -> {
+        EnvironmentContext envContext = new EnvironmentContext(
+            ImmutableMap.of(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE)
+        );
+        LOG.debug("Updating the metadata location of the following table:");
+        logTable(tbl);
+        LOG.debug("Metadata Location: {}", tbl.getParameters().get(METADATA_LOCATION_PROP));
+        ALTER_TABLE.invoke(client, database, tableName, tbl, envContext);
+        return null;
+      });
+    } else {
+      metaClients.run(client -> {
+        client.createTable(tbl);
+        return null;
+      });
     }
-    return metadataUpdatedSuccessfully;
   }
 }
