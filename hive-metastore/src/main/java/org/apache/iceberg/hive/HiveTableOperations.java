@@ -357,11 +357,15 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
 
     // timeout and do not have lock acquired
     if (timeout && !state.get().equals(LockState.ACQUIRED)) {
+      LOG.debug("Unlocking lock id for {}.{} ", database, tableName);
+      unlock(Optional.of(lockId));
       throw new CommitFailedException("Timed out after %s ms waiting for lock on %s.%s",
           duration, database, tableName);
     }
 
     if (!state.get().equals(LockState.ACQUIRED)) {
+      LOG.debug("Unlocking lock id for {}.{} ", database, tableName);
+      unlock(Optional.of(lockId));
       throw new CommitFailedException("Could not acquire the lock on %s.%s, " +
           "lock request ended in state %s", database, tableName, state);
     }
