@@ -325,4 +325,52 @@ public class TestSchemaConversions {
     List<String> origFieldDocs = Lists.newArrayList(Iterables.transform(origSchema.columns(), Types.NestedField::doc));
     Assert.assertEquals(origFieldDocs, fieldDocs);
   }
+
+  @Test
+  public void testConversionOfRecordDefaultWithOptionalNestedField() {
+    String schemaString = "{\n" +
+            "    \"type\": \"record\",\n" +
+            "    \"name\": \"root\",\n" +
+            "    \"fields\": [\n" +
+            "        {\n" +
+            "            \"name\": \"outer\",\n" +
+            "            \"type\": {\n" +
+            "                \"type\": \"record\",\n" +
+            "                \"name\": \"outerRecord\",\n" +
+            "                \"fields\": [\n" +
+            "                    {\n" +
+            "                        \"name\": \"mapField\",\n" +
+            "                        \"type\": {\n" +
+            "                            \"type\": \"map\",\n" +
+            "                            \"values\": \"string\"\n" +
+            "                        }\n" +
+            "                    },\n" +
+            "                    {\n" +
+            "                        \"name\": \"recordField\",\n" +
+            "                        \"type\": [\n" +
+            "                            \"null\",\n" +
+            "                            {\n" +
+            "                                \"type\": \"record\",\n" +
+            "                                \"name\": \"inner\",\n" +
+            "                                \"fields\": [\n" +
+            "                                    {\n" +
+            "                                        \"name\": \"innerString\",\n" +
+            "                                        \"type\": \"string\"\n" +
+            "                                    }\n" +
+            "                                ]\n" +
+            "                            }\n" +
+            "                        ],\n" +
+            "                        \"default\": null\n" +
+            "                    }\n" +
+            "                ]\n" +
+            "            },\n" +
+            "            \"default\": {\n" +
+            "                \"mapField\": {}\n" +
+            "            }\n" +
+            "        }\n" +
+            "    ]\n" +
+            "}";
+    Schema schema = new Schema.Parser().parse(schemaString);
+    AvroSchemaUtil.toIceberg(schema);
+  }
 }
