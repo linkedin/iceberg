@@ -22,11 +22,11 @@ package org.apache.iceberg.spark.source;
 import java.util.OptionalLong;
 import org.apache.spark.sql.sources.v2.reader.Statistics;
 
-public class Stats implements Statistics {
+class Stats implements Statistics {
   private final OptionalLong sizeInBytes;
   private final OptionalLong numRows;
 
-  public Stats(long sizeInBytes, long numRows) {
+  Stats(long sizeInBytes, long numRows) {
     this.sizeInBytes = OptionalLong.of(sizeInBytes);
     this.numRows = OptionalLong.of(numRows);
   }
