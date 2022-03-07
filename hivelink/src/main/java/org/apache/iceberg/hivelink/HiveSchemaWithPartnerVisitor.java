@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.iceberg.hive.legacy;
+package org.apache.iceberg.hivelink;
 
 import java.util.List;
 import org.apache.hadoop.hive.serde2.typeinfo.ListTypeInfo;

@@ -17,10 +17,13 @@
  * under the License.
  */
 
-package org.apache.iceberg.hive.legacy;
+package org.apache.iceberg.hivelink;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
@@ -41,8 +44,18 @@ public class LegacyHiveCatalog extends HiveCatalog {
 
   private static final Logger LOG = LoggerFactory.getLogger(LegacyHiveCatalog.class);
 
+  // hivelink refactoring: this is moved from HiveCatalogs
+  private static final Cache<String, HiveCatalog> LEGACY_CATALOG_CACHE = Caffeine.newBuilder().build();
+
   public LegacyHiveCatalog(Configuration conf) {
     super(conf);
+  }
+
+  // hivelink refactoring: this is moved from HiveCatalogs
+  public static HiveCatalog loadLegacyCatalog(Configuration conf) {
+    // metastore URI can be null in local mode
+    String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
+    return LEGACY_CATALOG_CACHE.get(metastoreUri, uri -> new LegacyHiveCatalog(conf));
   }
 
   @Override
