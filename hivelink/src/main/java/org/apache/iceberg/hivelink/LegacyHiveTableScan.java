@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.iceberg.hive.legacy;
+package org.apache.iceberg.hivelink;
 
 import org.apache.iceberg.BaseFileScanTask;
 import org.apache.iceberg.DataTableScan;

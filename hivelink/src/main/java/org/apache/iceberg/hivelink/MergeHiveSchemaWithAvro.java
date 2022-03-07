@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.iceberg.hive.legacy;
+package org.apache.iceberg.hivelink;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,7 +52,7 @@ import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema, Schema.Field, Schema, Schema.Field> {
 
   static Schema visit(StructTypeInfo typeInfo, Schema schema) {
-    return HiveSchemaWithPartnerVisitor.visit(typeInfo, schema, new MergeHiveSchemaWithAvro(),
+    return visit(typeInfo, schema, new MergeHiveSchemaWithAvro(),
         AvroPartnerAccessor.INSTANCE);
   }
 

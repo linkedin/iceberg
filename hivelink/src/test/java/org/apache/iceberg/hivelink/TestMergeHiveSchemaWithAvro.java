@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.iceberg.hive.legacy;
+package org.apache.iceberg.hivelink;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

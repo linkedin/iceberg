@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.iceberg.hive.legacy;
+package org.apache.iceberg.hivelink;
 
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
@@ -35,7 +35,7 @@ import static org.apache.iceberg.expressions.Expressions.notEqual;
 import static org.apache.iceberg.expressions.Expressions.notIn;
 import static org.apache.iceberg.expressions.Expressions.notNull;
 import static org.apache.iceberg.expressions.Expressions.or;
-import static org.apache.iceberg.hive.legacy.HiveExpressions.simplifyPartitionFilter;
+import static org.apache.iceberg.hivelink.HiveExpressions.simplifyPartitionFilter;
 
 
 public class TestHiveExpressions {

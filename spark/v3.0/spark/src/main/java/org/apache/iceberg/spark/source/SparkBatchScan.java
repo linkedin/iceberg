@@ -35,6 +35,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.Util;
+import org.apache.iceberg.hivelink.LegacyHiveTable;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.hive.legacy.LegacyHiveTable;
 import org.apache.iceberg.io.CloseableIterable;

@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.iceberg.hive.legacy;
+package org.apache.iceberg.hivelink;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
