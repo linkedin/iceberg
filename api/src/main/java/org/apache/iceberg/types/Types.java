@@ -462,9 +462,8 @@ public class Types {
           if (defaultStruct.isEmpty()) {
             return;
           }
-          Preconditions.checkArgument(defaultStruct.size() == type.asStructType().fields().size());
-          for (String fieldName : defaultStruct.keySet()) {
-            NestedField.validateDefaultValue(defaultStruct.get(fieldName), type.asStructType().field(fieldName).type);
+          for (NestedField field : type.asStructType().fields()) {
+            validateDefaultValue(defaultStruct.getOrDefault(field.name(), field.getDefaultValue()), field.type());
           }
           break;
 

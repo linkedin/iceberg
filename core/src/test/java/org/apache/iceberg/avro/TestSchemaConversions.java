@@ -325,4 +325,113 @@ public class TestSchemaConversions {
     List<String> origFieldDocs = Lists.newArrayList(Iterables.transform(origSchema.columns(), Types.NestedField::doc));
     Assert.assertEquals(origFieldDocs, fieldDocs);
   }
+
+  @Test
+  public void testConversionOfRecordDefaultWithOptionalNestedField() {
+    String schemaString = "{\n" +
+            "    \"type\": \"record\",\n" +
+            "    \"name\": \"root\",\n" +
+            "    \"fields\": [\n" +
+            "        {\n" +
+            "            \"name\": \"outer\",\n" +
+            "            \"type\": {\n" +
+            "                \"type\": \"record\",\n" +
+            "                \"name\": \"outerRecord\",\n" +
+            "                \"fields\": [\n" +
+            "                    {\n" +
+            "                        \"name\": \"mapField\",\n" +
+            "                        \"type\": {\n" +
+            "                            \"type\": \"map\",\n" +
+            "                            \"values\": \"string\"\n" +
+            "                        }\n" +
+            "                    },\n" +
+            "                    {\n" +
+            "                        \"name\": \"recordField\",\n" +
+            "                        \"type\": [\n" +
+            "                            \"null\",\n" +
+            "                            {\n" +
+            "                                \"type\": \"record\",\n" +
+            "                                \"name\": \"inner\",\n" +
+            "                                \"fields\": [\n" +
+            "                                    {\n" +
+            "                                        \"name\": \"innerString\",\n" +
+            "                                        \"type\": \"string\"\n" +
+            "                                    }\n" +
+            "                                ]\n" +
+            "                            }\n" +
+            "                        ],\n" +
+            "                        \"default\": null\n" +
+            "                    }\n" +
+            "                ]\n" +
+            "            },\n" +
+            "            \"default\": {\n" +
+            "                \"mapField\": {}\n" +
+            "            }\n" +
+            "        }\n" +
+            "    ]\n" +
+            "}";
+    Schema schema = new Schema.Parser().parse(schemaString);
+    org.apache.iceberg.Schema iSchema = AvroSchemaUtil.toIceberg(schema);
+    Assert.assertEquals("table {\n" +
+        "  0: outer: required struct<4: mapField: required map<string, string>, " +
+        "5: recordField: optional struct<3: innerString: required string>>, default value: {mapField={}}, \n" +
+        "}", iSchema.toString());
+  }
+
+  @Test
+  public void testConversionOfRecordDefaultWithOptionalNestedField2() {
+    String schemaString = "{\n" +
+            "    \"type\": \"record\",\n" +
+            "    \"name\": \"root\",\n" +
+            "    \"fields\": [\n" +
+            "        {\n" +
+            "            \"name\": \"outer\",\n" +
+            "            \"type\": {\n" +
+            "                \"type\": \"record\",\n" +
+            "                \"name\": \"outerRecord\",\n" +
+            "                \"fields\": [\n" +
+            "                    {\n" +
+            "                        \"name\": \"mapField\",\n" +
+            "                        \"type\": {\n" +
+            "                            \"type\": \"map\",\n" +
+            "                            \"values\": \"string\"\n" +
+            "                        }\n" +
+            "                    },\n" +
+            "                    {\n" +
+            "                        \"name\": \"recordField\",\n" +
+            "                        \"type\": [\n" +
+            "                            \"null\",\n" +
+            "                            {\n" +
+            "                                \"type\": \"record\",\n" +
+            "                                \"name\": \"inner\",\n" +
+            "                                \"fields\": [\n" +
+            "                                    {\n" +
+            "                                        \"name\": \"innerString\",\n" +
+            "                                        \"type\": \"string\"\n" +
+            "                                    }\n" +
+            "                                ]\n" +
+            "                            }\n" +
+            "                        ],\n" +
+            "                        \"default\": null\n" +
+            "                    }\n" +
+            "                ]\n" +
+            "            },\n" +
+            "            \"default\": {\n" +
+            "                \"mapField\": {\n" +
+            "                    \"foo\": \"bar\",\n" +
+            "                    \"x\": \"y\"\n" +
+            "                },\n" +
+            "                \"recordField\": null\n" +
+            "            }\n" +
+            "        }\n" +
+            "    ]\n" +
+            "}";
+    Schema schema = new Schema.Parser().parse(schemaString);
+    org.apache.iceberg.Schema iSchema = AvroSchemaUtil.toIceberg(schema);
+    Assert.assertEquals("table {\n" +
+        "  0: outer: required struct<4: mapField: required map<string, string>, " +
+        "5: recordField: optional struct<3: innerString: required string>>, " +
+        "default value: {mapField={foo=bar, x=y}, recordField=null}, \n" +
+        "}", iSchema.toString());
+  }
 }
