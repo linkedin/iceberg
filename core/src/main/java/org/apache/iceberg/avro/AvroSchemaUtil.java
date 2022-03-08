@@ -20,9 +20,11 @@
 package org.apache.iceberg.avro;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.avro.JsonProperties;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
@@ -465,5 +467,25 @@ public class AvroSchemaUtil {
     // need to account for it.
     return field.hasDefaultValue() && field.defaultVal() != JsonProperties.NULL_VALUE &&
         !(field.defaultVal() instanceof String && ((String) field.defaultVal()).equalsIgnoreCase("null"));
+  }
+
+  static Object convertToJavaDefaultValue(Object defaultValue) {
+    if (defaultValue instanceof List) {
+      return ((List<?>) defaultValue).stream()
+          .map(AvroSchemaUtil::convertToJavaDefaultValue)
+          .collect(Collectors.toList());
+    } else if (defaultValue instanceof Map) {
+      // can't seem to use the java8 stream api on map correctly because of setting null value in map
+      Map<Object, Object> retMap = new LinkedHashMap<>();
+      for (Map.Entry<Object, Object> entry : ((Map<Object, Object>) defaultValue).entrySet()) {
+        retMap.put(entry.getKey(), convertToJavaDefaultValue(entry.getValue()));
+      }
+      return retMap;
+    } else if (defaultValue == JsonProperties.NULL_VALUE) {
+      // convert the JsonProperties.NULL_VALUE whenever we see it
+      return null;
+    }
+    // don't touch any other primitive values
+    return defaultValue;
   }
 }
