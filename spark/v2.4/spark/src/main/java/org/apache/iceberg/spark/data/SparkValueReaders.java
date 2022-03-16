@@ -320,7 +320,8 @@ public class SparkValueReaders {
       int index = decoder.readIndex();
       if (index == nullIndex) {
         // if it is a null data, directly return null as the whole union result
-        return null;
+        // we know for sure it is a null so the casting will always work.
+        return (InternalRow) readers[nullIndex].read(decoder, reuse);
       }
 
       // otherwise, we need to return an InternalRow as a struct data
