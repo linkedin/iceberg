@@ -22,7 +22,6 @@ package org.apache.iceberg.avro;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.avro.JsonProperties;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaNormalization;
 import org.apache.iceberg.mapping.NameMapping;
@@ -106,27 +105,7 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
 
   @Override
   public Schema union(Schema union, List<Schema> options) {
-    if (AvroSchemaUtil.isOptionSchema(union)) {
-      // case option union
-      Schema pruned = null;
-      if (options.get(0) != null) {
-        pruned = options.get(0);
-      } else if (options.get(1) != null) {
-        pruned = options.get(1);
-      }
-
-      if (pruned != null) {
-        if (pruned != AvroSchemaUtil.fromOption(union)) {
-          return AvroSchemaUtil.toOption(pruned);
-        }
-        return union;
-      }
-
-      return null;
-    } else {
-      // Complex union case
-      return copyUnion(union, options);
-    }
+    return copyUnion(union, options);
   }
 
 
@@ -261,23 +240,8 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
   }
 
   private static Schema.Field copyField(Schema.Field field, Schema newSchema, Integer fieldId) {
-    Schema newSchemaReordered;
-    // if the newSchema is an optional schema with no, or null, default value, then make sure the
-    // NULL option is the first
-    boolean hasNonNullDefaultValue = AvroSchemaUtil.hasNonNullDefaultValue(field);
-    if (isOptionSchemaWithNonNullFirstOption(newSchema) && !hasNonNullDefaultValue) {
-      newSchemaReordered = AvroSchemaUtil.toOption(AvroSchemaUtil.fromOption(newSchema));
-    } else if (AvroSchemaUtil.isOptionSchema(newSchema) && hasNonNullDefaultValue) {
-      // o.w. if the newSchema is an optional that has a non-null default value, then make sure the
-      // NULL option is the second
-      newSchemaReordered = AvroSchemaUtil.toOption(AvroSchemaUtil.fromOption(newSchema), true);
-    } else {
-      newSchemaReordered = newSchema;
-    }
-    // copy over non-null default values
-    Object defaultValue = hasNonNullDefaultValue ? field.defaultVal() :
-        (AvroSchemaUtil.isOptionSchema(newSchemaReordered) ? JsonProperties.NULL_VALUE : null);
-    Schema.Field copy = new Schema.Field(field.name(), newSchemaReordered, field.doc(), defaultValue, field.order());
+    // always copy over default values
+    Schema.Field copy = new Schema.Field(field.name(), newSchema, field.doc(), field.defaultVal(), field.order());
 
     for (Map.Entry<String, Object> prop : field.getObjectProps().entrySet()) {
       copy.addProp(prop.getKey(), prop.getValue());
