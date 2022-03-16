@@ -279,6 +279,57 @@ public class TestSparkAvroUnions {
 
   @Test
   public void testDeeplyNestedUnionSchema3() throws IOException {
+    /*
+    * the printed write schema:
+    * {
+      "type": "record",
+      "name": "root",
+      "fields": [
+        {
+          "name": "value",
+          "type": [
+            {
+              "type": "record",
+              "name": "r1",
+              "fields": [
+                {
+                  "name": "ff1",
+                  "type": "long"
+                },
+                {
+                  "name": "ff2",
+                  "type": {
+                    "type": "record",
+                    "name": "r2",
+                    "fields": [
+                      {
+                        "name": "fff1",
+                        "type": [
+                          "null",
+                          "string",
+                          "int"
+                        ],
+                        "default": null
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "ff3",
+                  "type": {
+                    "type": "array",
+                    "items": "string"
+                  },
+                  "default": []
+                }
+              ]
+            },
+            "null"
+          ]
+        }
+      ]
+    }
+    * */
     org.apache.avro.Schema writeSchema = SchemaBuilder
         .record("root")
         .fields()
