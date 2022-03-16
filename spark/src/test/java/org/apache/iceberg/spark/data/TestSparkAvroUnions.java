@@ -32,6 +32,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.avro.Avro;
 import org.apache.iceberg.avro.AvroIterable;
 import org.apache.iceberg.avro.AvroSchemaUtil;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.junit.Assert;
@@ -274,5 +275,144 @@ public class TestSparkAvroUnions {
       // making sure it reads the correctly nested structured data, based on the transformation from union to struct
       Assert.assertEquals(1, rows.get(0).getArray(0).getStruct(0, 3).getStruct(1, 1).getInt(0));
     }
+  }
+
+  @Test
+  public void testDeeplyNestedUnionSchema3() throws IOException {
+    /*
+    * the printed write schema:
+    * {
+      "type": "record",
+      "name": "root",
+      "fields": [
+        {
+          "name": "value",
+          "type": [
+            {
+              "type": "record",
+              "name": "r1",
+              "fields": [
+                {
+                  "name": "ff1",
+                  "type": "long"
+                },
+                {
+                  "name": "ff2",
+                  "type": {
+                    "type": "record",
+                    "name": "r2",
+                    "fields": [
+                      {
+                        "name": "fff1",
+                        "type": [
+                          "null",
+                          "string",
+                          "int"
+                        ],
+                        "default": null
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "ff3",
+                  "type": {
+                    "type": "array",
+                    "items": "string"
+                  },
+                  "default": []
+                }
+              ]
+            },
+            "null"
+          ]
+        }
+      ]
+    }
+    * */
+    org.apache.avro.Schema writeSchema = SchemaBuilder
+        .record("root")
+        .fields()
+        .name("value")
+        .type()
+        .unionOf()
+        .record("r1")
+        .fields()
+        .name("ff1")
+        .type()
+        .longType()
+        .noDefault()
+        .name("ff2")
+        .type()
+        .record("r2")
+        .fields()
+        .name("fff1")
+        .type()
+        .unionOf()
+        .nullType()
+        .and()
+        .stringType()
+        .and()
+        .intType()
+        .endUnion()
+        .nullDefault()
+        .endRecord()
+        .noDefault()
+        .name("ff3")
+        .type()
+        .array()
+        .items()
+        .stringType()
+        .arrayDefault(ImmutableList.of())
+        .endRecord()
+        .and()
+        .nullType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    GenericData.Record record1 = new GenericData.Record(writeSchema);
+    GenericData.Record record11 = new GenericData.Record(writeSchema.getField("value").schema().getTypes().get(0));
+    GenericData.Record record111 =
+        new GenericData.Record(writeSchema.getField("value").schema().getTypes().get(0).getField("ff2").schema());
+    // record111.put("fff1", 1);
+    record11.put("ff1", 99);
+    record11.put("ff2", record111);
+    record11.put("ff3", ImmutableList.of());
+    record1.put("value", record11);
+
+    GenericData.Record record2 = new GenericData.Record(writeSchema);
+    GenericData.Record record22 = new GenericData.Record(writeSchema.getField("value").schema().getTypes().get(0));
+    GenericData.Record record222 =
+        new GenericData.Record(writeSchema.getField("value").schema().getTypes().get(0).getField("ff2").schema());
+    record222.put("fff1", 1);
+    record22.put("ff1", 99);
+    record22.put("ff2", record222);
+    record22.put("ff3", ImmutableList.of("foo"));
+    record2.put("value", record22);
+
+    File testFile = temp.newFile();
+    Assert.assertTrue("Delete should succeed", testFile.delete());
+
+    try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+      writer.create(writeSchema, testFile);
+      writer.append(record1);
+      writer.append(record2);
+    }
+
+    List<GenericData.Record> expected = ImmutableList.of(record1, record2);
+
+    org.apache.iceberg.Schema readIcebergSchema = AvroSchemaUtil.toIceberg(writeSchema);
+    // read written rows with evolved schema
+    List<InternalRow> rows;
+    try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
+        .createReaderFunc(SparkAvroReader::new)
+        .project(readIcebergSchema)
+        .build()) {
+      rows = Lists.newArrayList(reader);
+    }
+
+    // making sure the rows can be read successfully
+    Assert.assertEquals(2, rows.size());
   }
 }
