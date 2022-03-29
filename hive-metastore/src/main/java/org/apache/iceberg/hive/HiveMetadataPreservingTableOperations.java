@@ -24,7 +24,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -77,20 +76,6 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
     this.metaClients = metaClients;
     this.database = database;
     this.tableName = table;
-  }
-
-  private static void logTable(Table table) {
-    String columns = "";
-    try {
-      columns = table.getSd().getCols().stream().map(column -> column.getName() + " " + column.getType())
-          .collect(Collectors.joining("\n"));
-    } catch (Throwable throwable) {
-      LOG.debug("Encountered {} while fetching columns for {}.{}", throwable.getMessage(),
-          table.getDbName(), table.getTableName(), throwable);
-      return;
-    }
-    LOG.debug("Table: {}.{}", table.getDbName(), table.getTableName());
-    LOG.debug("Columns: \n{}", columns);
   }
 
   @Override
@@ -154,8 +139,6 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
       if (tableExists) {
         tbl = metaClients.run(client -> client.getTable(database, tableName));
-        LOG.debug("Following table has been fetched from metastore:");
-        logTable(tbl);
       } else {
         final long currentTimeMillis = System.currentTimeMillis();
         tbl = new Table(tableName,
@@ -234,9 +217,6 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
         EnvironmentContext envContext = new EnvironmentContext(
             ImmutableMap.of(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE)
         );
-        LOG.debug("Updating the metadata location of the following table:");
-        logTable(tbl);
-        LOG.debug("Metadata Location: {}", tbl.getParameters().get(METADATA_LOCATION_PROP));
         ALTER_TABLE.invoke(client, database, tableName, tbl, envContext);
         return null;
       });
