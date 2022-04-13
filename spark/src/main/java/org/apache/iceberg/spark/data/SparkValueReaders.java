@@ -43,6 +43,9 @@ import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 public class SparkValueReaders {
 
@@ -111,6 +114,7 @@ public class SparkValueReaders {
   }
 
   private static class EnumReader implements ValueReader<UTF8String> {
+    private static final Logger LOG = LoggerFactory.getLogger(EnumReader.class);
     private final UTF8String[] symbols;
 
     private EnumReader(List<String> symbols) {
@@ -123,7 +127,12 @@ public class SparkValueReaders {
     @Override
     public UTF8String read(Decoder decoder, Object ignore) throws IOException {
       int index = decoder.readEnum();
-      return symbols[index];
+      if (index < 0 || index >= symbols.length) {
+        LOG.error("Unable to read the symbol in the given enum as the deserialized index {} is out of bound", index);
+        return null;
+      } else {
+        return symbols[index];
+      }
     }
   }
 
