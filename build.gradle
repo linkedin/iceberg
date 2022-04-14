@@ -998,10 +998,6 @@ project(':iceberg-spark3') {
     testCompile project(path: ':iceberg-hive-metastore', configuration: 'testArtifacts')
     testCompile project(path: ':iceberg-api', configuration: 'testArtifacts')
     testCompile project(path: ':iceberg-data', configuration: 'testArtifacts')
-    //snappy-java supports Apple M1 cpu at the version of 1.1.8.2 when the tests are executed with JDK 11
-    if(JavaVersion.current() == JavaVersion.VERSION_11){
-      testRuntime "org.xerial.snappy:snappy-java:1.1.8.2"
-    }
   }
 
   test {
@@ -1048,10 +1044,6 @@ project(":iceberg-spark3-extensions") {
     testCompile project(path: ':iceberg-hive-metastore', configuration: 'testArtifacts')
     testCompile project(path: ':iceberg-spark', configuration: 'testArtifacts')
     testCompile project(path: ':iceberg-spark3', configuration: 'testArtifacts')
-    //snappy-java supports Apple M1 cpu at the version of 1.1.8.2 when the tests are executed with JDK 11
-    if(JavaVersion.current() == JavaVersion.VERSION_11){
-      testRuntime "org.xerial.snappy:snappy-java:1.1.8.2"
-    }
 
     // Required because we remove antlr plugin dependencies from the compile configuration, see note above
     runtime "org.antlr:antlr4-runtime:4.7.1"
