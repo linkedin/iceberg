@@ -127,11 +127,11 @@ public class SparkValueReaders {
     @Override
     public UTF8String read(Decoder decoder, Object ignore) throws IOException {
       int index = decoder.readEnum();
-      try {
-        return symbols[index];
-      } catch (ArrayIndexOutOfBoundsException ex) {
+      if (index >= symbols.length) {
         LOG.error("Unable to read the symbol in the given enum as the deserialized index {} is out of bound", index);
-        throw ex;
+        throw new ArrayIndexOutOfBoundsException();
+      } else {
+        return symbols[index];
       }
     }
   }
