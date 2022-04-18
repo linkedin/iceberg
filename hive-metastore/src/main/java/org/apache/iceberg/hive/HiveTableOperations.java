@@ -271,7 +271,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
    * @param config metadata to use for configuration
    * @return Commit Status of Success, Failure or Unknown
    */
-  CommitStatus checkCommitStatus(String newMetadataLocation, TableMetadata config) {
+  protected CommitStatus checkCommitStatus(String newMetadataLocation, TableMetadata config) {
     int maxAttempts = PropertyUtil.propertyAsInt(config.properties(), COMMIT_NUM_STATUS_CHECKS,
         COMMIT_NUM_STATUS_CHECKS_DEFAULT);
 
@@ -352,7 +352,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return newTable;
   }
 
-  void setHmsTableParameters(String newMetadataLocation, Table tbl, Map<String, String> icebergTableProps,
+  protected void setHmsTableParameters(String newMetadataLocation, Table tbl, Map<String, String> icebergTableProps,
                                      Set<String> obsoleteProps, boolean hiveEngineEnabled,
                                      Map<String, String> summary) {
     Map<String, String> parameters = tbl.getParameters();
@@ -396,7 +396,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     tbl.setParameters(parameters);
   }
 
-  StorageDescriptor storageDescriptor(TableMetadata metadata, boolean hiveEngineEnabled) {
+  protected StorageDescriptor storageDescriptor(TableMetadata metadata, boolean hiveEngineEnabled) {
 
     final StorageDescriptor storageDescriptor = new StorageDescriptor();
     storageDescriptor.setCols(HiveSchemaUtil.convert(metadata.schema()));
@@ -415,8 +415,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return storageDescriptor;
   }
 
-  @VisibleForTesting
-  long acquireLock() throws UnknownHostException, TException, InterruptedException {
+  protected long acquireLock() throws UnknownHostException, TException, InterruptedException {
     final LockComponent lockComponent = new LockComponent(LockType.EXCLUSIVE, LockLevel.TABLE, database);
     lockComponent.setTablename(tableName);
     final LockRequest lockRequest = new LockRequest(Lists.newArrayList(lockComponent),
@@ -482,7 +481,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return lockId;
   }
 
-  void cleanupMetadataAndUnlock(CommitStatus commitStatus, String metadataLocation, Optional<Long> lockId) {
+  protected void cleanupMetadataAndUnlock(CommitStatus commitStatus, String metadataLocation, Optional<Long> lockId) {
     try {
       if (commitStatus == CommitStatus.FAILURE) {
         // If we are sure the commit failed, clean up the uncommitted metadata file
