@@ -80,7 +80,7 @@ public class SparkAvroReader implements DatumReader<InternalRow> {
 
     @Override
     public ValueReader<?> union(Type expected, Schema union, List<ValueReader<?>> options) {
-      if (AvroSchemaUtil.isOptionSchema(union)) {
+      if (AvroSchemaUtil.isOptionSchema(union) || AvroSchemaUtil.isSingleTypeUnion(union)) {
         return ValueReaders.union(options);
       } else {
         return SparkValueReaders.union(union, options);

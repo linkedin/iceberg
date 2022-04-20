@@ -146,6 +146,44 @@ public class TestSparkAvroUnions {
         .name("unionCol")
         .type()
         .unionOf()
+        .intType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    GenericData.Record unionRecord1 = new GenericData.Record(avroSchema);
+    unionRecord1.put("unionCol", 0);
+    GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
+    unionRecord2.put("unionCol", 1);
+
+    File testFile = temp.newFile();
+    try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+      writer.create(avroSchema, testFile);
+      writer.append(unionRecord1);
+      writer.append(unionRecord2);
+    }
+
+    Schema expectedSchema = AvroSchemaUtil.toIceberg(avroSchema);
+
+    List<InternalRow> rows;
+    try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
+        .createReaderFunc(SparkAvroReader::new)
+        .project(expectedSchema)
+        .build()) {
+      rows = Lists.newArrayList(reader);
+
+      Assert.assertEquals(0, rows.get(0).getInt(0));
+      Assert.assertEquals(1, rows.get(1).getInt(0));
+    }
+  }
+
+  @Test
+  public void writeAndValidateOptionalSingleUnion() throws IOException {
+    org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("unionCol")
+        .type()
+        .unionOf()
         .nullType()
         .and()
         .intType()

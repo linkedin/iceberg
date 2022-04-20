@@ -116,6 +116,9 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       } else {
         return options.get(0);
       }
+    } else if (AvroSchemaUtil.isSingleTypeUnion(union)) {
+      // Single type union
+      return options.get(0);
     } else {
       // Complex union
       List<Types.NestedField> newFields = new ArrayList<>();
