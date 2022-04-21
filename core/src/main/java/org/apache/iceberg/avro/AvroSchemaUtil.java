@@ -147,11 +147,7 @@ public class AvroSchemaUtil {
    * @return true if schema is single type union
    */
   public static boolean isSingleTypeUnion(Schema schema) {
-    if (schema.getType() == UNION && schema.getTypes().size() == 1) {
-      return true;
-    }
-
-    return false;
+    return schema.getType() == UNION && schema.getTypes().size() == 1;
   }
 
   /**

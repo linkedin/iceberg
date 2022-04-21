@@ -74,7 +74,7 @@ public class TestUnionSchemaConversions {
   }
 
   @Test
-  public void testSimpleUnionSchema() {
+  public void testOptionalSingleUnionSchema() {
     Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("optionCol")
@@ -89,6 +89,64 @@ public class TestUnionSchemaConversions {
 
     org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
     String expectedIcebergSchema = "table {\n" + "  0: optionCol: optional int\n" + "}";
+
+    Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
+  }
+
+  @Test
+  public void testSingleTypeUnionSchema() {
+    Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("unionCol")
+        .type()
+        .unionOf()
+        .intType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
+    String expectedIcebergSchema = "table {\n" + "  0: unionCol: required int\n" + "}";
+
+    Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
+  }
+
+  @Test
+  public void testNestedSingleTypeUnionSchema() {
+    Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("col1")
+        .type()
+        .array()
+        .items()
+        .unionOf()
+        .stringType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
+    String expectedIcebergSchema = "table {\n" + "  0: col1: required list<string>\n" + "}";
+
+    Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
+  }
+
+  @Test
+  public void testSingleTypeUnionOfComplexTypeSchema() {
+    Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("unionCol")
+        .type()
+        .unionOf()
+        .array()
+        .items()
+        .intType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    org.apache.iceberg.Schema icebergSchema = AvroSchemaUtil.toIceberg(avroSchema);
+    String expectedIcebergSchema = "table {\n" + "  0: unionCol: required list<int>\n" + "}";
 
     Assert.assertEquals(expectedIcebergSchema, icebergSchema.toString());
   }

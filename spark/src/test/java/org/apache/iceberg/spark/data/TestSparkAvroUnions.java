@@ -178,6 +178,86 @@ public class TestSparkAvroUnions {
   }
 
   @Test
+  public void writeAndValidateNestedSingleTypeUnion() throws IOException {
+    org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("col1")
+        .type()
+        .array()
+        .items()
+        .unionOf()
+        .stringType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    GenericData.Record unionRecord1 = new GenericData.Record(avroSchema);
+    unionRecord1.put("col1", Arrays.asList("foo"));
+    GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
+    unionRecord2.put("col1", Arrays.asList("bar"));
+
+    File testFile = temp.newFile();
+    try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+      writer.create(avroSchema, testFile);
+      writer.append(unionRecord1);
+      writer.append(unionRecord2);
+    }
+
+    Schema expectedSchema = AvroSchemaUtil.toIceberg(avroSchema);
+
+    List<InternalRow> rows;
+    try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
+        .createReaderFunc(SparkAvroReader::new)
+        .project(expectedSchema)
+        .build()) {
+      rows = Lists.newArrayList(reader);
+
+      Assert.assertEquals("foo", rows.get(0).getArray(0).getUTF8String(0).toString());
+      Assert.assertEquals("bar", rows.get(1).getArray(0).getUTF8String(0).toString());
+    }
+  }
+
+  @Test
+  public void writeAndValidateSingleTypeUnionOfComplexType() throws IOException {
+    org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("unionCol")
+        .type()
+        .unionOf()
+        .array()
+        .items()
+        .intType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    GenericData.Record unionRecord1 = new GenericData.Record(avroSchema);
+    unionRecord1.put("unionCol", Arrays.asList(1));
+    GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
+    unionRecord2.put("unionCol", Arrays.asList(2));
+
+    File testFile = temp.newFile();
+    try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+      writer.create(avroSchema, testFile);
+      writer.append(unionRecord1);
+      writer.append(unionRecord2);
+    }
+
+    Schema expectedSchema = AvroSchemaUtil.toIceberg(avroSchema);
+
+    List<InternalRow> rows;
+    try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
+        .createReaderFunc(SparkAvroReader::new)
+        .project(expectedSchema)
+        .build()) {
+      rows = Lists.newArrayList(reader);
+
+      Assert.assertEquals(1, rows.get(0).getArray(0).getInt(0));
+      Assert.assertEquals(2, rows.get(1).getArray(0).getInt(0));
+    }
+  }
+
+  @Test
   public void writeAndValidateOptionalSingleUnion() throws IOException {
     org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
         .fields()
