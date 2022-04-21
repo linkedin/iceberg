@@ -37,7 +37,7 @@ import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.Util;
-import org.apache.iceberg.hivelink.LegacyHiveTable;
+import org.apache.iceberg.hivelink.core.LegacyHiveTable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.orc.OrcRowFilterUtils;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
