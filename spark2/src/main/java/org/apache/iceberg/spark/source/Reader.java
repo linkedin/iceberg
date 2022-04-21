@@ -44,7 +44,7 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hadoop.Util;
-import org.apache.iceberg.hivelink.LegacyHiveTable;
+import org.apache.iceberg.hivelink.core.LegacyHiveTable;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.orc.OrcRowFilterUtils;

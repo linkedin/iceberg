@@ -17,23 +17,35 @@
  * under the License.
  */
 
-package org.apache.iceberg.hive;
+package org.apache.iceberg.hivelink.core;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.StructLike;
 
-public final class HiveCatalogs {
 
-  private static final Cache<String, HiveCatalog> CATALOG_CACHE = Caffeine.newBuilder().build();
+/**
+ * Metadata for a data directory referenced by either a Hive table or a partition
+ */
+class DirectoryInfo {
+  private final String location;
+  private final FileFormat format;
+  private final StructLike partitionData;
 
-  private HiveCatalogs() {
+  DirectoryInfo(String location, FileFormat format, StructLike partitionData) {
+    this.location = location;
+    this.format = format;
+    this.partitionData = partitionData;
   }
 
-  public static HiveCatalog loadCatalog(Configuration conf) {
-    // metastore URI can be null in local mode
-    String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
-    return CATALOG_CACHE.get(metastoreUri, uri -> new HiveCatalog(conf));
+  public String location() {
+    return location;
+  }
+
+  public FileFormat format() {
+    return format;
+  }
+
+  public StructLike partitionData() {
+    return partitionData;
   }
 }
