@@ -89,6 +89,13 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
           options.add(visit(type, branch, visitor));
         }
       }
+    } else if (AvroSchemaUtil.isSingleTypeUnion(union)) { // single type union case
+      Schema branch = types.get(0);
+      if (branch.getType() == Schema.Type.NULL) {
+        options.add(visit((Type) null, branch, visitor));
+      } else {
+        options.add(visit(type, branch, visitor));
+      }
     } else { // complex union case
       int index = 1;
       for (Schema branch : types) {
