@@ -139,9 +139,7 @@ public class AvroSchemaUtil {
   }
 
   /**
-   * This method decides whether a schema is single type union
-   *
-   * single type union: a schema is of type union and there is only one option
+   * This method decides whether a schema represents a single type union, i.e., a union that contains only one option
    *
    * @param schema input schema
    * @return true if schema is single type union
