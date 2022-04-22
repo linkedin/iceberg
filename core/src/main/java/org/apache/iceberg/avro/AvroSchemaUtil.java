@@ -139,6 +139,16 @@ public class AvroSchemaUtil {
   }
 
   /**
+   * This method decides whether a schema represents a single type union, i.e., a union that contains only one option
+   *
+   * @param schema input schema
+   * @return true if schema is single type union
+   */
+  public static boolean isSingleTypeUnion(Schema schema) {
+    return schema.getType() == UNION && schema.getTypes().size() == 1;
+  }
+
+  /**
    * This method decides whether a schema is of type union and is complex union and is optional
    *
    * Complex union: the number of options in union not equals to 2
