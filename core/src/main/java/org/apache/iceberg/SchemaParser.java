@@ -333,6 +333,10 @@ public class SchemaParser {
   }
 
   private static String defaultValueToJsonString(Object value) {
+    if (value == null) {
+      // Json string representation of null object is string "null"
+      return "null";
+    }
     if (isPrimitiveClass(value)) {
       return value.toString();
     }
