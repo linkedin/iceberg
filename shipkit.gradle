@@ -1,0 +1,55 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+//Plugin jars are added to the buildscript classpath in the root build.gradle file
+apply plugin: "org.shipkit.shipkit-auto-version" //https://github.com/shipkit/shipkit-auto-version
+
+apply plugin: "org.shipkit.shipkit-changelog" //https://github.com/shipkit/shipkit-changelog
+tasks.named("generateChangelog") {
+  previousRevision = project.ext.'shipkit-auto-version.previous-tag'
+  githubToken = System.getenv("GITHUB_TOKEN")
+  repository = "linkedin/iceberg"
+}
+
+apply plugin: "org.shipkit.shipkit-github-release" //https://github.com/shipkit/shipkit-changelog
+tasks.named("githubRelease") {
+  def genTask = tasks.named("generateChangelog").get()
+  dependsOn genTask
+  repository = genTask.repository
+  changelog = genTask.outputFile
+  githubToken = System.getenv("GITHUB_TOKEN")
+  newTagRevision = System.getenv("GITHUB_SHA")
+}
+
+apply plugin: "io.github.gradle-nexus.publish-plugin" //https://github.com/gradle-nexus/publish-plugin/
+nexusPublishing {
+  repositories {
+    if (System.getenv("SONATYPE_PWD")) {
+      sonatype {
+        username = System.getenv("SONATYPE_USER")
+        password = System.getenv("SONATYPE_PWD")
+        nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
+        snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
+      }
+    }
+  }
+  transitionCheckOptions {
+    maxRetries.set(100)
+  }
+}
