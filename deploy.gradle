@@ -60,7 +60,7 @@ subprojects {
 
   publishing {
     publications {
-      apache(MavenPublication) {
+      javaLibrary(MavenPublication) {
         if (tasks.matching({task -> task.name == 'shadowJar'}).isEmpty()) {
           from components.java
         } else {
@@ -101,6 +101,9 @@ subprojects {
     //useful for testing - running "publish" will create artifacts/pom in a local dir
     repositories { maven { url = "$rootProject.buildDir/repo" } }
   }
+
+  //fleshes out problems with Maven pom generation when building
+  tasks.build.dependsOn("publishJavaLibraryPublicationToMavenLocal")
 
   signing {
     if (System.getenv("PGP_KEY")) {
