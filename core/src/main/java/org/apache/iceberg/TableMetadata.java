@@ -122,18 +122,6 @@ public class TableMetadata implements Serializable {
         ImmutableList.of(), ImmutableList.of());
   }
 
-  public static TableMetadata newTableMetadataWithoutFreshIds(Schema schema,
-      PartitionSpec spec,
-      String location,
-      Map<String, String> properties) {
-    return new TableMetadata(null, DEFAULT_TABLE_FORMAT_VERSION, UUID.randomUUID().toString(), location,
-        INITIAL_SEQUENCE_NUMBER, System.currentTimeMillis(),
-        -1, schema, INITIAL_SPEC_ID, ImmutableList.of(spec),
-        SortOrder.unsorted().orderId(), ImmutableList.of(SortOrder.unsorted()),
-        ImmutableMap.copyOf(properties), -1, ImmutableList.of(),
-        ImmutableList.of(), ImmutableList.of());
-  }
-
   public static class SnapshotLogEntry implements HistoryEntry {
     private final long timestampMillis;
     private final long snapshotId;
@@ -246,7 +234,7 @@ public class TableMetadata implements Serializable {
   private final List<MetadataLogEntry> previousFiles;
 
   @SuppressWarnings("checkstyle:CyclomaticComplexity")
-  TableMetadata(InputFile file,
+  public TableMetadata(InputFile file,
                 int formatVersion,
                 String uuid,
                 String location,

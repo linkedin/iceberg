@@ -54,7 +54,7 @@ public class NameMapping implements Serializable {
     this(mapping, true);
   }
 
-  NameMapping(MappedFields mapping, boolean caseSensitive) {
+  public NameMapping(MappedFields mapping, boolean caseSensitive) {
     this.mapping = mapping;
     this.caseSensitive = caseSensitive;
     lazyFieldsById();

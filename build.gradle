@@ -521,6 +521,9 @@ project(':iceberg-hivelink-core') {
       exclude group: 'com.zaxxer', module: 'HikariCP'
     }
 
+    testCompile project(':iceberg-data')
+    testCompile project(':iceberg-orc')
+
     // By default, hive-exec is a fat/uber jar and it exports a guava library
     // that's really old. We use the core classifier to be able to override our guava
     // version. Luckily, hive-exec seems to work okay so far with this version of guava
