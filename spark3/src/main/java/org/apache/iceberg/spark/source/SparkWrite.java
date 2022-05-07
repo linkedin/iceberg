@@ -41,6 +41,7 @@ import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.encryption.EncryptionManager;
+import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.FileIO;
@@ -99,6 +100,8 @@ class SparkWrite {
   private final StructType dsSchema;
   private final Map<String, String> extraSnapshotMetadata;
   private final boolean partitionedFanoutEnabled;
+
+  private boolean cleanupOnAbort = true;
 
   SparkWrite(Table table, Broadcast<FileIO> io, Broadcast<EncryptionManager> encryptionManager,
              LogicalWriteInfo writeInfo, String applicationId, String wapId,
@@ -190,25 +193,34 @@ class SparkWrite {
       operation.stageOnly();
     }
 
-    long start = System.currentTimeMillis();
-    operation.commit(); // abort is automatically called if this fails
-    long duration = System.currentTimeMillis() - start;
-    LOG.info("Committed in {} ms", duration);
+    try {
+      long start = System.currentTimeMillis();
+      operation.commit(); // abort is automatically called if this fails
+      long duration = System.currentTimeMillis() - start;
+      LOG.info("Committed in {} ms", duration);
+    } catch (CommitStateUnknownException commitStateUnknownException) {
+      cleanupOnAbort = false;
+      throw commitStateUnknownException;
+    }
   }
 
   private void abort(WriterCommitMessage[] messages) {
-    Map<String, String> props = table.properties();
-    Tasks.foreach(files(messages))
-        .retry(PropertyUtil.propertyAsInt(props, COMMIT_NUM_RETRIES, COMMIT_NUM_RETRIES_DEFAULT))
-        .exponentialBackoff(
-            PropertyUtil.propertyAsInt(props, COMMIT_MIN_RETRY_WAIT_MS, COMMIT_MIN_RETRY_WAIT_MS_DEFAULT),
-            PropertyUtil.propertyAsInt(props, COMMIT_MAX_RETRY_WAIT_MS, COMMIT_MAX_RETRY_WAIT_MS_DEFAULT),
-            PropertyUtil.propertyAsInt(props, COMMIT_TOTAL_RETRY_TIME_MS, COMMIT_TOTAL_RETRY_TIME_MS_DEFAULT),
-            2.0 /* exponential */)
-        .throwFailureWhenFinished()
-        .run(file -> {
-          io.value().deleteFile(file.path().toString());
-        });
+    if (cleanupOnAbort) {
+      Map<String, String> props = table.properties();
+      Tasks.foreach(files(messages))
+          .retry(PropertyUtil.propertyAsInt(props, COMMIT_NUM_RETRIES, COMMIT_NUM_RETRIES_DEFAULT))
+          .exponentialBackoff(
+              PropertyUtil.propertyAsInt(props, COMMIT_MIN_RETRY_WAIT_MS, COMMIT_MIN_RETRY_WAIT_MS_DEFAULT),
+              PropertyUtil.propertyAsInt(props, COMMIT_MAX_RETRY_WAIT_MS, COMMIT_MAX_RETRY_WAIT_MS_DEFAULT),
+              PropertyUtil.propertyAsInt(props, COMMIT_TOTAL_RETRY_TIME_MS, COMMIT_TOTAL_RETRY_TIME_MS_DEFAULT),
+              2.0 /* exponential */)
+          .throwFailureWhenFinished()
+          .run(file -> {
+            table.io().deleteFile(file.path().toString());
+          });
+    } else {
+      LOG.warn("Skipping cleaning up of data files because Iceberg was unable to determine the final commit state");
+    }
   }
 
   private Iterable<DataFile> files(WriterCommitMessage[] messages) {
