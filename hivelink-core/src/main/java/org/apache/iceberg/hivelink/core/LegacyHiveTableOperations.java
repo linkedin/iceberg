@@ -71,9 +71,9 @@ import org.slf4j.LoggerFactory;
 public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
 
   private static final Logger LOG = LoggerFactory.getLogger(LegacyHiveTableOperations.class);
-  static final long INITIAL_SEQUENCE_NUMBER = 0;
-  static final int DEFAULT_TABLE_FORMAT_VERSION = 1;
-  static final int INITIAL_SPEC_ID = 0;
+  private static final long INITIAL_SEQUENCE_NUMBER = 0;
+  private static final int DEFAULT_TABLE_FORMAT_VERSION = 1;
+  private static final int INITIAL_SPEC_ID = 0;
 
   private final HiveClientPool metaClients;
   private final String databaseName;
