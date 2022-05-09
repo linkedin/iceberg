@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.iceberg.data;
+package org.apache.iceberg.hivelink.core;
 
 import java.io.Closeable;
 import java.io.File;
@@ -35,10 +35,11 @@ import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.Files;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.avro.Avro;
+import org.apache.iceberg.data.Record;
 import org.apache.iceberg.data.avro.DataReader;
 import org.apache.iceberg.data.orc.GenericOrcReader;
+import org.apache.iceberg.hivelink.core.utils.MappingUtil;
 import org.apache.iceberg.io.CloseableIterable;
-import org.apache.iceberg.mapping.MappingUtil;
 import org.apache.iceberg.mapping.NameMapping;
 import org.apache.iceberg.orc.ORC;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
