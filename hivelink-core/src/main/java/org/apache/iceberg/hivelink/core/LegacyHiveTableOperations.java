@@ -28,6 +28,7 @@ import java.time.temporal.ChronoField;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -40,6 +41,7 @@ import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
@@ -51,12 +53,13 @@ import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hive.HiveClientPool;
 import org.apache.iceberg.hivelink.core.utils.FileSystemUtils;
+import org.apache.iceberg.hivelink.core.utils.MappingUtil;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.LocationProvider;
-import org.apache.iceberg.mapping.MappingUtil;
 import org.apache.iceberg.mapping.NameMappingParser;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Types;
@@ -68,6 +71,9 @@ import org.slf4j.LoggerFactory;
 public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
 
   private static final Logger LOG = LoggerFactory.getLogger(LegacyHiveTableOperations.class);
+  private static final long INITIAL_SEQUENCE_NUMBER = 0;
+  private static final int DEFAULT_TABLE_FORMAT_VERSION = 1;
+  private static final int INITIAL_SPEC_ID = 0;
 
   private final HiveClientPool metaClients;
   private final String databaseName;
@@ -105,7 +111,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
       // Provide a case insensitive name mapping for Hive tables
       tableProperties.put(TableProperties.DEFAULT_NAME_MAPPING,
           NameMappingParser.toJson(MappingUtil.create(schema, false)));
-      TableMetadata metadata = TableMetadata.newTableMetadataWithoutFreshIds(schema, spec,
+      TableMetadata metadata = newTableMetadataWithoutFreshIds(schema, spec,
           hiveTable.getSd().getLocation(), tableProperties);
       setCurrentMetadata(metadata);
     } catch (TException e) {
@@ -278,5 +284,17 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
   @Override
   public LocationProvider locationProvider() {
     throw new UnsupportedOperationException("Writes not supported for Hive tables without Iceberg metadata");
+  }
+
+  private TableMetadata newTableMetadataWithoutFreshIds(Schema schema,
+                                                              PartitionSpec spec,
+                                                              String location,
+                                                              Map<String, String> properties) {
+    return new TableMetadata(null, DEFAULT_TABLE_FORMAT_VERSION, UUID.randomUUID().toString(), location,
+            INITIAL_SEQUENCE_NUMBER, System.currentTimeMillis(),
+            -1, schema, INITIAL_SPEC_ID, ImmutableList.of(spec),
+            SortOrder.unsorted().orderId(), ImmutableList.of(SortOrder.unsorted()),
+            ImmutableMap.copyOf(properties), -1, ImmutableList.of(),
+            ImmutableList.of(), ImmutableList.of());
   }
 }

@@ -55,19 +55,6 @@ public class MappingUtil {
   }
 
   /**
-   * Create a name-based mapping for a schema.
-   * <p>
-   * The mapping returned by this method will use the schema's name for each field.
-   *
-   * @param schema a {@link Schema}
-   * @param caseSensitive whether names should be matched case sensitively
-   * @return a {@link NameMapping} initialized with the schema's fields and names
-   */
-  public static NameMapping create(Schema schema, boolean caseSensitive) {
-    return new NameMapping(TypeUtil.visit(schema, CreateMapping.INSTANCE), caseSensitive);
-  }
-
-  /**
    * Update a name-based mapping using changes to a schema.
    *
    * @param mapping a name-based mapping
@@ -259,8 +246,8 @@ public class MappingUtil {
     return visitor.fields(mapping, fieldResults);
   }
 
-  private static class CreateMapping extends TypeUtil.SchemaVisitor<MappedFields> {
-    private static final CreateMapping INSTANCE = new CreateMapping();
+  public static class CreateMapping extends TypeUtil.SchemaVisitor<MappedFields> {
+    public static final CreateMapping INSTANCE = new CreateMapping();
 
     private CreateMapping() {
     }
