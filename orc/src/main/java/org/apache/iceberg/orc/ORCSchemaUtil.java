@@ -284,15 +284,21 @@ public final class ORCSchemaUtil {
       default:
         if (mapping.containsKey(fieldId)) {
           TypeDescription originalType = mapping.get(fieldId).type();
-          Optional<TypeDescription> promotedType = getPromotedType(type, originalType);
-
-          if (promotedType.isPresent()) {
-            orcType = promotedType.get();
-          } else {
-            Preconditions.checkArgument(isSameType(originalType, type),
-                "Can not promote %s type to %s",
-                originalType.getCategory(), type.typeId().name());
+          if (originalType != null && originalType.getCategory().equals(TypeDescription.Category.UNION)) {
+            Preconditions.checkState(originalType.getChildren().size() == 1,
+                "TODO: add proper error message");
             orcType = originalType.clone();
+          } else {
+            Optional<TypeDescription> promotedType = getPromotedType(type, originalType);
+
+            if (promotedType.isPresent()) {
+              orcType = promotedType.get();
+            } else {
+              Preconditions.checkArgument(isSameType(originalType, type),
+                  "Can not promote %s type to %s",
+                  originalType.getCategory(), type.typeId().name());
+              orcType = originalType.clone();
+            }
           }
         } else {
           if (isRequired) {

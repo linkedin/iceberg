@@ -75,8 +75,12 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
     List<TypeDescription> types = union.getChildren();
     List<T> options = Lists.newArrayListWithCapacity(types.size());
 
-    for (int i = 0; i < types.size(); i += 1) {
-      options.add(visit(type.asStructType().fields().get(i + 1).type(), types.get(i), visitor));
+    if (types.size() == 1) { // single type union
+      options.add(visit(type, types.get(0), visitor));
+    } else { // complex union
+      for (int i = 0; i < types.size(); i += 1) {
+        options.add(visit(type.asStructType().fields().get(i + 1).type(), types.get(i), visitor));
+      }
     }
 
     return visitor.union(type, union, options);

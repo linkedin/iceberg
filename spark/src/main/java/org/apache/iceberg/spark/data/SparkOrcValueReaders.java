@@ -164,7 +164,7 @@ public class SparkOrcValueReaders {
     }
   }
 
-  static class UnionReader implements OrcValueReader<InternalRow> {
+  static class UnionReader implements OrcValueReader<Object> {
     private final OrcValueReader[] readers;
 
     private UnionReader(List<OrcValueReader<?>> readers) {
@@ -175,20 +175,23 @@ public class SparkOrcValueReaders {
     }
 
     @Override
-    public InternalRow nonNullRead(ColumnVector vector, int row) {
-      InternalRow struct = new GenericInternalRow(readers.length + 1);
+    public Object nonNullRead(ColumnVector vector, int row) {
       UnionColumnVector unionColumnVector = (UnionColumnVector) vector;
-
       int fieldIndex = unionColumnVector.tags[row];
       Object value = this.readers[fieldIndex].read(unionColumnVector.fields[fieldIndex], row);
 
-      for (int i = 0; i < readers.length; i += 1) {
-        struct.setNullAt(i + 1);
-      }
-      struct.update(0, fieldIndex);
-      struct.update(fieldIndex + 1, value);
+      if (readers.length == 1) {
+        return value;
+      } else {
+        InternalRow struct = new GenericInternalRow(readers.length + 1);
+        for (int i = 0; i < readers.length; i += 1) {
+          struct.setNullAt(i + 1);
+        }
+        struct.update(0, fieldIndex);
+        struct.update(fieldIndex + 1, value);
 
-      return struct;
+        return struct;
+      }
     }
   }
 
