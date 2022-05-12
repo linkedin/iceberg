@@ -100,7 +100,7 @@ public class SchemaParser {
       generator.writeBooleanField(REQUIRED, field.isRequired());
       generator.writeFieldName(TYPE);
       toJson(field.type(), generator);
-      // BDP-xxx: Disable serializing default value
+      // BDP-11826: Disable serializing default value
 //      writeDefaultValue(field.getDefaultValue(), field.type(), generator);
       if (field.doc() != null) {
         generator.writeStringField(DOC, field.doc());
@@ -249,7 +249,7 @@ public class SchemaParser {
       int id = JsonUtil.getInt(ID, field);
       String name = JsonUtil.getString(NAME, field);
       Type type = typeFromJson(field.get(TYPE));
-      // BDP-xxx: Disable deserializing default value
+      // BDP-11826: Disable deserializing default value
 //      Object defaultValue = defaultValueFromJson(field, type);
       String doc = JsonUtil.getStringOrNull(DOC, field);
       boolean isRequired = JsonUtil.getBool(REQUIRED, field);
