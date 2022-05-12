@@ -100,7 +100,8 @@ public class SchemaParser {
       generator.writeBooleanField(REQUIRED, field.isRequired());
       generator.writeFieldName(TYPE);
       toJson(field.type(), generator);
-      writeDefaultValue(field.getDefaultValue(), field.type(), generator);
+      // BDP-xxx: Disable serializing default value
+//      writeDefaultValue(field.getDefaultValue(), field.type(), generator);
       if (field.doc() != null) {
         generator.writeStringField(DOC, field.doc());
       }
@@ -248,13 +249,14 @@ public class SchemaParser {
       int id = JsonUtil.getInt(ID, field);
       String name = JsonUtil.getString(NAME, field);
       Type type = typeFromJson(field.get(TYPE));
-      Object defaultValue = defaultValueFromJson(field, type);
+      // BDP-xxx: Disable deserializing default value
+//      Object defaultValue = defaultValueFromJson(field, type);
       String doc = JsonUtil.getStringOrNull(DOC, field);
       boolean isRequired = JsonUtil.getBool(REQUIRED, field);
       if (isRequired) {
-        fields.add(Types.NestedField.required(id, name, type, defaultValue, doc));
+        fields.add(Types.NestedField.required(id, name, type, doc));
       } else {
-        fields.add(Types.NestedField.optional(id, name, type, defaultValue, doc));
+        fields.add(Types.NestedField.optional(id, name, type, doc));
       }
     }
 
