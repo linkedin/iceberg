@@ -31,6 +31,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.types.Types.NestedField;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.apache.avro.Schema.Type.BOOLEAN;
@@ -42,7 +43,7 @@ import static org.apache.avro.Schema.Type.LONG;
 import static org.apache.avro.Schema.Type.NULL;
 import static org.apache.avro.Schema.Type.STRING;
 
-
+@Ignore("BDP-11826: Disable default value preserving in iceberg schema")
 public class TestSchemaParserForDefaultValues {
 
   private void assertEqualStructs(org.apache.iceberg.Schema expected, org.apache.iceberg.Schema actual) {
