@@ -76,7 +76,6 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.Option;
 
 import static org.apache.iceberg.TableProperties.DEFAULT_NAME_MAPPING;
 
@@ -144,7 +143,7 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
     if (io.getValue() instanceof HadoopFileIO) {
       String fsscheme = "no_exist";
       try {
-        Configuration conf = new Configuration(activeSparkSession().sessionState().newHadoopConf());
+        Configuration conf = new Configuration(SparkSession.active().sessionState().newHadoopConf());
         // merge hadoop config set on table
         mergeIcebergHadoopConfs(conf, table.properties());
         // merge hadoop config passed as options and overwrite the one on table
@@ -521,22 +520,8 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
         return new String[0];
       }
 
-      Configuration conf = activeSparkSession().sparkContext().hadoopConfiguration();
+      Configuration conf = SparkSession.active().sparkContext().hadoopConfiguration();
       return Util.blockLocations(task, conf);
-    }
-  }
-
-  private static SparkSession activeSparkSession() {
-    final Option<SparkSession> activeSession = SparkSession.getActiveSession();
-    if (activeSession.isDefined()) {
-      return activeSession.get();
-    } else {
-      final Option<SparkSession> defaultSession = SparkSession.getDefaultSession();
-      if (defaultSession.isDefined()) {
-        return defaultSession.get();
-      } else {
-        throw new IllegalStateException("No active spark session found");
-      }
     }
   }
 
