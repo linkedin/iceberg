@@ -49,14 +49,20 @@ public abstract class OrcSchemaVisitor<T> {
       case UNION:
         List<TypeDescription> types = schema.getChildren();
         List<T> options = Lists.newArrayListWithExpectedSize(types.size());
-        for (int i = 0; i < types.size(); i++) {
-          visitor.beforeUnionOption(types.get(i), i);
-          try {
-            options.add(visit(types.get(i), visitor));
-          } finally {
-            visitor.afterUnionOption(types.get(i), i);
+
+        if (types.size() == 1) {
+          options.add(visit(types.get(0), visitor));
+        } else {
+          for (int i = 0; i < types.size(); i++) {
+            visitor.beforeUnionOption(types.get(i), i);
+            try {
+              options.add(visit(types.get(i), visitor));
+            } finally {
+              visitor.afterUnionOption(types.get(i), i);
+            }
           }
         }
+
         return visitor.union(schema, options);
 
       case LIST:
