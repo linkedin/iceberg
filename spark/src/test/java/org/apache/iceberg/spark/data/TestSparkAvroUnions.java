@@ -178,7 +178,7 @@ public class TestSparkAvroUnions {
   }
 
   @Test
-  public void writeAndValidateNestedSingleTypeUnion() throws IOException {
+  public void writeAndValidateNestedSingleTypeUnion1() throws IOException {
     org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
         .fields()
         .name("col1")
@@ -214,6 +214,57 @@ public class TestSparkAvroUnions {
 
       Assert.assertEquals("foo", rows.get(0).getArray(0).getUTF8String(0).toString());
       Assert.assertEquals("bar", rows.get(1).getArray(0).getUTF8String(0).toString());
+    }
+  }
+
+  @Test
+  public void writeAndValidateNestedSingleTypeUnion2() throws IOException {
+    org.apache.avro.Schema avroSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("outerUnion")
+        .type()
+        .unionOf()
+        .record("r")
+        .fields()
+        .name("innerUnion")
+        .type()
+        .unionOf()
+        .stringType()
+        .endUnion()
+        .noDefault()
+        .endRecord()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    GenericData.Record unionRecord1 = new GenericData.Record(avroSchema);
+    GenericData.Record innerRecord1 = new GenericData.Record(avroSchema.getFields().get(0).schema().getTypes().get(0));
+    innerRecord1.put("innerUnion", "foo");
+    unionRecord1.put("outerUnion", innerRecord1);
+
+    GenericData.Record unionRecord2 = new GenericData.Record(avroSchema);
+    GenericData.Record innerRecord2 = new GenericData.Record(avroSchema.getFields().get(0).schema().getTypes().get(0));
+    innerRecord2.put("innerUnion", "bar");
+    unionRecord2.put("outerUnion", innerRecord2);
+
+    File testFile = temp.newFile();
+    try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+      writer.create(avroSchema, testFile);
+      writer.append(unionRecord1);
+      writer.append(unionRecord2);
+    }
+
+    Schema expectedSchema = AvroSchemaUtil.toIceberg(avroSchema);
+
+    List<InternalRow> rows;
+    try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
+        .createReaderFunc(SparkAvroReader::new)
+        .project(expectedSchema)
+        .build()) {
+      rows = Lists.newArrayList(reader);
+
+      Assert.assertEquals("foo", rows.get(0).getStruct(0, 1).getUTF8String(0).toString());
+      Assert.assertEquals("bar", rows.get(1).getStruct(0, 1).getUTF8String(0).toString());
     }
   }
 

@@ -52,7 +52,7 @@ public abstract class AvroSchemaVisitor<T> {
       case UNION:
         List<Schema> types = schema.getTypes();
         List<T> options = Lists.newArrayListWithExpectedSize(types.size());
-        if (AvroSchemaUtil.isOptionSchema(schema)) {
+        if (AvroSchemaUtil.isOptionSchema(schema) || AvroSchemaUtil.isSingleTypeUnion(schema)) {
           for (Schema type : types) {
             options.add(visit(type, visitor));
           }
