@@ -260,4 +260,9 @@ public class TestParquetVectorizedReads extends AvroDataTest {
     assertRecordsMatch(readSchema, 30000, data, dataFile, false,
         true, BATCH_SIZE);
   }
+
+  @Test
+  @Ignore
+  public void testTimestampWithoutZone() {
+  }
 }

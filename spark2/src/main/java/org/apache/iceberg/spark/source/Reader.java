@@ -54,12 +54,11 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.SparkFilters;
 import org.apache.iceberg.spark.SparkReadOptions;
 import org.apache.iceberg.spark.SparkSchemaUtil;
-import org.apache.iceberg.types.Type;
-import org.apache.iceberg.types.TypeUtil;
-import org.apache.iceberg.types.Types;
+import org.apache.iceberg.spark.SparkUtil;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.TableScanUtil;
 import org.apache.spark.broadcast.Broadcast;
+import org.apache.spark.sql.RuntimeConfig;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.sources.Filter;
@@ -177,16 +176,8 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
     this.batchSize = options.get(SparkReadOptions.VECTORIZATION_BATCH_SIZE).map(Integer::parseInt).orElseGet(() ->
         PropertyUtil.propertyAsInt(table.properties(),
           TableProperties.PARQUET_BATCH_SIZE, TableProperties.PARQUET_BATCH_SIZE_DEFAULT));
-    // Allow reading timestamp without time zone as timestamp with time zone. Generally, this is not safe as timestamp
-    // without time zone is supposed to represent wall clock time semantics, i.e. no matter the reader/writer timezone
-    // 3PM should always be read as 3PM, but timestamp with time zone represents instant semantics, i.e the timestamp
-    // is adjusted so that the corresponding time in the reader timezone is displayed. However, at LinkedIn, all readers
-    // and writers are in the UTC timezone as our production machines are set to UTC. So, timestamp with/without time
-    // zone is the same.
-    // When set to false (default), we throw an exception at runtime
-    // "Spark does not support timestamp without time zone fields" if reading timestamp without time zone fields
-    this.readTimestampWithoutZone = options.get(SparkReadOptions.READ_TIMESTAMP_WITHOUT_ZONE)
-            .map(Boolean::parseBoolean).orElse(false);
+    RuntimeConfig sessionConf = SparkSession.active().conf();
+    this.readTimestampWithoutZone = SparkUtil.canHandleTimestampWithoutZone(options.asMap(), sessionConf);
   }
 
   private Schema lazySchema() {
@@ -210,8 +201,8 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
   private StructType lazyType() {
     if (type == null) {
-      Preconditions.checkArgument(readTimestampWithoutZone || !hasTimestampWithoutZone(lazySchema()),
-          "Spark does not support timestamp without time zone fields");
+      Preconditions.checkArgument(readTimestampWithoutZone || !SparkUtil.hasTimestampWithoutZone(lazySchema()),
+          SparkUtil.TIMESTAMP_WITHOUT_TIMEZONE_ERROR);
       this.type = SparkSchemaUtil.convert(lazySchema());
     }
     return type;
@@ -380,18 +371,12 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
       boolean hasNoDeleteFiles = tasks().stream().noneMatch(TableScanUtil::hasDeletes);
 
-      boolean hasTimestampWithoutZone = hasTimestampWithoutZone(lazySchema());
+      boolean hasTimestampWithoutZone = SparkUtil.hasTimestampWithoutZone(lazySchema());
 
       this.readUsingBatch = batchReadsEnabled && hasNoDeleteFiles && ((allOrcFileScanTasks && hasNoRowFilters) ||
           (allParquetFileScanTasks && atLeastOneColumn && onlyPrimitives && !hasTimestampWithoutZone));
     }
     return readUsingBatch;
-  }
-
-  private static boolean hasTimestampWithoutZone(Schema schema) {
-    return TypeUtil.find(schema, t ->
-        t.typeId().equals(Type.TypeID.TIMESTAMP) && !((Types.TimestampType) t).shouldAdjustToUTC()
-    ) != null;
   }
 
   private static void mergeIcebergHadoopConfs(
