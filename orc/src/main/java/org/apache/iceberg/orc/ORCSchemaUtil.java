@@ -270,42 +270,10 @@ public final class ORCSchemaUtil {
         orcType = buildOrcProjectForStructType(fieldId, type, isRequired, mapping);
         break;
       case LIST:
-        if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
-          Preconditions.checkState(orcField.type.getChildren().size() == 1,
-              "TODO: add proper error message");
-
-          orcType = TypeDescription.createUnion();
-          Types.ListType list = (Types.ListType) type;
-          TypeDescription elementType = buildOrcProjection(list.elementId(), list.elementType(),
-              isRequired && list.isElementRequired(), mapping);
-          orcType.addUnionChild(TypeDescription.createList(elementType));
-        } else {
-          Types.ListType list = (Types.ListType) type;
-          TypeDescription elementType = buildOrcProjection(list.elementId(), list.elementType(),
-              isRequired && list.isElementRequired(), mapping);
-          orcType = TypeDescription.createList(elementType);
-        }
-
+        orcType = buildOrcProjectionForListType((Types.ListType) type, isRequired, mapping, orcField);
         break;
       case MAP:
-        if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
-          Preconditions.checkState(orcField.type.getChildren().size() == 1,
-              "TODO: add proper error message");
-
-          orcType = TypeDescription.createUnion();
-          Types.MapType map = (Types.MapType) type;
-          TypeDescription keyType = buildOrcProjection(map.keyId(), map.keyType(), isRequired, mapping);
-          TypeDescription valueType = buildOrcProjection(map.valueId(), map.valueType(),
-              isRequired && map.isValueRequired(), mapping);
-          orcType.addUnionChild(TypeDescription.createMap(keyType, valueType));
-        } else {
-          Types.MapType map = (Types.MapType) type;
-          TypeDescription keyType = buildOrcProjection(map.keyId(), map.keyType(), isRequired, mapping);
-          TypeDescription valueType = buildOrcProjection(map.valueId(), map.valueType(),
-              isRequired && map.isValueRequired(), mapping);
-          orcType = TypeDescription.createMap(keyType, valueType);
-        }
-
+        orcType = buildOrcProjectionForMapType((Types.MapType) type, isRequired, mapping, orcField);
         break;
       default:
         if (mapping.containsKey(fieldId)) {
@@ -339,38 +307,58 @@ public final class ORCSchemaUtil {
     return orcType;
   }
 
+  private static TypeDescription buildOrcProjectionForMapType(Types.MapType type, boolean isRequired,
+      Map<Integer, OrcField> mapping, OrcField orcField) {
+    final TypeDescription orcType;
+    if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
+      Preconditions.checkState(orcField.type.getChildren().size() == 1,
+          "TODO: add proper error message");
+
+      orcType = TypeDescription.createUnion();
+      Types.MapType map = type;
+      TypeDescription keyType = buildOrcProjection(map.keyId(), map.keyType(), isRequired, mapping);
+      TypeDescription valueType = buildOrcProjection(map.valueId(), map.valueType(),
+          isRequired && map.isValueRequired(), mapping);
+      orcType.addUnionChild(TypeDescription.createMap(keyType, valueType));
+    } else {
+      Types.MapType map = type;
+      TypeDescription keyType = buildOrcProjection(map.keyId(), map.keyType(), isRequired, mapping);
+      TypeDescription valueType = buildOrcProjection(map.valueId(), map.valueType(),
+          isRequired && map.isValueRequired(), mapping);
+      orcType = TypeDescription.createMap(keyType, valueType);
+    }
+    return orcType;
+  }
+
+  private static TypeDescription buildOrcProjectionForListType(Types.ListType type, boolean isRequired,
+      Map<Integer, OrcField> mapping, OrcField orcField) {
+    final TypeDescription orcType;
+    if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
+      Preconditions.checkState(orcField.type.getChildren().size() == 1,
+          "TODO: add proper error message");
+
+      orcType = TypeDescription.createUnion();
+      Types.ListType list = type;
+      TypeDescription elementType = buildOrcProjection(list.elementId(), list.elementType(),
+          isRequired && list.isElementRequired(), mapping);
+      orcType.addUnionChild(TypeDescription.createList(elementType));
+    } else {
+      Types.ListType list = type;
+      TypeDescription elementType = buildOrcProjection(list.elementId(), list.elementType(),
+          isRequired && list.isElementRequired(), mapping);
+      orcType = TypeDescription.createList(elementType);
+    }
+    return orcType;
+  }
+
   private static TypeDescription buildOrcProjectForStructType(Integer fieldId, Type type, boolean isRequired,
       Map<Integer, OrcField> mapping) {
     TypeDescription orcType;
     OrcField orcField = mapping.getOrDefault(fieldId, null);
-    // this branch means the iceberg struct schema actually correspond to an underlying union
+
     if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
-      if (orcField.type.getChildren().size() == 1) { // single type union
-        orcType = TypeDescription.createUnion();
-
-        TypeDescription childOrcStructType = TypeDescription.createStruct();
-        for (Types.NestedField nestedField : type.asStructType().fields()) {
-          if (mapping.get(nestedField.fieldId()) == null && nestedField.hasDefaultValue()) {
-            continue;
-          }
-          String name = Optional.ofNullable(mapping.get(nestedField.fieldId()))
-              .map(OrcField::name)
-              .orElseGet(() -> nestedField.name());
-          TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
-              isRequired && nestedField.isRequired(), mapping);
-          childOrcStructType.addField(name, childType);
-        }
-
-        orcType.addUnionChild(childOrcStructType);
-      } else { // complex union
-        orcType = TypeDescription.createUnion();
-        List<Types.NestedField> nestedFields = type.asStructType().fields();
-        for (Types.NestedField nestedField : nestedFields.subList(1, nestedFields.size())) {
-          TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
-              isRequired && nestedField.isRequired(), mapping);
-          orcType.addUnionChild(childType);
-        }
-      }
+      // this branch means the iceberg struct schema actually correspond to an underlying union
+      orcType = getOrcSchemaForUnionType(type, isRequired, mapping, orcField);
     } else {
       orcType = TypeDescription.createStruct();
       for (Types.NestedField nestedField : type.asStructType().fields()) {
@@ -386,6 +374,38 @@ public final class ORCSchemaUtil {
         TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
             isRequired && nestedField.isRequired(), mapping);
         orcType.addField(name, childType);
+      }
+    }
+    return orcType;
+  }
+
+  private static TypeDescription getOrcSchemaForUnionType(Type type, boolean isRequired, Map<Integer, OrcField> mapping,
+      OrcField orcField) {
+    TypeDescription orcType;
+    if (orcField.type.getChildren().size() == 1) { // single type union
+      orcType = TypeDescription.createUnion();
+
+      TypeDescription childOrcStructType = TypeDescription.createStruct();
+      for (Types.NestedField nestedField : type.asStructType().fields()) {
+        if (mapping.get(nestedField.fieldId()) == null && nestedField.hasDefaultValue()) {
+          continue;
+        }
+        String name = Optional.ofNullable(mapping.get(nestedField.fieldId()))
+            .map(OrcField::name)
+            .orElseGet(() -> nestedField.name());
+        TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
+            isRequired && nestedField.isRequired(), mapping);
+        childOrcStructType.addField(name, childType);
+      }
+
+      orcType.addUnionChild(childOrcStructType);
+    } else { // complex union
+      orcType = TypeDescription.createUnion();
+      List<Types.NestedField> nestedFields = type.asStructType().fields();
+      for (Types.NestedField nestedField : nestedFields.subList(1, nestedFields.size())) {
+        TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
+            isRequired && nestedField.isRequired(), mapping);
+        orcType.addUnionChild(childType);
       }
     }
     return orcType;
