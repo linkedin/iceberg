@@ -380,6 +380,81 @@ public class TestSparkOrcUnions {
      */
   }
 
+  @Test
+  public void testDeepNestedSingleTypeUnion() throws IOException {
+    TypeDescription orcSchema =
+        TypeDescription.fromString("struct<outerUnion:uniontype<struct<innerUnion:uniontype<string>>>>");
+
+    Schema expectedSchema = new Schema(
+        Types.NestedField.optional(0, "outerUnion", Types.StructType.of(
+            Types.NestedField.optional(1, "innerUnion", Types.StringType.get())
+        )));
+
+    final InternalRow expectedFirstRow = new GenericInternalRow(1);
+    final InternalRow innerExpectedFirstRow = new GenericInternalRow(1);
+    innerExpectedFirstRow.update(0, UTF8String.fromString("foo-0"));
+    expectedFirstRow.update(0, innerExpectedFirstRow);
+
+    final InternalRow expectedSecondRow = new GenericInternalRow(1);
+    final InternalRow innerExpectedSecondRow = new GenericInternalRow(1);
+    innerExpectedSecondRow.update(0, UTF8String.fromString("foo-1"));
+    expectedSecondRow.update(0, innerExpectedSecondRow);
+
+    Configuration conf = new Configuration();
+
+    File orcFile = temp.newFile();
+    Path orcFilePath = new Path(orcFile.getPath());
+
+    Writer writer = OrcFile.createWriter(orcFilePath,
+        OrcFile.writerOptions(conf)
+            .setSchema(orcSchema).overwrite(true));
+
+    VectorizedRowBatch batch = orcSchema.createRowBatch();
+    UnionColumnVector outerUnion = (UnionColumnVector) batch.cols[0];
+    StructColumnVector structColumnVector = (StructColumnVector) outerUnion.fields[0];
+    UnionColumnVector innerUnion = (UnionColumnVector) structColumnVector.fields[0];
+    BytesColumnVector bytesColumnVector = (BytesColumnVector) innerUnion.fields[0];
+
+    for (int i = 0; i < NUM_OF_ROWS; i += 1) {
+      outerUnion.tags[i] = 0;
+      innerUnion.tags[i] = 0;
+      String stringValue = "foo-" + i;
+      bytesColumnVector.setVal(i, stringValue.getBytes(StandardCharsets.UTF_8));
+    }
+
+    batch.size = NUM_OF_ROWS;
+    writer.addRowBatch(batch);
+    batch.reset();
+    writer.close();
+
+    // Test non-vectorized reader
+    List<InternalRow> actualRows = Lists.newArrayList();
+    try (CloseableIterable<InternalRow> reader = ORC.read(Files.localInput(orcFile))
+        .project(expectedSchema)
+        .createReaderFunc(readOrcSchema -> new SparkOrcReader(expectedSchema, readOrcSchema))
+        .build()) {
+      reader.forEach(actualRows::add);
+
+      Assert.assertEquals(actualRows.size(), NUM_OF_ROWS);
+      assertEquals(expectedSchema, expectedFirstRow, actualRows.get(0));
+      assertEquals(expectedSchema, expectedSecondRow, actualRows.get(1));
+    }
+
+    // Test vectorized reader
+    /*
+    try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
+        .project(expectedSchema)
+        .createBatchedReaderFunc(readOrcSchema ->
+            VectorizedSparkOrcReaders.buildReader(expectedSchema, readOrcSchema, ImmutableMap.of()))
+        .build()) {
+      final Iterator<InternalRow> actualRowsIt = batchesToRows(reader.iterator());
+
+      assertEquals(expectedSchema, expectedFirstRow, actualRowsIt.next());
+      assertEquals(expectedSchema, expectedSecondRow, actualRowsIt.next());
+    }
+     */
+  }
+
   private Iterator<InternalRow> batchesToRows(Iterator<ColumnarBatch> batches) {
     return Iterators.concat(Iterators.transform(batches, ColumnarBatch::rowIterator));
   }
