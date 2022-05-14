@@ -280,7 +280,7 @@ public final class ORCSchemaUtil {
           TypeDescription originalType = mapping.get(fieldId).type();
           if (originalType != null && originalType.getCategory().equals(TypeDescription.Category.UNION)) {
             Preconditions.checkState(originalType.getChildren().size() == 1,
-                "TODO: add proper error message");
+                "Expect single type union for orc schema.");
             orcType = originalType.clone();
           } else {
             Optional<TypeDescription> promotedType = getPromotedType(type, originalType);
@@ -312,7 +312,7 @@ public final class ORCSchemaUtil {
     final TypeDescription orcType;
     if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
       Preconditions.checkState(orcField.type.getChildren().size() == 1,
-          "TODO: add proper error message");
+          "Expect single type union for orc schema.");
 
       orcType = TypeDescription.createUnion();
       Types.MapType map = type;
@@ -335,7 +335,7 @@ public final class ORCSchemaUtil {
     final TypeDescription orcType;
     if (orcField != null && orcField.type.getCategory().equals(TypeDescription.Category.UNION)) {
       Preconditions.checkState(orcField.type.getChildren().size() == 1,
-          "TODO: add proper error message");
+          "Expect single type union for orc schema.");
 
       orcType = TypeDescription.createUnion();
       Types.ListType list = type;
