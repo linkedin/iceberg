@@ -20,7 +20,9 @@
 package org.apache.iceberg.avro;
 
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.apache.avro.Schema;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
@@ -28,6 +30,8 @@ import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 
 public abstract class AvroSchemaWithTypeVisitor<T> {
+  private static final String UNION_TAG_FIELD_NAME = "tag";
+
   public static <T> T visit(org.apache.iceberg.Schema iSchema, Schema schema, AvroSchemaWithTypeVisitor<T> visitor) {
     return visit(iSchema.asStruct(), schema, visitor);
   }
@@ -97,13 +101,23 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
         options.add(visit(type, branch, visitor));
       }
     } else { // complex union case
-      int index = 1;
-      for (Schema branch : types) {
-        if (branch.getType() == Schema.Type.NULL) {
-          options.add(visit((Type) null, branch, visitor));
+      Map<Integer, Types.NestedField> icebergFieldMap = new HashMap<>();
+      for (Types.NestedField icebergField : type.asStructType().fields()) {
+        String fieldName = icebergField.name();
+        if (fieldName.equals(UNION_TAG_FIELD_NAME)) {
+          continue;
+        }
+        int fieldId = Integer.valueOf(fieldName.substring(5));
+        icebergFieldMap.put(fieldId, icebergField);
+      }
+
+      for (int i = 0; i < types.size(); ++i) {
+        Schema schema = types.get(i);
+        int fieldIdxInIceberg = types.get(0).getType() == Schema.Type.NULL ? i - 1 : i;
+        if (schema.getType() == Schema.Type.NULL || !icebergFieldMap.containsKey(fieldIdxInIceberg)) {
+          options.add(visit((Type) null, schema, visitor));
         } else {
-          options.add(visit(type.asStructType().fields().get(index).type(), branch, visitor));
-          index += 1;
+          options.add(visit(icebergFieldMap.get(fieldIdxInIceberg).type(), schema, visitor));
         }
       }
     }

@@ -25,6 +25,7 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,6 +35,7 @@ import org.apache.avro.util.Utf8;
 import org.apache.iceberg.avro.ValueReader;
 import org.apache.iceberg.avro.ValueReaders;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.UUIDUtil;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -86,8 +88,8 @@ public class SparkValueReaders {
     return new StructReader(readers, struct, idToConstant);
   }
 
-  static ValueReader<InternalRow> union(Schema schema, List<ValueReader<?>> readers) {
-    return new UnionReader(schema, readers);
+  static ValueReader<InternalRow> union(Schema schema, List<ValueReader<?>> readers, Type expected) {
+    return new UnionReader(schema, readers, expected);
   }
 
   private static class StringReader implements ValueReader<UTF8String> {
@@ -304,12 +306,27 @@ public class SparkValueReaders {
   private static class UnionReader implements ValueReader<InternalRow> {
     private final Schema schema;
     private final ValueReader[] readers;
+    private final Map<Integer, Integer> projectedFieldIdsToIdxInReturnedRow;
+    private boolean isTagFieldProjected;
 
-    private UnionReader(Schema schema, List<ValueReader<?>> readers) {
+    private UnionReader(Schema schema, List<ValueReader<?>> readers, Type expected) {
       this.schema = schema;
       this.readers = new ValueReader[readers.size()];
       for (int i = 0; i < this.readers.length; i += 1) {
         this.readers[i] = readers.get(i);
+      }
+      this.projectedFieldIdsToIdxInReturnedRow = new HashMap<>();
+      this.isTagFieldProjected = false;
+      int idxInReturnedRow = 0;
+      for (Types.NestedField icebergField : expected.asStructType().fields()) {
+        String fieldName = icebergField.name();
+        if (fieldName.equals("tag")) {
+          this.isTagFieldProjected = true;
+          idxInReturnedRow++;
+          continue;
+        }
+        int fieldId = Integer.valueOf(fieldName.substring(5));
+        this.projectedFieldIdsToIdxInReturnedRow.put(fieldId, idxInReturnedRow++);
       }
     }
 
@@ -334,22 +351,20 @@ public class SparkValueReaders {
       }
 
       // otherwise, we need to return an InternalRow as a struct data
-      InternalRow struct = new GenericInternalRow(nullIndex >= 0 ? alts.size() : alts.size() + 1);
+      int numOfFields = isTagFieldProjected ?
+          projectedFieldIdsToIdxInReturnedRow.size() + 1 : projectedFieldIdsToIdxInReturnedRow.size();
+      InternalRow struct = new GenericInternalRow(numOfFields);
       for (int i = 0; i < struct.numFields(); i += 1) {
         struct.setNullAt(i);
       }
+      int fieldId = (nullIndex < 0 || index < nullIndex) ? index : index - 1;
+      if (isTagFieldProjected) {
+        struct.setInt(0, fieldId);
+      }
 
       Object value = readers[index].read(decoder, reuse);
-
-      if (nullIndex < 0) {
-        struct.update(index + 1, value);
-        struct.setInt(0, index);
-      } else if (index < nullIndex) {
-        struct.update(index + 1, value);
-        struct.setInt(0, index);
-      } else {
-        struct.update(index, value);
-        struct.setInt(0, index - 1);
+      if (projectedFieldIdsToIdxInReturnedRow.containsKey(fieldId)) {
+        struct.update(projectedFieldIdsToIdxInReturnedRow.get(fieldId), value);
       }
 
       return struct;
