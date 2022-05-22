@@ -106,11 +106,13 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
 
   /*
   A complex union with multiple types of Avro schema is converted into a struct with multiple fields of Iceberg schema.
-  A field is related to a type in the order defined in Avro schema. Also, an extra tag field is added into the struct of
-  Iceberg schema. The user can query the column of union type with the field projected (e.g. colUnion.field0) in which
-  the maximum number of the fields to be projected equals to the number of fields of the complete struct converted
-  from the union. The case of without field projection equals to the case of full fields projection.
-  Therefore, this function visits the complex union by assuming the field projection always happens.
+  Also an extra tag field is added into the struct of Iceberg schema during the conversion.
+  The fields in the struct of Iceberg schema are expected to be stored in the same order
+  as the corresponding types in the union of Avro schema.
+  Except the tag field, the fields in the struct of Iceberg schema are the same as the types in the union of Avro schema
+  in the general case. In case of field projection, the fields in the struct of Iceberg schema only contains
+  the fields to be projected which equals to a subset of the types in the union of Avro schema.
+  Therefore, this function visits the complex union with the consideration of both cases.
    */
   private static <T> void visitComplexUnion(Type type, Schema union,
                                             AvroSchemaWithTypeVisitor<T> visitor, List<T> options) {
@@ -124,37 +126,35 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
       if (schema.getType() == Schema.Type.NULL) {
         nullTypeFound = true;
         options.add(visit((Type) null, schema, visitor));
-        typeIndex++;
-        continue;
-      }
-
-      // If a NULL type is found before current type, the type index is one larger than the actual type index which
-      // can be used to track the corresponding field in the struct of Iceberg schema.
-      int actualTypeIndex = nullTypeFound ? typeIndex - 1 : typeIndex;
-      boolean relatedFieldInStructFound = false;
-      while (fieldIndexInStruct < type.asStructType().fields().size()) {
-        String structFieldName = type.asStructType().fields().get(fieldIndexInStruct).name();
-        if (UNION_TAG_FIELD_NAME.equals(structFieldName)) {
-          fieldIndexInStruct++;
-          continue;
-        }
-
-        int indexFromStructFieldName = Integer.valueOf(structFieldName.substring(5));
-        if (actualTypeIndex == indexFromStructFieldName) {
-          relatedFieldInStructFound = true;
-          options.add(visit(type.asStructType().fields().get(fieldIndexInStruct).type(), schema, visitor));
+      } else {
+        boolean relatedFieldInStructFound = false;
+        Types.StructType struct = type.asStructType();
+        if (fieldIndexInStruct < struct.fields().size() &&
+            UNION_TAG_FIELD_NAME.equals(struct.fields().get(fieldIndexInStruct).name())) {
           fieldIndexInStruct++;
         }
-        break;
-      }
 
-      // If a field is not projected, a corresponding field in the struct of Iceberg schema cannot be found
-      // for current type of union in Avro schema, a reader for current type still needs to be created and
-      // used to make the reading of Avro file successfully. In this case, a null field type is used to
-      // create the option for the reader of the current type which still can read the corresponding content
-      // in Avro file successfully.
-      if (!relatedFieldInStructFound) {
-        options.add(visit((Type) null, schema, visitor));
+        if (fieldIndexInStruct < struct.fields().size()) {
+          // If a NULL type is found before current type, the type index is one larger than the actual type index which
+          // can be used to track the corresponding field in the struct of Iceberg schema.
+          int actualTypeIndex = nullTypeFound ? typeIndex - 1 : typeIndex;
+          String structFieldName = type.asStructType().fields().get(fieldIndexInStruct).name();
+          int indexFromStructFieldName = Integer.valueOf(structFieldName.substring(5));
+          if (actualTypeIndex == indexFromStructFieldName) {
+            relatedFieldInStructFound = true;
+            options.add(visit(type.asStructType().fields().get(fieldIndexInStruct).type(), schema, visitor));
+            fieldIndexInStruct++;
+          }
+        }
+
+        // If a field is not projected, a corresponding field in the struct of Iceberg schema cannot be found
+        // for current type of union in Avro schema, a reader for current type still needs to be created and
+        // used to make the reading of Avro file successfully. In this case, a null field type is used to
+        // create the option for the reader of the current type which still can read the corresponding content
+        // in Avro file successfully.
+        if (!relatedFieldInStructFound) {
+          options.add(visit((Type) null, schema, visitor));
+        }
       }
       typeIndex++;
     }
