@@ -385,6 +385,7 @@ public class Avro {
     };
     private Long start = null;
     private Long length = null;
+    private Schema fileSchema = null;
 
     private ReadBuilder(InputFile file) {
       Preconditions.checkNotNull(file, "Input file cannot be null");
@@ -446,6 +447,11 @@ public class Avro {
       return this;
     }
 
+    public ReadBuilder setFileSchema(Schema fileSchema) {
+      this.fileSchema = fileSchema;
+      return this;
+    }
+
     public <D> AvroIterable<D> build() {
       Preconditions.checkNotNull(schema, "Schema is required");
       Function<Schema, DatumReader<?>> readerFunc;
@@ -458,7 +464,7 @@ public class Avro {
       }
 
       return new AvroIterable<>(file,
-          new ProjectionDatumReader<>(readerFunc, schema, renames, nameMapping),
+          new ProjectionDatumReader<>(readerFunc, schema, renames, nameMapping, fileSchema),
           start, length, reuseContainers);
     }
   }

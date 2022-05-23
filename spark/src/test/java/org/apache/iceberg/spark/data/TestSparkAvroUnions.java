@@ -78,6 +78,7 @@ public class TestSparkAvroUnions {
     try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
         .createReaderFunc(SparkAvroReader::new)
         .project(expectedSchema)
+        .setFileSchema(avroSchema)
         .build()) {
       rows = Lists.newArrayList(reader);
 
@@ -572,6 +573,56 @@ public class TestSparkAvroUnions {
       Assert.assertEquals(1, rows.get(0).getStruct(0, 1).numFields());
       Assert.assertTrue(rows.get(0).getStruct(0, 1).isNullAt(0));
       Assert.assertEquals(1, rows.get(1).getStruct(0, 1).getInt(0));
+    }
+  }
+
+  @Test(expected = ArrayIndexOutOfBoundsException.class)
+  public void writeAndReadRequiredComplexUnionWithSchemaMismatch() throws IOException {
+    org.apache.avro.Schema avroWriteSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("unionCol")
+        .type()
+        .unionOf()
+        .intType()
+        .and()
+        .stringType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    GenericData.Record unionRecord1 = new GenericData.Record(avroWriteSchema);
+    unionRecord1.put("unionCol", "foo");
+    GenericData.Record unionRecord2 = new GenericData.Record(avroWriteSchema);
+    unionRecord2.put("unionCol", 1);
+
+    File testFile = temp.newFile();
+    try (DataFileWriter<GenericData.Record> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+      writer.create(avroWriteSchema, testFile);
+      writer.append(unionRecord1);
+      writer.append(unionRecord2);
+    }
+
+    org.apache.avro.Schema avroReadSchema = SchemaBuilder.record("root")
+        .fields()
+        .name("unionCol")
+        .type()
+        .unionOf()
+        .stringType()
+        .and()
+        .intType()
+        .endUnion()
+        .noDefault()
+        .endRecord();
+
+    Schema expectedSchema = AvroSchemaUtil.toIceberg(avroReadSchema);
+
+    List<InternalRow> rows;
+    try (AvroIterable<InternalRow> reader = Avro.read(Files.localInput(testFile))
+        .createReaderFunc(SparkAvroReader::new)
+        .project(expectedSchema)
+        .setFileSchema(avroReadSchema)
+        .build()) {
+      rows = Lists.newArrayList(reader);
     }
   }
 }

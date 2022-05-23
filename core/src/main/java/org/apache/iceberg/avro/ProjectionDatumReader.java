@@ -50,6 +50,18 @@ public class ProjectionDatumReader<D> implements DatumReader<D>, SupportsRowPosi
     this.nameMapping = nameMapping;
   }
 
+  public ProjectionDatumReader(Function<Schema, DatumReader<?>> getReader,
+      org.apache.iceberg.Schema expectedSchema,
+      Map<String, String> renames,
+      NameMapping nameMapping,
+      Schema fileSchema) {
+    this.getReader = getReader;
+    this.expectedSchema = expectedSchema;
+    this.renames = renames;
+    this.nameMapping = nameMapping;
+    this.fileSchema = fileSchema;
+  }
+
   @Override
   public void setRowPositionSupplier(Supplier<Long> posSupplier) {
     if (wrapped instanceof SupportsRowPosition) {
@@ -59,7 +71,9 @@ public class ProjectionDatumReader<D> implements DatumReader<D>, SupportsRowPosi
 
   @Override
   public void setSchema(Schema newFileSchema) {
-    this.fileSchema = newFileSchema;
+    if (this.fileSchema == null) {
+      this.fileSchema = newFileSchema;
+    }
     if (nameMapping == null && !AvroSchemaUtil.hasIds(fileSchema)) {
       nameMapping = MappingUtil.create(expectedSchema);
     }
