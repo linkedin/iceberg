@@ -94,8 +94,11 @@ class BuildAvroProjection extends AvroCustomOrderSchemaVisitor<Schema, Schema.Fi
         // if the expectedField has a defaultValue, but the avroField does not, we need to
         // create a newField to copy over the non-null default value.
         if (expectedField.hasDefaultValue() && !AvroSchemaUtil.hasNonNullDefaultValue(avroField)) {
+          Schema newFiledSchema = (expectedField.isOptional()) ?
+                  AvroSchemaUtil.toOption(avroField.schema(), true) :
+                  avroField.schema();
           Schema.Field newField =
-              new Schema.Field(avroField.name(), avroField.schema(), avroField.doc(), expectedField.getDefaultValue());
+                  new Schema.Field(avroField.name(), newFiledSchema, avroField.doc(), expectedField.getDefaultValue());
           newField.addProp(AvroSchemaUtil.FIELD_ID_PROP, expectedField.fieldId());
           updatedFields.add(newField);
           hasChange = true;
