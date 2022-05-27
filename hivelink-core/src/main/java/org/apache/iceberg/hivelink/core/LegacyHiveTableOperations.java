@@ -48,6 +48,7 @@ import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Bound;
+import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
@@ -202,6 +203,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
             databaseName, tableName, null, (short) -1));
       } else {
         boundExpression = Binder.bind(partitionSchema, simplified, false);
+        Evaluator evaluator = new Evaluator(partitionSchema, simplified, false);
         String partitionFilterString = HiveExpressions.toPartitionFilterString(boundExpression);
         LOG.info("Listing partitions for {}.{} with filter string: {}", databaseName, tableName, partitionFilterString);
         try {
@@ -239,7 +241,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
                   break;
               }
             }
-            return ((Bound<Boolean>) boundExpression).eval(record);
+            return evaluator.eval(record);
           }).collect(Collectors.toList());
         }
       }

@@ -37,6 +37,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.avro.AvroSchemaVisitor;
+import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.hivelink.core.schema.MergeHiveSchemaWithAvro;
 import org.apache.iceberg.hivelink.core.utils.HiveTypeUtil;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
@@ -165,9 +166,17 @@ class LegacyHiveTableUtils {
 
       @Override
       public <T> T get(int pos, Class<T> javaClass) {
-        final Object partitionValue = Conversions.fromPartitionString(
-            fields.get(pos).type(),
-            partitionValues.get(pos));
+        Type type = fields.get(pos).type();
+        String partitionString = partitionValues.get(pos);
+        final Object partitionValue;
+        // Special handling of TIMESTAMP type since Iceberg Conversions.fromPartitionString
+        // does not support it
+        if (type.typeId() == Type.TypeID.TIMESTAMP) {
+          String isoFormatTs = partitionString.replaceFirst(" ", "T");
+          partitionValue =  Literal.of(isoFormatTs).to(Types.TimestampType.withoutZone()).value();
+        } else {
+          partitionValue = Conversions.fromPartitionString(type, partitionString);
+        }
         return javaClass.cast(partitionValue);
       }
 
