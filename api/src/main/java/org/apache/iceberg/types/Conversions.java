@@ -34,7 +34,6 @@ import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.util.UUIDUtil;
 
-
 public class Conversions {
 
   private Conversions() {
@@ -72,9 +71,6 @@ public class Conversions {
         return new BigDecimal(asString);
       case DATE:
         return Literal.of(asString).to(Types.DateType.get()).value();
-      case TIMESTAMP:
-        final String isoFormatTs = asString.replaceFirst(" ", "T");
-        return Literal.of(isoFormatTs).to(Types.TimestampType.withoutZone()).value();
       default:
         throw new UnsupportedOperationException(
             "Unsupported type for fromPartitionString: " + type);
