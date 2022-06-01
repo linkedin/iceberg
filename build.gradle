@@ -17,13 +17,11 @@
  * under the License.
  */
 
-import groovy.transform.Memoized
-
 buildscript {
   repositories {
+    maven { url "https://plugins.gradle.org/m2/" }
     jcenter()
     gradlePluginPortal()
-    maven { url "https://plugins.gradle.org/m2/" }
   }
   dependencies {
     classpath 'com.github.jengelman.gradle.plugins:shadow:5.0.0'
@@ -32,6 +30,9 @@ buildscript {
     classpath 'com.diffplug.spotless:spotless-plugin-gradle:3.14.0'
     classpath 'gradle.plugin.org.inferred:gradle-processors:2.1.0'
     classpath 'me.champeau.gradle:jmh-gradle-plugin:0.4.8'
+    classpath 'io.github.gradle-nexus:publish-plugin:1.1.0'
+    classpath 'org.shipkit:shipkit-auto-version:1.2.0'
+    classpath 'org.shipkit:shipkit-changelog:1.1.10'
   }
 }
 
@@ -60,8 +61,7 @@ dependencyRecommendations {
 }
 
 allprojects {
-  group = "org.apache.iceberg"
-  version = getProjectVersion()
+  group = "com.linkedin.iceberg"
   repositories {
     mavenCentral()
     mavenLocal()
@@ -1232,41 +1232,7 @@ project(':iceberg-runtime') {
   }
 }
 
-@Memoized
-boolean isVersionFileExists() {
-  return file('version.txt').exists()
-}
-
-@Memoized
-String getVersionFromFile() {
-  return file('version.txt').text.trim()
-}
-
-String getProjectVersion() {
-  if (isVersionFileExists()) {
-    return getVersionFromFile()
-  }
-
-  try {
-    return gitVersion()
-  } catch (NullPointerException e) {
-    throw new Exception("Neither version.txt nor git version exists")
-  }
-}
-
-String getJavadocVersion() {
-  if (isVersionFileExists()) {
-    return getVersionFromFile()
-  }
-
-  try {
-    // use the branch name in place of version in Javadoc
-    return versionDetails().branchName
-  } catch (NullPointerException e) {
-    throw new Exception("Neither version.txt nor git version exists")
-  }
-}
 
 apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
-apply from: 'tasks.gradle'
+apply from: 'shipkit.gradle'
