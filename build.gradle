@@ -23,9 +23,9 @@ import java.util.regex.Pattern
 
 buildscript {
   repositories {
-    gradlePluginPortal()
-    maven { url "http://palantir.bintray.com/releases" }
     maven { url "https://plugins.gradle.org/m2/" }
+    jcenter()
+    gradlePluginPortal()
   }
   dependencies {
     classpath 'gradle.plugin.com.github.jengelman.gradle.plugins:shadow:7.0.0'
@@ -37,6 +37,9 @@ buildscript {
     classpath "com.github.alisiikh:gradle-scalastyle-plugin:3.4.1"
     classpath 'com.palantir.gradle.revapi:gradle-revapi:1.7.0'
     classpath 'com.gorylenko.gradle-git-properties:gradle-git-properties:2.4.1'
+    classpath 'io.github.gradle-nexus:publish-plugin:1.1.0'
+    classpath 'org.shipkit:shipkit-auto-version:1.2.0'
+    classpath 'org.shipkit:shipkit-changelog:1.1.10'
   }
 }
 
@@ -88,8 +91,7 @@ dependencyRecommendations {
 }
 
 allprojects {
-  group = "org.apache.iceberg"
-  version = getProjectVersion()
+  group = "com.linkedin.iceberg"
   repositories {
     mavenCentral()
     mavenLocal()
@@ -1023,5 +1025,5 @@ String getJavadocVersion() {
 apply from: 'jmh.gradle'
 apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
-apply from: 'tasks.gradle'
+apply from: 'shipkit.gradle'
 
