@@ -90,9 +90,35 @@ subprojects {
               url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
             }
           }
+          developers {
+            [
+              'wmoustafa:Walaa Eldin Moustafa',
+              'funcheetah:Wenye Zhang',
+              'shardulm94:Shardul Mahadik',
+              'hotsushi:Sushant Raikar',
+              'rzhang10:Raymond Zhang',
+              'yiqiangin:Yiqiang Ding',
+              'ljfgem:Jiefan Li'
+            ].each { devData ->
+              developer {
+                def devInfo = devData.split(':')
+                id = devInfo[0]
+                name = devInfo[1]
+                url = 'https://github.com/' + devInfo[0]
+                roles = ["Core developer"]
+              }
+            }
+          }
+          scm {
+            url = 'https://github.com/linkedin/iceberg.git'
+          }
           issueManagement {
             system = 'GitHub'
-            url = 'https://github.com/apache/iceberg/issues'
+            url = 'https://github.com/linkedin/iceberg/issues'
+          }
+          ciManagement {
+            url = 'https://github.com/linkedin/iceberg/actions'
+            system = 'GitHub Actions'
           }
         }
       }
