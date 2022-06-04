@@ -510,8 +510,6 @@ public class TestSchemaConversions {
     Schema schema = new Schema.Parser().parse(schemaString);
     org.apache.iceberg.Schema iSchema = AvroSchemaUtil.toIceberg(schema);
 
-    System.out.println(iSchema);
-
     String schemaJson = SchemaParser.toJson(iSchema);
     org.apache.iceberg.Schema roundTripiSchema = SchemaParser.fromJson(schemaJson);
 
