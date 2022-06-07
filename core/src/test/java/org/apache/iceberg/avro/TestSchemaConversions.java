@@ -20,9 +20,11 @@
 package org.apache.iceberg.avro;
 
 import java.util.List;
+import java.util.stream.IntStream;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaBuilder;
+import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Type;
@@ -433,5 +435,85 @@ public class TestSchemaConversions {
         "5: recordField: optional struct<3: innerString: required string>>, " +
         "default value: {mapField={foo=bar, x=y}, recordField=null}, \n" +
         "}", iSchema.toString());
+  }
+
+  @Test
+  public void testVariousTypesDefaultValues() {
+    String schemaString = "{\n" +
+        "  \"namespace\": \"com.razhang\",\n" +
+        "  \"type\": \"record\",\n" +
+        "  \"name\": \"RAZHANG\",\n" +
+        "  \"fields\": [\n" +
+        "    {\n" +
+        "      \"name\": \"f1\",\n" +
+        "      \"type\": \"string\",\n" +
+        "      \"default\": \"foo\"\n" +
+        "    },\n" +
+        "    {\n" +
+        "      \"name\": \"f2\",\n" +
+        "      \"type\": \"int\",\n" +
+        "      \"default\": 1\n" +
+        "    },\n" +
+        "    {\n" +
+        "      \"name\": \"f3\",\n" +
+        "      \"type\": {\n" +
+        "        \"type\": \"map\",\n" +
+        "        \"values\" : \"int\"\n" +
+        "      },\n" +
+        "      \"default\": {\"a\": 1}\n" +
+        "    },\n" +
+        "    {\n" +
+        "      \"name\": \"f4\",\n" +
+        "      \"type\": {\n" +
+        "        \"type\": \"array\",\n" +
+        "        \"items\" : \"int\"\n" +
+        "      },\n" +
+        "      \"default\": [1, 2, 3]\n" +
+        "    },\n" +
+        "    {\n" +
+        "      \"name\": \"f5\",\n" +
+        "      \"type\": {\n" +
+        "        \"type\": \"record\",\n" +
+        "        \"name\": \"F5\",\n" +
+        "        \"fields\" : [\n" +
+        "          {\"name\": \"ff1\", \"type\": \"long\"},\n" +
+        "          {\"name\": \"ff2\", \"type\": [\"null\", \"string\"]}\n" +
+        "        ]\n" +
+        "      },\n" +
+        "      \"default\": {\n" +
+        "        \"ff1\": 999,\n" +
+        "        \"ff2\": null\n" +
+        "      }\n" +
+        "    },\n" +
+        "    {\n" +
+        "      \"name\": \"f6\",\n" +
+        "      \"type\": {\n" +
+        "        \"type\": \"map\",\n" +
+        "        \"values\": {\n" +
+        "          \"type\": \"array\",\n" +
+        "          \"items\" : \"int\"\n" +
+        "        }\n" +
+        "      },\n" +
+        "      \"default\": {\"key\": [1, 2, 3]}\n" +
+        "    },\n" +
+        "    {\n" +
+        "      \"name\": \"f7\",\n" +
+        "      \"type\": {\n" +
+        "        \"type\": \"fixed\",\n" +
+        "        \"name\": \"md5\",\n" +
+        "        \"size\": 2\n" +
+        "      },\n" +
+        "      \"default\": \"fF\"\n" +
+        "    }\n" +
+        "  ]\n" +
+        "}";
+    Schema schema = new Schema.Parser().parse(schemaString);
+    org.apache.iceberg.Schema iSchema = AvroSchemaUtil.toIceberg(schema);
+
+    String schemaJson = SchemaParser.toJson(iSchema);
+    org.apache.iceberg.Schema roundTripiSchema = SchemaParser.fromJson(schemaJson);
+
+    Assert.assertTrue(IntStream.range(0, roundTripiSchema.columns().size())
+        .allMatch(i -> roundTripiSchema.columns().get(i).equals(iSchema.columns().get(i))));
   }
 }

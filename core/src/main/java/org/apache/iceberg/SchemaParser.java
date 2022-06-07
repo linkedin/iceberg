@@ -19,8 +19,6 @@
 
 package org.apache.iceberg;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -28,16 +26,13 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.io.IOException;
 import java.io.StringWriter;
-import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
+import org.apache.avro.util.internal.JacksonUtils;
+import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
@@ -71,22 +66,15 @@ public class SchemaParser {
   private static final String VALUE_REQUIRED = "value-required";
   private static final String DEFAULT = "default";
 
-  private static final List<Class> primitiveClasses = Arrays.asList(Boolean.class, Integer.class, Long.class,
-      Float.class, Double.class, CharSequence.class, String.class, java.util.UUID.class, BigDecimal.class);
-
   private static void writeDefaultValue(Object defaultValue, Type type, JsonGenerator generator) throws IOException {
     if (defaultValue == null) {
       return;
     }
     generator.writeFieldName(DEFAULT);
-    if (type.isListType()) {
-      generator.writeString(defaultValueToJsonString((List<Object>) defaultValue));
-    } else if (type.isStructType() || type.isMapType()) {
-      generator.writeString(defaultValueToJsonString((Map<String, Object>) defaultValue));
-    } else if (isFixedOrBinary(type)) {
-      generator.writeString(defaultValueToJsonString((byte[]) defaultValue));
+    if (isFixedOrBinary(type)) {
+      generator.writeRawValue(defaultValueToJsonString((byte[]) defaultValue));
     } else {
-      generator.writeString(defaultValueToJsonString(defaultValue));
+      generator.writeRawValue(defaultValueToJsonString(defaultValue));
     }
   }
 
@@ -119,8 +107,7 @@ public class SchemaParser {
       generator.writeBooleanField(REQUIRED, field.isRequired());
       generator.writeFieldName(TYPE);
       toJson(field.type(), generator);
-      // BDP-11826: Disable serializing default value
-//      writeDefaultValue(field.getDefaultValue(), field.type(), generator);
+      writeDefaultValue(field.getDefaultValue(), field.type(), generator);
       if (field.doc() != null) {
         generator.writeStringField(DOC, field.doc());
       }
@@ -237,21 +224,16 @@ public class SchemaParser {
       return null;
     }
 
-    String defaultValueString = field.get(DEFAULT).asText();
-
     if (isFixedOrBinary(type)) {
-      return defaultValueFromJsonBytesField(defaultValueString);
+      try {
+        return field.get(DEFAULT).binaryValue();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     }
 
-    if (type.isPrimitiveType()) {
-      return primitiveDefaultValueFromJsonString(defaultValueString, type);
-    }
-
-    try {
-      return defaultValueFromJsonString(defaultValueString, type);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
+    return AvroSchemaUtil.convertToJavaDefaultValue(JacksonUtils.toObject(field.get(DEFAULT),
+        AvroSchemaUtil.convert(type)));
   }
 
   private static Types.StructType structFromJson(JsonNode json) {
@@ -269,14 +251,13 @@ public class SchemaParser {
       int id = JsonUtil.getInt(ID, field);
       String name = JsonUtil.getString(NAME, field);
       Type type = typeFromJson(field.get(TYPE));
-      // BDP-11826: Disable deserializing default value
-//      Object defaultValue = defaultValueFromJson(field, type);
+      Object defaultValue = defaultValueFromJson(field, type);
       String doc = JsonUtil.getStringOrNull(DOC, field);
       boolean isRequired = JsonUtil.getBool(REQUIRED, field);
       if (isRequired) {
-        fields.add(Types.NestedField.required(id, name, type, doc));
+        fields.add(Types.NestedField.required(id, name, type, defaultValue, doc));
       } else {
-        fields.add(Types.NestedField.optional(id, name, type, doc));
+        fields.add(Types.NestedField.optional(id, name, type, defaultValue, doc));
       }
     }
 
@@ -340,19 +321,6 @@ public class SchemaParser {
     });
   }
 
-  private static String defaultValueToJsonString(Map<String, Object> map) {
-    Map<String, String> jsonStringElementsMap = new LinkedHashMap<>();
-    map.entrySet().forEach(
-        entry -> jsonStringElementsMap.put(entry.getKey(), defaultValueToJsonString(entry.getValue())));
-    return defaultValueToJsonString(jsonStringElementsMap);
-  }
-
-  private static String defaultValueToJsonString(List<Object> list) {
-    List<String> jsonStringItemsList = new ArrayList<>();
-    list.forEach(item -> jsonStringItemsList.add(defaultValueToJsonString(item)));
-    return defaultValueToJsonString(jsonStringItemsList);
-  }
-
   private static String defaultValueToJsonString(byte[] bytes) {
     try {
       return JsonUtil.mapper().writeValueAsString(ByteBuffer.wrap(bytes));
@@ -362,115 +330,10 @@ public class SchemaParser {
   }
 
   private static String defaultValueToJsonString(Object value) {
-    if (value == null) {
-      // Json string representation of null object is string "null"
-      return "null";
-    }
-    if (isPrimitiveClass(value)) {
-      return value.toString();
-    }
-
     try {
-      return JsonUtil.mapper().writeValueAsString(new SerDeValue(value));
+      return JsonUtil.mapper().writeValueAsString(value);
     } catch (JsonProcessingException e) {
       throw new RuntimeException(e);
-    }
-  }
-
-  private static boolean isPrimitiveClass(Object value) {
-    return primitiveClasses.contains(value.getClass());
-  }
-
-  private static Object defaultValueFromJsonBytesField(String value) {
-    try {
-      return JsonUtil.mapper().readValue(value, ByteBuffer.class).array();
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private static Object defaultValueFromJsonString(String jsonString, Type type) throws IOException {
-    Preconditions.checkArgument(!type.isPrimitiveType(), "jsonString %s is for primitive type %s", jsonString, type);
-    Object jsonStringCollection = JsonUtil.mapper().readValue(jsonString, SerDeValue.class).getValue();
-
-    if (type.isListType()) {
-      Preconditions.checkArgument(jsonStringCollection instanceof List,
-          "deserialized Json object: (%s) is not List for List type", jsonStringCollection);
-      List<Object> list = new ArrayList<>();
-      Type elementType = type.asListType().elementType();
-      for (String item : (List<String>) jsonStringCollection) {
-        list.add(elementType.isPrimitiveType() ? primitiveDefaultValueFromJsonString(item, elementType) :
-            JsonUtil.mapper().readValue(item, SerDeValue.class).getValue());
-      }
-      return list;
-    }
-
-    Preconditions.checkArgument((type.isMapType() || type.isStructType()) && jsonStringCollection instanceof Map,
-        "deserialized Json object: (%s) is not Map for type: %s", jsonStringCollection, type);
-
-    // map (MapType or StructType) case
-    Map<String, Object> map = new HashMap<>();
-    Map<String, String> jsonStringMap = (HashMap<String, String>) jsonStringCollection;
-    for (Map.Entry entry : jsonStringMap.entrySet()) {
-      String key = entry.getKey().toString();
-      String valueString = entry.getValue().toString();
-      Type elementType = type.isMapType() ? type.asMapType().valueType() : type.asStructType().field(key).type();
-      Object value = elementType.isPrimitiveType() ? primitiveDefaultValueFromJsonString(valueString, elementType)
-            : JsonUtil.mapper().readValue(valueString, SerDeValue.class).getValue();
-      map.put(key, value);
-    }
-    return map;
-  }
-
-  private static Object primitiveDefaultValueFromJsonString(String jsonString, Type type) {
-    switch (type.typeId()) {
-      case BOOLEAN:
-        return Boolean.valueOf(jsonString);
-      case INTEGER:
-      case DATE:
-        return Integer.valueOf(jsonString);
-      case DECIMAL:
-        return BigDecimal.valueOf(Long.valueOf(jsonString));
-      case LONG:
-      case TIME:
-      case TIMESTAMP:
-        return Long.valueOf(jsonString);
-      case FLOAT:
-        return Float.valueOf(jsonString);
-      case DOUBLE:
-        return Double.valueOf(jsonString);
-      case STRING:
-        return jsonString;
-      case UUID:
-        return java.util.UUID.fromString(jsonString);
-      case FIXED:
-      case BINARY:
-        return defaultValueFromJsonBytesField(jsonString);
-      default:
-        throw new RuntimeException("non-primitive type: " + type);
-    }
-  }
-
-  /**
-   * SerDeValue class:
-   *   This is used so that the value to serialize is specified
-   *   as a property, so that the type information gets included in
-   *   the serialized String.
-   */
-  private static class SerDeValue {
-    // Name of the field used in the intermediate JSON representation
-    private static final String VALUE_FIELD = "__value__";
-
-    @JsonProperty(VALUE_FIELD)
-    private final Object value;
-
-    @JsonCreator
-    private SerDeValue(@JsonProperty(VALUE_FIELD) Object value) {
-      this.value = value;
-    }
-
-    private Object getValue() {
-      return value;
     }
   }
 }

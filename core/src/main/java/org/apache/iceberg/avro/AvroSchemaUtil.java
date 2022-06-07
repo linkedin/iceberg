@@ -518,7 +518,7 @@ public class AvroSchemaUtil {
         !(field.defaultVal() instanceof String && ((String) field.defaultVal()).equalsIgnoreCase("null"));
   }
 
-  static Object convertToJavaDefaultValue(Object defaultValue) {
+  public static Object convertToJavaDefaultValue(Object defaultValue) {
     if (defaultValue instanceof List) {
       return ((List<?>) defaultValue).stream()
           .map(AvroSchemaUtil::convertToJavaDefaultValue)
