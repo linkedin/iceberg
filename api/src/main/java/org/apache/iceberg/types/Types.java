@@ -592,7 +592,8 @@ public class Types {
         return false;
       } else if (!name.equals(that.name)) {
         return false;
-      } else if (!Objects.equals(defaultValue, that.defaultValue)) {
+      } else if (!Objects.equals(defaultValue, that.defaultValue) &&
+          !Arrays.equals((byte[]) defaultValue, (byte[]) that.defaultValue)) {
         return false;
       } else if (!Objects.equals(doc, that.doc)) {
         return false;
