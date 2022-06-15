@@ -432,11 +432,11 @@ public class VectorizedSparkOrcReaders {
   }
 
   private static class UnionConverter implements Converter {
-    private final Types.StructType structType;
+    private final Type type;
     private final List<Converter> optionConverters;
 
     private UnionConverter(Type type, List<Converter> optionConverters) {
-      this.structType = type.asStructType();
+      this.type = type;
       this.optionConverters = optionConverters;
     }
 
@@ -444,24 +444,30 @@ public class VectorizedSparkOrcReaders {
     public ColumnVector convert(org.apache.orc.storage.ql.exec.vector.ColumnVector vector, int batchSize,
         long batchOffsetInFile) {
       UnionColumnVector unionColumnVector = (UnionColumnVector) vector;
-      List<Types.NestedField> fields = structType.fields();
-      List<ColumnVector> fieldVectors = Lists.newArrayListWithExpectedSize(fields.size());
+      if (optionConverters.size() > 1) {
+        // the case of complex union with multiple types
+        List<Types.NestedField> fields = type.asStructType().fields();
+        List<ColumnVector> fieldVectors = Lists.newArrayListWithExpectedSize(fields.size());
 
-      LongColumnVector longColumnVector = new LongColumnVector();
-      longColumnVector.vector = Arrays.stream(unionColumnVector.tags).asLongStream().toArray();
+        LongColumnVector longColumnVector = new LongColumnVector();
+        longColumnVector.vector = Arrays.stream(unionColumnVector.tags).asLongStream().toArray();
 
-      fieldVectors.add(new PrimitiveOrcColumnVector(Types.IntegerType.get(), batchSize, longColumnVector,
-          OrcValueReaders.ints(), batchOffsetInFile));
-      for (int i = 0; i < fields.size() - 1; i += 1) {
-        fieldVectors.add(optionConverters.get(i).convert(unionColumnVector.fields[i], batchSize, batchOffsetInFile));
-      }
-
-      return new BaseOrcColumnVector(structType, batchSize, vector) {
-        @Override
-        public ColumnVector getChild(int ordinal) {
-          return fieldVectors.get(ordinal);
+        fieldVectors.add(new PrimitiveOrcColumnVector(Types.IntegerType.get(), batchSize, longColumnVector,
+            OrcValueReaders.ints(), batchOffsetInFile));
+        for (int i = 0; i < fields.size() - 1; i += 1) {
+          fieldVectors.add(optionConverters.get(i).convert(unionColumnVector.fields[i], batchSize, batchOffsetInFile));
         }
-      };
+
+        return new BaseOrcColumnVector(type.asStructType(), batchSize, vector) {
+          @Override
+          public ColumnVector getChild(int ordinal) {
+            return fieldVectors.get(ordinal);
+          }
+        };
+      } else {
+        // the case of single type union
+        return optionConverters.get(0).convert(unionColumnVector.fields[0], batchSize, batchOffsetInFile);
+      }
     }
   }
 }
