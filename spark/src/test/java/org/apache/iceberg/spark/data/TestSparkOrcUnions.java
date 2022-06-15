@@ -293,7 +293,6 @@ public class TestSparkOrcUnions {
     }
 
     // Test vectorized reader
-    /*
     try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
         .project(expectedSchema)
         .createBatchedReaderFunc(readOrcSchema ->
@@ -304,7 +303,6 @@ public class TestSparkOrcUnions {
       assertEquals(expectedSchema, expectedFirstRow, actualRowsIt.next());
       assertEquals(expectedSchema, expectedSecondRow, actualRowsIt.next());
     }
-     */
   }
 
   @Test
@@ -366,7 +364,6 @@ public class TestSparkOrcUnions {
     }
 
     // Test vectorized reader
-    /*
     try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
         .project(expectedSchema)
         .createBatchedReaderFunc(readOrcSchema ->
@@ -377,7 +374,6 @@ public class TestSparkOrcUnions {
       assertEquals(expectedSchema, expectedFirstRow, actualRowsIt.next());
       assertEquals(expectedSchema, expectedSecondRow, actualRowsIt.next());
     }
-     */
   }
 
   @Test
@@ -441,7 +437,6 @@ public class TestSparkOrcUnions {
     }
 
     // Test vectorized reader
-    /*
     try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
         .project(expectedSchema)
         .createBatchedReaderFunc(readOrcSchema ->
@@ -452,7 +447,6 @@ public class TestSparkOrcUnions {
       assertEquals(expectedSchema, expectedFirstRow, actualRowsIt.next());
       assertEquals(expectedSchema, expectedSecondRow, actualRowsIt.next());
     }
-     */
   }
 
   private Iterator<InternalRow> batchesToRows(Iterator<ColumnarBatch> batches) {
