@@ -172,29 +172,29 @@ public class TestSparkAvroReaderForFieldsWithDefaultValue {
     Assert.assertEquals(expected.size(), rows.size());
     for (int row = 0; row < expected.size(); row++) {
       InternalRow actualRow = rows.get(row);
-      final InternalRow expectedFirstRow = new GenericInternalRow(8);
-      expectedFirstRow.update(0, UTF8String.fromString((String) expected.get(row).get(0)));
-      expectedFirstRow.update(1, UTF8String.fromString("foo"));
-      expectedFirstRow.update(2, 1);
-      expectedFirstRow.update(3, new ArrayBasedMapData(
+      final InternalRow expectedRow = new GenericInternalRow(8);
+      expectedRow.update(0, UTF8String.fromString((String) expected.get(row).get(0)));
+      expectedRow.update(1, UTF8String.fromString("foo"));
+      expectedRow.update(2, 1);
+      expectedRow.update(3, new ArrayBasedMapData(
               new GenericArrayData(Arrays.asList(UTF8String.fromString("a"))),
               new GenericArrayData(Arrays.asList(1))));
-      expectedFirstRow.update(4, new GenericArrayData(ImmutableList.of(1, 2, 3).toArray()));
+      expectedRow.update(4, new GenericArrayData(ImmutableList.of(1, 2, 3).toArray()));
 
       final InternalRow nestedStructData = new GenericInternalRow(2);
       nestedStructData.update(0, 999L);
       nestedStructData.update(1, UTF8String.fromString("foo"));
-      expectedFirstRow.update(5, nestedStructData);
+      expectedRow.update(5, nestedStructData);
 
       List<GenericArrayData> listOfLists = new ArrayList<GenericArrayData>(1);
       listOfLists.add(new GenericArrayData(ImmutableList.of(1, 2, 3).toArray()));
-      expectedFirstRow.update(6, new ArrayBasedMapData(
+      expectedRow.update(6, new ArrayBasedMapData(
               new GenericArrayData(Arrays.asList(UTF8String.fromString("key"))),
               new GenericArrayData(listOfLists.toArray())));
 
       byte[] objGUIDByteArr = "FF".getBytes("UTF-8");
-      expectedFirstRow.update(7, objGUIDByteArr);
-      assertEquals(icebergReadSchema, actualRow, expectedFirstRow);
+      expectedRow.update(7, objGUIDByteArr);
+      assertEquals(icebergReadSchema, actualRow, expectedRow);
 
     }
   }
