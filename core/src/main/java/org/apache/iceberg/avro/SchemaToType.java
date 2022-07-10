@@ -20,7 +20,10 @@
 package org.apache.iceberg.avro;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
@@ -30,13 +33,21 @@ import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 
 class SchemaToType extends AvroSchemaVisitor<Type> {
+  public static final String AVRO_FIELD_NAME_TO_ICEBERG_ID = "AvroFieldNameToIcebergId";
   private final Schema root;
+  private boolean deriveNameMapping;
 
   SchemaToType(Schema root) {
     this.root = root;
     if (root.getType() == Schema.Type.RECORD) {
       this.nextId = root.getFields().size();
     }
+    this.deriveNameMapping = false;
+  }
+
+  SchemaToType(Schema root, boolean deriveNameMapping) {
+    this(root);
+    this.deriveNameMapping = deriveNameMapping;
   }
 
   private int nextId = 1;
@@ -88,19 +99,27 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       this.nextId = 0;
     }
 
+    Map<String, Integer> fieldNameToId = new HashMap<>();
     for (int i = 0; i < fields.size(); i += 1) {
       Schema.Field field = fields.get(i);
       Type fieldType = fieldTypes.get(i);
       int fieldId = getId(field);
 
-      Object defaultValue = AvroSchemaUtil.hasNonNullDefaultValue(field) ?
-          AvroSchemaUtil.convertToJavaDefaultValue(field.defaultVal()) : null;
+      Object defaultValue =
+          AvroSchemaUtil.hasNonNullDefaultValue(field) ?
+              AvroSchemaUtil.convertToJavaDefaultValue(field.defaultVal()) : null;
 
       if (AvroSchemaUtil.isOptionSchema(field.schema()) || AvroSchemaUtil.isOptionalComplexUnion(field.schema())) {
         newFields.add(Types.NestedField.optional(fieldId, field.name(), fieldType, defaultValue, field.doc()));
       } else {
         newFields.add(Types.NestedField.required(fieldId, field.name(), fieldType, defaultValue, field.doc()));
       }
+
+      fieldNameToId.put(field.name(), fieldId);
+    }
+
+    if (deriveNameMapping && record.getObjectProp(AVRO_FIELD_NAME_TO_ICEBERG_ID) == null) {
+      record.addProp(AVRO_FIELD_NAME_TO_ICEBERG_ID, fieldNameToId);
     }
 
     return Types.StructType.of(newFields);
@@ -121,14 +140,22 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       return options.get(0);
     } else {
       // Complex union
+      Map<String, Integer> fieldNameToId = new HashMap<>();
       List<Types.NestedField> newFields = new ArrayList<>();
       newFields.add(Types.NestedField.required(allocateId(), "tag", Types.IntegerType.get()));
 
       int tagIndex = 0;
       for (Type type : options) {
         if (type != null) {
-          newFields.add(Types.NestedField.optional(allocateId(), "field" + tagIndex++, type));
+          int fieldId = allocateId();
+          Schema schema = union.getTypes().get(tagIndex);
+          newFields.add(Types.NestedField.optional(fieldId, "field" + tagIndex++, type));
+          String name = schema.getType().equals(Schema.Type.RECORD) ? schema.getName() : schema.getType().getName();
+          fieldNameToId.put(name, fieldId);
         }
+      }
+      if (deriveNameMapping && union.getObjectProp(AVRO_FIELD_NAME_TO_ICEBERG_ID) == null) {
+        union.addProp(AVRO_FIELD_NAME_TO_ICEBERG_ID, fieldNameToId);
       }
 
       return Types.StructType.of(newFields);
@@ -147,6 +174,12 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       Types.NestedField keyField = keyValueType.field("key");
       Types.NestedField valueField = keyValueType.field("value");
 
+      if (deriveNameMapping && array.getObjectProp(AVRO_FIELD_NAME_TO_ICEBERG_ID) == null) {
+        Map<String, Integer> fieldNameToId = new HashMap<>();
+        fieldNameToId.put("key", keyField.fieldId());
+        fieldNameToId.put("value", valueField.fieldId());
+        array.addProp(AVRO_FIELD_NAME_TO_ICEBERG_ID, fieldNameToId);
+      }
       if (keyValueType.field("value").isOptional()) {
         return Types.MapType.ofOptional(
             keyField.fieldId(), valueField.fieldId(), keyField.type(), valueField.type());
@@ -159,6 +192,9 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       // normal array
       Schema elementSchema = array.getElementType();
       int id = getElementId(array);
+      if (deriveNameMapping && array.getObjectProp(AVRO_FIELD_NAME_TO_ICEBERG_ID) == null) {
+        array.addProp(AVRO_FIELD_NAME_TO_ICEBERG_ID, Collections.singletonMap("element", id));
+      }
       if (AvroSchemaUtil.isOptionSchema(elementSchema)) {
         return Types.ListType.ofOptional(id, elementType);
       } else {
@@ -172,6 +208,12 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
     Schema valueSchema = map.getValueType();
     int keyId = getKeyId(map);
     int valueId = getValueId(map);
+    if (deriveNameMapping && map.getObjectProp(AVRO_FIELD_NAME_TO_ICEBERG_ID) == null) {
+      Map<String, Integer> fieldNameToId = new HashMap<>();
+      fieldNameToId.put("key", keyId);
+      fieldNameToId.put("value", valueId);
+      map.addProp(AVRO_FIELD_NAME_TO_ICEBERG_ID, fieldNameToId);
+    }
 
     if (AvroSchemaUtil.isOptionSchema(valueSchema)) {
       return Types.MapType.ofOptional(keyId, valueId, Types.StringType.get(), valueType);

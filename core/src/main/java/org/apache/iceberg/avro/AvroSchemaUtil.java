@@ -84,6 +84,10 @@ public class AvroSchemaUtil {
     return AvroSchemaVisitor.visit(schema, new SchemaToType(schema));
   }
 
+  public static Type convertToDeriveNameMapping(Schema schema) {
+    return AvroSchemaVisitor.visit(schema, new SchemaToType(schema, true));
+  }
+
   public static org.apache.iceberg.Schema toIceberg(Schema schema) {
     final List<Types.NestedField> fields = convert(schema).asNestedType().asStructType().fields();
     return new org.apache.iceberg.Schema(fields);

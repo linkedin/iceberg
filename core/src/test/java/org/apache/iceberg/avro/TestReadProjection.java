@@ -192,13 +192,15 @@ public abstract class TestReadProjection {
   public void testNestedStructProjection() throws Exception {
     Schema writeSchema = new Schema(
         Types.NestedField.required(0, "id", Types.LongType.get()),
-        Types.NestedField.optional(3, "location", Types.StructType.of(
-            Types.NestedField.required(1, "lat", Types.FloatType.get()),
-            Types.NestedField.required(2, "long", Types.FloatType.get())
+        Types.NestedField.optional(1, "location", Types.StructType.of(
+            Types.NestedField.required(2, "lat", Types.FloatType.get()),
+            Types.NestedField.required(3, "long", Types.FloatType.get())
         ))
     );
 
-    Record record = new Record(AvroSchemaUtil.convert(writeSchema, "table"));
+    org.apache.avro.Schema avroWriteSchema = AvroSchemaUtil.convert(writeSchema, "table");
+    AvroSchemaUtil.convertToDeriveNameMapping(avroWriteSchema);
+    Record record = new Record(avroWriteSchema);
     record.put("id", 34L);
     Record location = new Record(
         AvroSchemaUtil.fromOption(record.getSchema().getField("location").schema()));
@@ -215,8 +217,8 @@ public abstract class TestReadProjection {
     assertNotProjected("should not project location", projected, "location");
 
     Schema latOnly = new Schema(
-        Types.NestedField.optional(3, "location", Types.StructType.of(
-            Types.NestedField.required(1, "lat", Types.FloatType.get())
+        Types.NestedField.optional(1, "location", Types.StructType.of(
+            Types.NestedField.required(2, "lat", Types.FloatType.get())
         ))
     );
 
@@ -229,8 +231,8 @@ public abstract class TestReadProjection {
         52.995143f, (float) projectedLocation.get("lat"), 0.000001f);
 
     Schema longOnly = new Schema(
-        Types.NestedField.optional(3, "location", Types.StructType.of(
-            Types.NestedField.required(2, "long", Types.FloatType.get())
+        Types.NestedField.optional(1, "location", Types.StructType.of(
+            Types.NestedField.required(3, "long", Types.FloatType.get())
         ))
     );
 
@@ -257,13 +259,15 @@ public abstract class TestReadProjection {
   public void testMapProjection() throws IOException {
     Schema writeSchema = new Schema(
         Types.NestedField.required(0, "id", Types.LongType.get()),
-        Types.NestedField.optional(5, "properties",
-            Types.MapType.ofOptional(6, 7, Types.StringType.get(), Types.StringType.get()))
+        Types.NestedField.optional(1, "properties",
+            Types.MapType.ofOptional(2, 3, Types.StringType.get(), Types.StringType.get()))
     );
 
     Map<String, String> properties = ImmutableMap.of("a", "A", "b", "B");
 
-    Record record = new Record(AvroSchemaUtil.convert(writeSchema, "table"));
+    org.apache.avro.Schema avroWriteSchema = AvroSchemaUtil.convert(writeSchema, "table");
+    AvroSchemaUtil.convertToDeriveNameMapping(avroWriteSchema);
+    Record record = new Record(avroWriteSchema);
     record.put("id", 34L);
     record.put("properties", properties);
 
@@ -319,7 +323,10 @@ public abstract class TestReadProjection {
         ))
     );
 
-    Record record = new Record(AvroSchemaUtil.convert(writeSchema, "table"));
+    org.apache.avro.Schema avroWriteSchema = AvroSchemaUtil.convert(writeSchema, "table");
+    AvroSchemaUtil.convertToDeriveNameMapping(avroWriteSchema);
+
+    Record record = new Record(avroWriteSchema);
     record.put("id", 34L);
     Record l1 = new Record(AvroSchemaUtil.fromOption(
         AvroSchemaUtil.fromOption(record.getSchema().getField("locations").schema())
@@ -413,13 +420,15 @@ public abstract class TestReadProjection {
   public void testListProjection() throws IOException {
     Schema writeSchema = new Schema(
         Types.NestedField.required(0, "id", Types.LongType.get()),
-        Types.NestedField.optional(10, "values",
+        Types.NestedField.optional(1, "values",
             Types.ListType.ofOptional(11, Types.LongType.get()))
     );
 
     List<Long> values = ImmutableList.of(56L, 57L, 58L);
 
-    Record record = new Record(AvroSchemaUtil.convert(writeSchema, "table"));
+    org.apache.avro.Schema avroWriteSchema = AvroSchemaUtil.convert(writeSchema, "table");
+    AvroSchemaUtil.convertToDeriveNameMapping(avroWriteSchema);
+    Record record = new Record(avroWriteSchema);
     record.put("id", 34L);
     record.put("values", values);
 
@@ -455,7 +464,9 @@ public abstract class TestReadProjection {
         )
     );
 
-    Record record = new Record(AvroSchemaUtil.convert(writeSchema, "table"));
+    org.apache.avro.Schema avroWriteSchema = AvroSchemaUtil.convert(writeSchema, "table");
+    AvroSchemaUtil.convertToDeriveNameMapping(avroWriteSchema);
+    Record record = new Record(avroWriteSchema);
     record.put("id", 34L);
     Record p1 = new Record(AvroSchemaUtil.fromOption(
         AvroSchemaUtil.fromOption(record.getSchema().getField("points").schema())
