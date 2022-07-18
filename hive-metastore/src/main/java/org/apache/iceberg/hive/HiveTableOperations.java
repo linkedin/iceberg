@@ -142,6 +142,13 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     }
   }
 
+  protected enum CommitStatus {
+    FAILURE,
+    SUCCESS,
+    UNKNOWN
+  }
+
+  private final HiveClientPool metaClients;
   private final String fullName;
   private final String database;
   private final String tableName;
