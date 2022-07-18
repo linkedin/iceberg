@@ -78,6 +78,8 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
   private final HiveClientPool metaClients;
   private final String databaseName;
   private final String tableName;
+
+  private final String fullName;
   private final Configuration conf;
 
   private FileIO fileIO;
@@ -87,6 +89,12 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
     this.metaClients = metaClients;
     this.databaseName = database;
     this.tableName = table;
+    this.fullName = database + "." + table;
+  }
+
+  @Override
+  protected String tableName() {
+    return fullName;
   }
 
   @Override
