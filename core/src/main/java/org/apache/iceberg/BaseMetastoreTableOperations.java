@@ -22,6 +22,7 @@ package org.apache.iceberg;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.exceptions.CommitFailedException;
@@ -32,9 +33,19 @@ import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.relocated.com.google.common.base.Objects;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.Tasks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.iceberg.TableProperties.COMMIT_NUM_STATUS_CHECKS;
+import static org.apache.iceberg.TableProperties.COMMIT_NUM_STATUS_CHECKS_DEFAULT;
+import static org.apache.iceberg.TableProperties.COMMIT_STATUS_CHECKS_MAX_WAIT_MS;
+import static org.apache.iceberg.TableProperties.COMMIT_STATUS_CHECKS_MAX_WAIT_MS_DEFAULT;
+import static org.apache.iceberg.TableProperties.COMMIT_STATUS_CHECKS_MIN_WAIT_MS;
+import static org.apache.iceberg.TableProperties.COMMIT_STATUS_CHECKS_MIN_WAIT_MS_DEFAULT;
+import static org.apache.iceberg.TableProperties.COMMIT_STATUS_CHECKS_TOTAL_WAIT_MS;
+import static org.apache.iceberg.TableProperties.COMMIT_STATUS_CHECKS_TOTAL_WAIT_MS_DEFAULT;
 
 public abstract class BaseMetastoreTableOperations implements TableOperations {
   private static final Logger LOG = LoggerFactory.getLogger(BaseMetastoreTableOperations.class);
@@ -59,9 +70,7 @@ public abstract class BaseMetastoreTableOperations implements TableOperations {
    * catalogName + "." + database + "." + table.
    * @return The full name
    */
-  protected String tableName() {
-    return null;
-  }
+  protected abstract String tableName();
 
   @Override
   public TableMetadata current() {
@@ -132,6 +141,10 @@ public abstract class BaseMetastoreTableOperations implements TableOperations {
     this.shouldRefresh = true;
   }
 
+  protected void disableRefresh() {
+    this.shouldRefresh = false;
+  }
+
   protected String writeNewMetadata(TableMetadata metadata, int newVersion) {
     String newTableMetadataFilePath = newTableMetadataFilePath(metadata, newVersion);
     OutputFile newMetadataLocation = io().newOutputFile(newTableMetadataFilePath);
@@ -154,6 +167,12 @@ public abstract class BaseMetastoreTableOperations implements TableOperations {
 
   protected void refreshFromMetadataLocation(String newLocation, Predicate<Exception> shouldRetry,
                                              int numRetries) {
+    refreshFromMetadataLocation(newLocation, shouldRetry, numRetries,
+        metadataLocation -> TableMetadataParser.read(io(), metadataLocation));
+  }
+
+  protected void refreshFromMetadataLocation(String newLocation, Predicate<Exception> shouldRetry,
+                                             int numRetries, Function<String, TableMetadata> metadataLoader) {
     // use null-safe equality check because new tables have a null metadata location
     if (!Objects.equal(currentMetadataLocation, newLocation)) {
       LOG.info("Refreshing table metadata from new version: {}", newLocation);
@@ -163,8 +182,7 @@ public abstract class BaseMetastoreTableOperations implements TableOperations {
           .retry(numRetries).exponentialBackoff(100, 5000, 600000, 4.0 /* 100, 400, 1600, ... */)
           .throwFailureWhenFinished()
           .shouldRetryTest(shouldRetry)
-          .run(metadataLocation -> newMetadata.set(
-              TableMetadataParser.read(io(), metadataLocation)));
+          .run(metadataLocation -> newMetadata.set(metadataLoader.apply(metadataLocation)));
 
       String newUUID = newMetadata.get().uuid();
       if (currentMetadata != null && currentMetadata.uuid() != null && newUUID != null) {
@@ -243,6 +261,61 @@ public abstract class BaseMetastoreTableOperations implements TableOperations {
         return BaseMetastoreTableOperations.this.newSnapshotId();
       }
     };
+  }
+
+  protected enum CommitStatus {
+    FAILURE,
+    SUCCESS,
+    UNKNOWN
+  }
+
+  /**
+   * Attempt to load the table and see if any current or past metadata location matches the one we were attempting
+   * to set. This is used as a last resort when we are dealing with exceptions that may indicate the commit has
+   * failed but are not proof that this is the case. Past locations must also be searched on the chance that a second
+   * committer was able to successfully commit on top of our commit.
+   *
+   * @param newMetadataLocation the path of the new commit file
+   * @param config metadata to use for configuration
+   * @return Commit Status of Success, Failure or Unknown
+   */
+  protected CommitStatus checkCommitStatus(String newMetadataLocation, TableMetadata config) {
+    int maxAttempts = PropertyUtil.propertyAsInt(config.properties(), COMMIT_NUM_STATUS_CHECKS,
+        COMMIT_NUM_STATUS_CHECKS_DEFAULT);
+    long minWaitMs = PropertyUtil.propertyAsLong(config.properties(), COMMIT_STATUS_CHECKS_MIN_WAIT_MS,
+        COMMIT_STATUS_CHECKS_MIN_WAIT_MS_DEFAULT);
+    long maxWaitMs = PropertyUtil.propertyAsLong(config.properties(), COMMIT_STATUS_CHECKS_MAX_WAIT_MS,
+        COMMIT_STATUS_CHECKS_MAX_WAIT_MS_DEFAULT);
+    long totalRetryMs = PropertyUtil.propertyAsLong(config.properties(), COMMIT_STATUS_CHECKS_TOTAL_WAIT_MS,
+        COMMIT_STATUS_CHECKS_TOTAL_WAIT_MS_DEFAULT);
+
+    AtomicReference<CommitStatus> status = new AtomicReference<>(CommitStatus.UNKNOWN);
+
+    Tasks.foreach(newMetadataLocation)
+        .retry(maxAttempts)
+        .suppressFailureWhenFinished()
+        .exponentialBackoff(minWaitMs, maxWaitMs, totalRetryMs, 2.0)
+        .onFailure((location, checkException) ->
+            LOG.error("Cannot check if commit to {} exists.", tableName(), checkException))
+        .run(location -> {
+          TableMetadata metadata = refresh();
+          String currentMetadataFileLocation = metadata.metadataFileLocation();
+          boolean commitSuccess = currentMetadataFileLocation.equals(newMetadataLocation) ||
+              metadata.previousFiles().stream().anyMatch(log -> log.file().equals(newMetadataLocation));
+          if (commitSuccess) {
+            LOG.info("Commit status check: Commit to {} of {} succeeded", tableName(), newMetadataLocation);
+            status.set(CommitStatus.SUCCESS);
+          } else {
+            LOG.warn("Commit status check: Commit to {} of {} unknown, new metadata location is not current " +
+                    "or in history", tableName(), newMetadataLocation);
+          }
+        });
+
+    if (status.get() == CommitStatus.UNKNOWN) {
+      LOG.error("Cannot determine commit state to {}. Failed during checking {} times. " +
+              "Treating commit state as unknown.", tableName(), maxAttempts);
+    }
+    return status.get();
   }
 
   private String newTableMetadataFilePath(TableMetadata meta, int newVersion) {
