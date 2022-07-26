@@ -259,7 +259,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
     }
   }
 
-  static List<FieldSchema> getColsFromAvroSchema(Schema schema)
+  private static List<FieldSchema> getColsFromAvroSchema(Schema schema)
       throws SerDeException {
     AvroObjectInspectorGenerator avroOI = new AvroObjectInspectorGenerator(schema);
     List<String> columnNames = avroOI.getColumnNames();
@@ -273,7 +273,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
         .collect(Collectors.toList());
   }
 
-  static String getAvroSchemaLiteral(Table table) {
+  private static String getAvroSchemaLiteral(Table table) {
     String schemaStr = table.getParameters().get(AvroSerdeUtils.AvroTableProperties.SCHEMA_LITERAL.getPropName());
     if (Strings.isNullOrEmpty(schemaStr)) {
       schemaStr = table.getSd().getSerdeInfo().getParameters()

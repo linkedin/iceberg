@@ -35,14 +35,20 @@ public class TestHiveMetadataPreservingTableOperations {
 
   @Test
   public void testFixMismatchedSchema() {
-    // Schema literal with 2 fields (name and id)
-    String testSchemaLiteral = "{\"name\": \"testSchema\", \"type\": \"record\", " +
-        "\"namespace\": \"com.linkedin.test\", \"fields\": [{ \"name\": \"name\", \"type\": " +
-        "\"string\"},{ \"name\": \"id\", \"type\": \"int\"}]}";
+    // Schema literal with 3 fields (name, id, nested)
+    String testSchemaLiteral = "{\"name\":\"testSchema\",\"type\":\"record\",\"namespace\":\"com.linkedin.test\"," +
+        "\"fields\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"id\",\"type\":\"int\"},{\"name\":\"nested\"," +
+        "\"type\":{\"name\":\"nested\",\"type\":\"record\",\"fields\":[{\"name\":\"field1\",\"type\":\"string\"}," +
+        "{\"name\":\"field2\",\"type\":\"string\"}]}}]}";
+
     long currentTimeMillis = System.currentTimeMillis();
     StorageDescriptor storageDescriptor = new StorageDescriptor();
-    // Set cols to only id field (missing name)
-    storageDescriptor.setCols(ImmutableList.of(new FieldSchema("id", "int", "")));
+    FieldSchema field1 = new FieldSchema("name", "string", "");
+    FieldSchema field2 = new FieldSchema("id", "int", "");
+    FieldSchema field3 = new FieldSchema("nested", "struct<field1:string,field2:string>", "");
+    // Set cols with incorrect nested type
+    storageDescriptor.setCols(ImmutableList.of(field1, field2, new FieldSchema("nested", "struct<field1:int," +
+        "field2:string>", "")));
     Map<String, String> parameters = ImmutableMap.of("avro.schema.literal", testSchemaLiteral);
     Table tbl = new Table("tableName",
         "dbName",
@@ -57,10 +63,10 @@ public class TestHiveMetadataPreservingTableOperations {
         null,
         TableType.EXTERNAL_TABLE.toString());
 
-    Assert.assertEquals(1, tbl.getSd().getColsSize());
     HiveMetadataPreservingTableOperations.fixMismatchedSchema(tbl);
-    Assert.assertEquals(2, tbl.getSd().getColsSize());
-    Assert.assertEquals("name", tbl.getSd().getCols().get(0).getName());
-    Assert.assertEquals("id", tbl.getSd().getCols().get(1).getName());
+    Assert.assertEquals(3, tbl.getSd().getColsSize());
+    Assert.assertEquals(field1, tbl.getSd().getCols().get(0));
+    Assert.assertEquals(field2, tbl.getSd().getCols().get(1));
+    Assert.assertEquals(field3, tbl.getSd().getCols().get(2));
   }
 }
