@@ -22,15 +22,25 @@ package org.apache.iceberg.hivelink.core;
 import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.avro.AvroObjectInspectorGenerator;
+import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.common.DynMethods;
 import org.apache.iceberg.exceptions.AlreadyExistsException;
@@ -40,6 +50,7 @@ import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.hive.HiveClientPool;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.relocated.com.google.common.base.Strings;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.thrift.TException;
@@ -141,6 +152,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
       if (tableExists) {
         tbl = metaClients.run(client -> client.getTable(database, tableName));
+        fixMismatchedSchema(tbl);
       } else {
         final long currentTimeMillis = System.currentTimeMillis();
         tbl = new Table(tableName,
@@ -207,6 +219,67 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
     } finally {
       cleanupMetadataAndUnlock(commitStatus, newMetadataLocation, lockId);
     }
+  }
+
+  /**
+   * [LINKEDIN] Due to an issue that the table read in is sometimes corrupted and has incorrect columns, compare the
+   * table columns to the avro.schema.literal property (if it exists) and fix the table columns if there is a mismatch
+   */
+  static void fixMismatchedSchema(Table table) {
+    String avroSchemaLiteral = getAvroSchemaLiteral(table);
+    if (Strings.isNullOrEmpty(avroSchemaLiteral)) {
+      return;
+    }
+    Schema schema = new Schema.Parser().parse(avroSchemaLiteral);
+    List<FieldSchema> hiveCols;
+    try {
+      hiveCols = getColsFromAvroSchema(schema);
+    } catch (SerDeException e) {
+      LOG.error("Failed to get get columns from avro schema when checking schema", e);
+      return;
+    }
+
+    boolean schemaMismatched;
+    if (table.getSd().getCols().size() != hiveCols.size()) {
+      schemaMismatched = true;
+    } else {
+      Map<String, String> hiveFieldMap = hiveCols.stream().collect(
+          Collectors.toMap(FieldSchema::getName, FieldSchema::getType));
+      Map<String, String> tableFieldMap = table.getSd().getCols().stream().collect(
+          Collectors.toMap(FieldSchema::getName, FieldSchema::getType));
+      schemaMismatched = !hiveFieldMap.equals(tableFieldMap);
+    }
+
+    if (schemaMismatched) {
+      LOG.warn("Schema columns don't match avro.schema.literal, setting columns to avro.schema.literal. Schema " +
+              "columns: {}, avro.schema.literal columns: {}",
+          table.getSd().getCols().stream().map(Object::toString).collect(Collectors.joining(", ")),
+          hiveCols.stream().map(Object::toString).collect(Collectors.joining(", ")));
+      table.getSd().setCols(hiveCols);
+    }
+  }
+
+  private static List<FieldSchema> getColsFromAvroSchema(Schema schema)
+      throws SerDeException {
+    AvroObjectInspectorGenerator avroOI = new AvroObjectInspectorGenerator(schema);
+    List<String> columnNames = avroOI.getColumnNames();
+    List<TypeInfo> columnTypes = avroOI.getColumnTypes();
+    if (columnNames.size() != columnTypes.size()) {
+      throw new IllegalStateException();
+    }
+
+    return IntStream.range(0, columnNames.size())
+        .mapToObj(i -> new FieldSchema(columnNames.get(i), columnTypes.get(i).getTypeName(), ""))
+        .collect(Collectors.toList());
+  }
+
+  private static String getAvroSchemaLiteral(Table table) {
+    String schemaStr = table.getParameters().get(AvroSerdeUtils.AvroTableProperties.SCHEMA_LITERAL.getPropName());
+    if (Strings.isNullOrEmpty(schemaStr)) {
+      schemaStr = table.getSd().getSerdeInfo().getParameters()
+          .get(AvroSerdeUtils.AvroTableProperties.SCHEMA_LITERAL.getPropName());
+    }
+    return schemaStr;
   }
 
   /**
