@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.Files;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.orc.ORC;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
@@ -141,6 +142,75 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
     // vectorized-read
     try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
         .project(readSchema)
+        .createBatchedReaderFunc(readOrcSchema ->
+            VectorizedSparkOrcReaders.buildReader(readSchema, readOrcSchema, ImmutableMap.of()))
+        .build()) {
+      final Iterator<InternalRow> actualRows = batchesToRows(reader.iterator());
+      final InternalRow actualFirstRow = actualRows.next();
+
+      assertEquals(readSchema, expectedFirstRow, actualFirstRow);
+    }
+  }
+
+  @Test
+  public void testSelectionAndFilterWithDefaultValueColumnOnly() throws IOException {
+    final int numRows = 10;
+
+    final InternalRow expectedFirstRow = new GenericInternalRow(1);
+    // expectedFirstRow.update(0, 0);
+    expectedFirstRow.update(0, UTF8String.fromString("foo"));
+
+    TypeDescription orcSchema =
+        TypeDescription.fromString("struct<col1:int>");
+
+    Schema readSchema = new Schema(
+        Types.NestedField.required(2, "col2", Types.StringType.get(), "foo", null)
+    );
+
+    Configuration conf = new Configuration();
+
+    File orcFile = temp.newFile();
+    Path orcFilePath = new Path(orcFile.getPath());
+
+    Writer writer = OrcFile.createWriter(orcFilePath,
+        OrcFile.writerOptions(conf).setSchema(orcSchema).overwrite(true));
+
+    VectorizedRowBatch batch = orcSchema.createRowBatch();
+    LongColumnVector firstCol = (LongColumnVector) batch.cols[0];
+    for (int r = 0; r < numRows; ++r) {
+      int row = batch.size++;
+      firstCol.vector[row] = r;
+      // If the batch is full, write it out and start over.
+      if (batch.size == batch.getMaxSize()) {
+        writer.addRowBatch(batch);
+        batch.reset();
+      }
+    }
+    if (batch.size != 0) {
+      writer.addRowBatch(batch);
+      batch.reset();
+    }
+    writer.close();
+
+    // try to read the data using the readSchema, which is an evolved
+    // schema that contains a new column with default value
+
+    // non-vectorized read
+    try (CloseableIterable<InternalRow> reader = ORC.read(Files.localInput(orcFile))
+        .project(readSchema)
+        .filter(Expressions.equal("col2", "foo"))
+        .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema))
+        .build()) {
+      final Iterator<InternalRow> actualRows = reader.iterator();
+      final InternalRow actualFirstRow = actualRows.next();
+
+      assertEquals(readSchema, expectedFirstRow, actualFirstRow);
+    }
+
+    // vectorized-read
+    try (CloseableIterable<ColumnarBatch> reader = ORC.read(Files.localInput(orcFile))
+        .project(readSchema)
+        .filter(Expressions.equal("col2", "foo"))
         .createBatchedReaderFunc(readOrcSchema ->
             VectorizedSparkOrcReaders.buildReader(readSchema, readOrcSchema, ImmutableMap.of()))
         .build()) {
