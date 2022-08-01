@@ -97,9 +97,13 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
       fileSchemaWithIds = ORCSchemaUtil.applyNameMapping(fileSchema, nameMapping);
     }
     readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchemaWithIds);
+    // If the projected ORC schema is an empty struct, it means we are only projecting columns
+    // with default values that aren't existent in previously written files, and thus we won't need
+    // to push down filters to ORC's SearchArgument, since we are not reading anything from files at all
+    boolean isEmptyStruct = readOrcSchema.getChildren().size() == 0;
 
     SearchArgument sarg = null;
-    if (filter != null) {
+    if (filter != null && !isEmptyStruct) {
       Expression boundFilter = Binder.bind(schema.asStruct(), filter, caseSensitive);
       sarg = ExpressionToSearchArgument.convert(boundFilter, readOrcSchema);
     }
