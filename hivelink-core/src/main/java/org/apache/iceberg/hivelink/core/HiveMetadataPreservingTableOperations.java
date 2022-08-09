@@ -36,6 +36,7 @@ import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.avro.AvroObjectInspectorGenerator;
@@ -53,6 +54,7 @@ import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.Strings;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -82,6 +84,8 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       .impl(HiveMetaStoreClient.class, "alter_table",
           String.class, String.class, Table.class, EnvironmentContext.class)
       .build();
+  public static final String ORC_COLUMNS = "columns";
+  public static final String ORC_COLUMNS_TYPES = "columns.types";
 
   protected HiveMetadataPreservingTableOperations(Configuration conf, HiveClientPool metaClients, FileIO fileIO,
       String catalogName, String database, String table) {
@@ -224,11 +228,12 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
   /**
    * [LINKEDIN] Due to an issue that the table read in is sometimes corrupted and has incorrect columns, compare the
    * table columns to the avro.schema.literal property (if it exists) and fix the table columns if there is a mismatch
+   * @return true if the schema was mismatched and fixed
    */
-  static void fixMismatchedSchema(Table table) {
+  static boolean fixMismatchedSchema(Table table) {
     String avroSchemaLiteral = getAvroSchemaLiteral(table);
     if (Strings.isNullOrEmpty(avroSchemaLiteral)) {
-      return;
+      return false;
     }
     Schema schema = new Schema.Parser().parse(avroSchemaLiteral);
     List<FieldSchema> hiveCols;
@@ -236,7 +241,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       hiveCols = getColsFromAvroSchema(schema);
     } catch (SerDeException e) {
       LOG.error("Failed to get get columns from avro schema when checking schema", e);
-      return;
+      return false;
     }
 
     boolean schemaMismatched;
@@ -244,9 +249,9 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       schemaMismatched = true;
     } else {
       Map<String, String> hiveFieldMap = hiveCols.stream().collect(
-          Collectors.toMap(FieldSchema::getName, FieldSchema::getType));
+          Collectors.toMap(field -> field.getName().toLowerCase(), field -> field.getType().toLowerCase()));
       Map<String, String> tableFieldMap = table.getSd().getCols().stream().collect(
-          Collectors.toMap(FieldSchema::getName, FieldSchema::getType));
+          Collectors.toMap(field -> field.getName().toLowerCase(), field -> field.getType().toLowerCase()));
       schemaMismatched = !hiveFieldMap.equals(tableFieldMap);
     }
 
@@ -256,7 +261,13 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
           table.getSd().getCols().stream().map(Object::toString).collect(Collectors.joining(", ")),
           hiveCols.stream().map(Object::toString).collect(Collectors.joining(", ")));
       table.getSd().setCols(hiveCols);
+      if (!Strings.isNullOrEmpty(table.getSd().getInputFormat()) && table.getSd().getInputFormat()
+          .contains("OrcInputFormat")) {
+        updateORCStorageDesc(hiveCols, table);
+      }
     }
+
+    return schemaMismatched;
   }
 
   private static List<FieldSchema> getColsFromAvroSchema(Schema schema)
@@ -280,6 +291,22 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
           .get(AvroSerdeUtils.AvroTableProperties.SCHEMA_LITERAL.getPropName());
     }
     return schemaStr;
+  }
+
+  private static void updateORCStorageDesc(List<FieldSchema> hiveCols, Table table) {
+    String columnsString = hiveCols.stream().map(FieldSchema::getName).collect(Collectors.joining(","));
+    String typesString = hiveCols.stream().map(FieldSchema::getType).collect(Collectors.joining(","));
+
+    if (!table.getSd().isSetSerdeInfo()) {
+      table.getSd().setSerdeInfo(new SerDeInfo());
+    }
+    if (!table.getSd().getSerdeInfo().isSetParameters()) {
+      table.getSd().getSerdeInfo().setParameters(Maps.newHashMap());
+    }
+
+    Map<String, String> sdParams = table.getSd().getSerdeInfo().getParameters();
+    sdParams.put(ORC_COLUMNS, columnsString);
+    sdParams.put(ORC_COLUMNS_TYPES, typesString);
   }
 
   /**
