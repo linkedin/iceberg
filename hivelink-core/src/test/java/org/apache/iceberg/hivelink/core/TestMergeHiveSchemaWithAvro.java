@@ -291,6 +291,27 @@ public class TestMergeHiveSchemaWithAvro {
   }
 
   @Test
+  public void shouldRetainMapProp() {
+    String hive = "struct<fa:map<string,int>>";
+    Schema fa = map(Schema.Type.INT);
+    fa.addProp("key-id", 1);
+    fa.addProp("value-id", 2);
+    Schema avro = struct("r1", required("fa", fa));
+
+    assertSchema(avro, merge(hive, avro));
+  }
+
+  @Test
+  public void shouldRetainListProp() {
+    String hive = "struct<fa:array<int>>";
+    Schema fa = array(Schema.Type.INT);
+    fa.addProp("element-id", 1);
+    Schema avro = struct("r1", required("fA", fa));
+
+    assertSchema(avro, merge(hive, avro));
+  }
+
+  @Test
   public void shouldRecoverLogicalType() {
     String hive = "struct<fa:date,fb:timestamp,fc:decimal(4,2)>";
     Schema avro = struct("r1",

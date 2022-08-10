@@ -21,6 +21,7 @@ package org.apache.iceberg.hivelink.core.schema;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.avro.JsonProperties;
 import org.apache.avro.LogicalTypes;
@@ -113,6 +114,11 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
     // if there was no matching Avro list, or if matching Avro list was an option, return an optional list
     boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
     Schema result = Schema.createArray(elementResult);
+    if (partner != null) {
+      for (Map.Entry<String, Object> prop : partner.getObjectProps().entrySet()) {
+        result.addProp(prop.getKey(), prop.getValue());
+      }
+    }
     return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
   }
 
@@ -123,6 +129,11 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
     // if there was no matching Avro map, or if matching Avro map was an option, return an optional map
     boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
     Schema result = Schema.createMap(valueResult);
+    if (partner != null) {
+      for (Map.Entry<String, Object> prop : partner.getObjectProps().entrySet()) {
+        result.addProp(prop.getKey(), prop.getValue());
+      }
+    }
     return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
   }
 
