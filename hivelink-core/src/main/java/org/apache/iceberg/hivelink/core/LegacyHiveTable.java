@@ -118,7 +118,7 @@ public class LegacyHiveTable implements Table, HasTableOperations {
 
   @Override
   public Snapshot currentSnapshot() {
-    throw new UnsupportedOperationException("Snapshots not supported for Hive tables without Iceberg metadata");
+    return null;
   }
 
   @Override
