@@ -19,6 +19,7 @@
 
 package org.apache.iceberg.hivelink.core;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.apache.iceberg.AppendFiles;
@@ -128,7 +129,7 @@ public class LegacyHiveTable implements Table, HasTableOperations {
 
   @Override
   public Iterable<Snapshot> snapshots() {
-    throw new UnsupportedOperationException("Snapshots not supported for Hive tables without Iceberg metadata");
+    return Collections.emptyList();
   }
 
   @Override
