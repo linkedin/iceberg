@@ -127,6 +127,14 @@ class LegacyHiveTableUtils {
     return new Schema(partitionFields);
   }
 
+  /**
+   *
+   * @param idMapping A comma separated string representation of column name
+   *                  and its id, e.g. partitionCol1:10,partitionCol2:11, no
+   *                  whitespace is allowed in the middle
+   * @return          The parsed in-mem Map representation of the name to
+   *                  id mapping
+   */
   private static Map<String, Integer> parsePartitionColId(String idMapping) {
     Map<String, Integer> nameToId = Maps.newHashMap();
     if (idMapping != null) {
