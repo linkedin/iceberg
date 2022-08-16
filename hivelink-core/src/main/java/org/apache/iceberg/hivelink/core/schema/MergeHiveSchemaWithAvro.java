@@ -114,11 +114,7 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
     // if there was no matching Avro list, or if matching Avro list was an option, return an optional list
     boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
     Schema result = Schema.createArray(elementResult);
-    if (partner != null) {
-      for (Map.Entry<String, Object> prop : partner.getObjectProps().entrySet()) {
-        result.addProp(prop.getKey(), prop.getValue());
-      }
-    }
+    copySchemaProps(partner, result);
     return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
   }
 
@@ -129,11 +125,7 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
     // if there was no matching Avro map, or if matching Avro map was an option, return an optional map
     boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
     Schema result = Schema.createMap(valueResult);
-    if (partner != null) {
-      for (Map.Entry<String, Object> prop : partner.getObjectProps().entrySet()) {
-        result.addProp(prop.getKey(), prop.getValue());
-      }
-    }
+    copySchemaProps(partner, result);
     return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
   }
 
@@ -161,6 +153,14 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
     // TODO: Check if schema is compatible with partner
     //       Also do type promotion if required, schema = string & partner = enum, schema = bytes & partner = fixed, etc
     return schema;
+  }
+
+  private static void copySchemaProps(Schema from, Schema to) {
+    if (from != null) {
+      for (Map.Entry<String, Object> prop : from.getObjectProps().entrySet()) {
+        to.addProp(prop.getKey(), prop.getValue());
+      }
+    }
   }
 
   /**
