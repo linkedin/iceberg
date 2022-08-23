@@ -102,8 +102,12 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     // to push down filters to ORC's SearchArgument, since we are not reading anything from files at all
     boolean isEmptyStruct = readOrcSchema.getChildren().size() == 0;
 
+    // If the projected ORC schema has union type, we can't reliably build a pushdown filter for the
+    // underlying ORC files, since the Iceberg schema has a different representation than the ORC schema.
+    boolean containsUnion = readOrcSchema.toString().contains("uniontype");
+
     SearchArgument sarg = null;
-    if (filter != null && !isEmptyStruct) {
+    if (filter != null && !isEmptyStruct && !containsUnion) {
       Expression boundFilter = Binder.bind(schema.asStruct(), filter, caseSensitive);
       sarg = ExpressionToSearchArgument.convert(boundFilter, readOrcSchema);
     }
