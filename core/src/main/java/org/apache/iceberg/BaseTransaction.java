@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.exceptions.CommitFailedException;
+import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.LocationProvider;
@@ -247,6 +248,9 @@ class BaseTransaction implements Transaction {
     try {
       ops.commit(null, createMetadata);
 
+    } catch (CommitStateUnknownException e) {
+      throw e;
+
     } catch (RuntimeException e) {
       // the commit failed and no files were committed. clean up each update.
       Tasks.foreach(updates)
@@ -301,6 +305,9 @@ class BaseTransaction implements Transaction {
 
             underlyingOps.commit(base, replaceMetadata);
           });
+
+    } catch (CommitStateUnknownException e) {
+      throw e;
 
     } catch (RuntimeException e) {
       // the commit failed and no files were committed. clean up each update.
@@ -359,6 +366,9 @@ class BaseTransaction implements Transaction {
             // fix up the snapshot log, which should not contain intermediate snapshots
             underlyingOps.commit(base, current.removeSnapshotLogEntries(intermediateSnapshotIds));
           });
+
+    } catch (CommitStateUnknownException e) {
+      throw e;
 
     } catch (RuntimeException e) {
       // the commit failed and no files were committed. clean up each update.
