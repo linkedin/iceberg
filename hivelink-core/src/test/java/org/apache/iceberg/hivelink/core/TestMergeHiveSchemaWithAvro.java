@@ -302,11 +302,32 @@ public class TestMergeHiveSchemaWithAvro {
   }
 
   @Test
+  public void shouldRetainNullableMapProp() {
+    String hive = "struct<fa:map<string,int>>";
+    Schema fa = map(Schema.Type.INT);
+    fa.addProp("key-id", 1);
+    fa.addProp("value-id", 2);
+    Schema avro = struct("r1", optional("fa", fa));
+
+    assertSchema(avro, merge(hive, avro));
+  }
+
+  @Test
   public void shouldRetainListProp() {
     String hive = "struct<fa:array<int>>";
     Schema fa = array(Schema.Type.INT);
     fa.addProp("element-id", 1);
     Schema avro = struct("r1", required("fA", fa));
+
+    assertSchema(avro, merge(hive, avro));
+  }
+
+  @Test
+  public void shouldRetainNullableListProp() {
+    String hive = "struct<fa:array<int>>";
+    Schema fa = array(Schema.Type.INT);
+    fa.addProp("element-id", 1);
+    Schema avro = struct("r1", optional("fA", fa));
 
     assertSchema(avro, merge(hive, avro));
   }

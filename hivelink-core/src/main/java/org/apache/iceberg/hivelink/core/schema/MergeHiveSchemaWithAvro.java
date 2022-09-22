@@ -157,7 +157,14 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
 
   private static void copySchemaProps(Schema from, Schema to) {
     if (from != null) {
-      for (Map.Entry<String, Object> prop : from.getObjectProps().entrySet()) {
+      Schema sanitizedFrom;
+      if (AvroSchemaUtil.isOptionSchema(from)) {
+        // extract the actual type from the nullable union
+        sanitizedFrom = AvroSchemaUtil.fromOption(from);
+      } else {
+        sanitizedFrom = from;
+      }
+      for (Map.Entry<String, Object> prop : sanitizedFrom.getObjectProps().entrySet()) {
         to.addProp(prop.getKey(), prop.getValue());
       }
     }
