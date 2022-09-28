@@ -32,9 +32,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.iceberg.BaseMetastoreTableOperations;
+import org.apache.iceberg.ClientPool;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
@@ -75,7 +77,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
   private static final int DEFAULT_TABLE_FORMAT_VERSION = 1;
   private static final int INITIAL_SPEC_ID = 0;
 
-  private final HiveClientPool metaClients;
+  private final ClientPool<IMetaStoreClient, TException> metaClients;
   private final String databaseName;
   private final String tableName;
 
@@ -84,7 +86,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
 
   private FileIO fileIO;
 
-  protected LegacyHiveTableOperations(Configuration conf, HiveClientPool metaClients, String database, String table) {
+  protected LegacyHiveTableOperations(Configuration conf, ClientPool metaClients, String database, String table) {
     this.conf = conf;
     this.metaClients = metaClients;
     this.databaseName = database;
@@ -147,7 +149,9 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
       matchingDirectories = getDirectoryInfosByFilter(expression);
     }
 
-    Iterable<Iterable<DataFile>> filesPerDirectory = Iterables.transform(
+    // Note that we return an Iterable of Iterables here so that the TableScan can process iterables of individual
+    // directories in parallel hence resulting in a parallel file listing
+    return Iterables.transform(
         matchingDirectories,
         directory -> {
           List<FileStatus> files;
@@ -162,10 +166,6 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
               file -> createDataFile(file, current().spec(), directory.partitionData(), directory.format())
           );
         });
-
-    // Note that we return an Iterable of Iterables here so that the TableScan can process iterables of individual
-    // directories in parallel hence resulting in a parallel file listing
-    return filesPerDirectory;
   }
 
   private DirectoryInfo getDirectoryInfo() {
@@ -270,7 +270,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
         .withPath(fileStatus.getPath().toString())
         .withFormat(format)
         .withFileSizeInBytes(fileStatus.getLen())
-        .withMetrics(new Metrics(10000L, null, null, null, null, null));
+        .withMetrics(new Metrics(10000L, null, null, null, null));
 
     if (partitionSpec.fields().isEmpty()) {
       return builder.build();

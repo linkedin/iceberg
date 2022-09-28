@@ -88,24 +88,24 @@ class BuildAvroProjection extends AvroCustomOrderSchemaVisitor<Schema, Schema.Fi
     List<Schema.Field> updatedFields = Lists.newArrayListWithExpectedSize(struct.fields().size());
     List<Types.NestedField> expectedFields = struct.fields();
     for (int i = 0; i < expectedFields.size(); i += 1) {
-      Types.NestedField expectedField = expectedFields.get(i);
+      Types.NestedField field = expectedFields.get(i);
       // detect reordering
-      if (i < fields.size() && !expectedField.name().equals(fields.get(i).name())) {
+      if (i < fields.size() && !field.name().equals(fields.get(i).name())) {
         hasChange = true;
       }
 
-      Schema.Field avroField = updateMap.get(AvroSchemaUtil.makeCompatibleName(expectedField.name()));
+      Schema.Field avroField = updateMap.get(AvroSchemaUtil.makeCompatibleName(field.name()));
 
       if (avroField != null) {
-        // if the expectedField has a defaultValue, but the avroField does not, we need to
+        // if the field has a defaultValue, but the avroField does not, we need to
         // create a newField to copy over the non-null default value.
-        if (expectedField.hasDefaultValue() && !AvroSchemaUtil.hasNonNullDefaultValue(avroField)) {
-          Schema newFiledSchema = (expectedField.isOptional()) ?
+        if (field.hasDefaultValue() && !AvroSchemaUtil.hasNonNullDefaultValue(avroField)) {
+          Schema newFiledSchema = (field.isOptional()) ?
                   AvroSchemaUtil.toOption(avroField.schema(), true) :
                   avroField.schema();
           Schema.Field newField =
-                  new Schema.Field(avroField.name(), newFiledSchema, avroField.doc(), expectedField.getDefaultValue());
-          newField.addProp(AvroSchemaUtil.FIELD_ID_PROP, expectedField.fieldId());
+                  new Schema.Field(avroField.name(), newFiledSchema, avroField.doc(), field.getDefaultValue());
+          newField.addProp(AvroSchemaUtil.FIELD_ID_PROP, field.fieldId());
           updatedFields.add(newField);
           hasChange = true;
         } else {
@@ -113,30 +113,30 @@ class BuildAvroProjection extends AvroCustomOrderSchemaVisitor<Schema, Schema.Fi
           updatedFields.add(avroField);
         }
       } else {
-        // here the expectedField is missing from the file schema, so we verify it is either
+        // here the field is missing from the file schema, so we verify it is either
         // an optional field, a metadata column or one that has default value
-        Preconditions.checkArgument(expectedField.isOptional() ||
-                MetadataColumns.metadataFieldIds().contains(expectedField.fieldId()) ||
-                expectedField.hasDefaultValue(),
-                "Missing required field that has no default value: expectedField: %s, avroField: null, record: %s",
-                expectedField, record);
+        Preconditions.checkArgument(field.isOptional() ||
+                MetadataColumns.metadataFieldIds().contains(field.fieldId()) ||
+                field.hasDefaultValue(),
+                "Missing required field that has no default value: field: %s, avroField: null, record: %s",
+                field, record);
 
-        // Create a field that will be defaulted to the expectedField's default value. If no default value,
+        // Create a field that will be defaulted to the field's default value. If no default value,
         // then default to null and assign a unique suffix to the field to make sure that even if records in the
         // file have the field it is not projected.
-        String newFieldName = expectedField.name();
+        String newFieldName = field.name();
         Schema newFiledSchema;
         Object defaultValue;
-        if (expectedField.hasDefaultValue()) {
-          newFiledSchema = AvroSchemaUtil.convert(expectedField.type());
-          defaultValue = expectedField.getDefaultValue();
+        if (field.hasDefaultValue()) {
+          newFiledSchema = AvroSchemaUtil.convert(field.type());
+          defaultValue = field.getDefaultValue();
         } else {
-          newFieldName = newFieldName + "_r" + expectedField.fieldId();
-          newFiledSchema = AvroSchemaUtil.toOption(AvroSchemaUtil.convert(expectedField.type()));
+          newFieldName = newFieldName + "_r" + field.fieldId();
+          newFiledSchema = AvroSchemaUtil.toOption(AvroSchemaUtil.convert(field.type()));
           defaultValue = JsonProperties.NULL_VALUE;
         }
         Schema.Field newField = new Schema.Field(newFieldName, newFiledSchema, null, defaultValue);
-        newField.addProp(AvroSchemaUtil.FIELD_ID_PROP, expectedField.fieldId());
+        newField.addProp(AvroSchemaUtil.FIELD_ID_PROP, field.fieldId());
         updatedFields.add(newField);
         hasChange = true;
       }
@@ -185,9 +185,10 @@ class BuildAvroProjection extends AvroCustomOrderSchemaVisitor<Schema, Schema.Fi
       Schema nonNullOriginal = AvroSchemaUtil.fromOption(union);
       Schema nonNullResult = AvroSchemaUtil.fromOptions(Lists.newArrayList(options));
 
-    if (!Objects.equals(nonNullOriginal, nonNullResult)) {
-      boolean nullIsSecondOption = union.getTypes().get(1).getType() == Schema.Type.NULL;
+      if (!Objects.equals(nonNullOriginal, nonNullResult)) {
+        boolean nullIsSecondOption = union.getTypes().get(1).getType() == Schema.Type.NULL;
         return AvroSchemaUtil.toOption(nonNullResult, nullIsSecondOption);
+      }
     }
     return union;
   }

@@ -80,4 +80,3 @@ public interface RESTClient extends Closeable {
   <T extends RESTResponse> T postForm(String path, Map<String, String> formData, Class<T> responseType,
                                       Map<String, String> headers, Consumer<ErrorResponse> errorHandler);
 }
-

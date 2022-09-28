@@ -19,7 +19,6 @@
 
 package org.apache.iceberg;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +28,7 @@ import org.apache.avro.Schema.Field;
 import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Types.NestedField;
 import org.junit.Assert;
 import org.junit.Test;
@@ -81,7 +81,7 @@ public class TestSchemaParserForDefaultValues {
   }
 
   private void testToFromJsonPreservingDefaultValues(String[] fieldNames, Schema[] fieldsSchemas, Object[] defaults) {
-    List<Field> fields = new ArrayList<>();
+    List<Field> fields = Lists.newArrayList();
     IntStream.range(0, defaults.length).forEach(
         i -> fields.add(new Schema.Field(fieldNames[i], fieldsSchemas[i], null, defaults[i])));
 
@@ -226,7 +226,7 @@ public class TestSchemaParserForDefaultValues {
         Schema.create(INT),
         Schema.createRecord("name", null, "namespace", false, structFields)};
 
-    List<Schema.Field> fields = new ArrayList<>();
+    List<Schema.Field> fields = Lists.newArrayList();
     IntStream.range(0, fieldNames.length).forEach(
         i -> fields.add(new Schema.Field(fieldNames[i], topLevelFields[i], null)));
 
@@ -264,7 +264,7 @@ public class TestSchemaParserForDefaultValues {
         Schema.create(STRING),
         intermediateStruct};
 
-    List<Schema.Field> fields = new ArrayList<>();
+    List<Schema.Field> fields = Lists.newArrayList();
     IntStream.range(0, fieldNames.length).forEach(
         i -> fields.add(new Schema.Field(fieldNames[i], topLevelFields[i], null)));
 

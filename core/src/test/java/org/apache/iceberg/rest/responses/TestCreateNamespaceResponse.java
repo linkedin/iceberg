@@ -175,4 +175,3 @@ public class TestCreateNamespaceResponse extends RequestResponseTestBase<CreateN
     return response;
   }
 }
-

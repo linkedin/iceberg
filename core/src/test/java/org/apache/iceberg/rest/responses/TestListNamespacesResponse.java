@@ -132,4 +132,3 @@ public class TestListNamespacesResponse extends RequestResponseTestBase<ListName
     return resp;
   }
 }
-

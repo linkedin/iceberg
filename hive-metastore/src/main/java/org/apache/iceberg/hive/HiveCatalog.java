@@ -106,7 +106,7 @@ public class HiveCatalog extends BaseMetastoreCatalog implements SupportsNamespa
     this.clients = new CachedClientPool(conf, properties);
   }
 
-  protected HiveClientPool clientPool() {
+  protected ClientPool<IMetaStoreClient, TException> clientPool() {
     return clients;
   }
 

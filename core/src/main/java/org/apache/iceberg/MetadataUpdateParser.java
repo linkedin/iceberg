@@ -444,4 +444,3 @@ public class MetadataUpdateParser {
     return new MetadataUpdate.SetLocation(location);
   }
 }
-

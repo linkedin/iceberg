@@ -19,7 +19,6 @@
 
 package org.apache.iceberg.avro;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import org.apache.avro.LogicalType;
@@ -122,7 +121,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       return options.get(0);
     } else {
       // Complex union
-      List<Types.NestedField> newFields = new ArrayList<>();
+      List<Types.NestedField> newFields = Lists.newArrayList();
       newFields.add(Types.NestedField.required(allocateId(), "tag", Types.IntegerType.get()));
 
       int tagIndex = 0;

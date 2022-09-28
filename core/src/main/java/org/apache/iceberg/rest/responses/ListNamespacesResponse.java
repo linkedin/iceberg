@@ -86,4 +86,3 @@ public class ListNamespacesResponse implements RESTResponse {
     }
   }
 }
-

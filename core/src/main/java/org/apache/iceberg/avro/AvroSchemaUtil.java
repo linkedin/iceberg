@@ -19,7 +19,6 @@
 
 package org.apache.iceberg.avro;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -191,7 +190,7 @@ public class AvroSchemaUtil {
   public static Schema discardNullFromUnionIfExist(Schema schema) {
     Preconditions.checkArgument(schema.getType() == UNION,
         "Expected union schema but was passed: %s", schema);
-    List<Schema> result = new ArrayList<>();
+    List<Schema> result = Lists.newArrayList();
     for (Schema nested : schema.getTypes()) {
       if (!(nested.getType() == Schema.Type.NULL)) {
         result.add(nested);

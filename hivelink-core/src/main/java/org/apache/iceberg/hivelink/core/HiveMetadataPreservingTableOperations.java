@@ -26,12 +26,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
+import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -42,13 +48,13 @@ import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.avro.AvroObjectInspectorGenerator;
 import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.iceberg.ClientPool;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.common.DynMethods;
 import org.apache.iceberg.exceptions.AlreadyExistsException;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
-import org.apache.iceberg.hive.HiveClientPool;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.Strings;
@@ -56,6 +62,8 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.thrift.TException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -71,9 +79,11 @@ import org.apache.thrift.TException;
  * updated.
  */
 public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
-  private final HiveClientPool metaClients;
+  private final ClientPool<IMetaStoreClient, TException> metaClients;
   private final String database;
   private final String tableName;
+  private final String fullName;
+
   private static final DynMethods.UnboundMethod ALTER_TABLE = DynMethods.builder("alter_table")
       .impl(HiveMetaStoreClient.class, "alter_table_with_environmentContext",
           String.class, String.class, Table.class, EnvironmentContext.class)
@@ -82,13 +92,31 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       .build();
   public static final String ORC_COLUMNS = "columns";
   public static final String ORC_COLUMNS_TYPES = "columns.types";
+  private static final String HIVE_TABLE_LEVEL_LOCK_EVICT_MS = "iceberg.hive.table-level-lock-evict-ms";
+  private static final long HIVE_TABLE_LEVEL_LOCK_EVICT_MS_DEFAULT = TimeUnit.MINUTES.toMillis(10);
+  private static final Logger LOG = LoggerFactory.getLogger(HiveMetadataPreservingTableOperations.class);
 
-  protected HiveMetadataPreservingTableOperations(Configuration conf, HiveClientPool metaClients, FileIO fileIO,
-      String catalogName, String database, String table) {
+
+  private static Cache<String, ReentrantLock> commitLockCache;
+
+  private static synchronized void initTableLevelLockCache(long evictionTimeout) {
+    if (commitLockCache == null) {
+      commitLockCache = Caffeine.newBuilder()
+          .expireAfterAccess(evictionTimeout, TimeUnit.MILLISECONDS)
+          .build();
+    }
+  }
+
+  protected HiveMetadataPreservingTableOperations(Configuration conf, ClientPool metaClients, FileIO fileIO,
+                                                  String catalogName, String database, String table) {
     super(conf, metaClients, fileIO, catalogName, database, table);
     this.metaClients = metaClients;
     this.database = database;
     this.tableName = table;
+    this.fullName = catalogName + "." + database + "." + table;
+    long tableLevelLockCacheEvictionTimeout =
+        conf.getLong(HIVE_TABLE_LEVEL_LOCK_EVICT_MS, HIVE_TABLE_LEVEL_LOCK_EVICT_MS_DEFAULT);
+    initTableLevelLockCache(tableLevelLockCacheEvictionTimeout);
   }
 
   @Override
@@ -142,6 +170,10 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
 
     CommitStatus commitStatus = CommitStatus.FAILURE;
     Optional<Long> lockId = Optional.empty();
+    // getting a process-level lock per table to avoid concurrent commit attempts to the same table from the same
+    // JVM process, which would result in unnecessary and costly HMS lock acquisition requests
+    ReentrantLock tableLevelMutex = commitLockCache.get(fullName, t -> new ReentrantLock(true));
+    tableLevelMutex.lock();
     try {
       lockId = Optional.of(acquireLock());
       // TODO add lock heart beating for cases where default lock timeout is too low.
@@ -182,7 +214,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
 
       // [LINKEDIN] comply to the new signature of setting Hive table's properties by
       // setting newly added parameters as empty container.
-      setHmsTableParameters(newMetadataLocation, tbl, ImmutableMap.of(),
+      setHmsTableParameters(newMetadataLocation, tbl, TableMetadata.buildFromEmpty().build(),
           ImmutableSet.of(), false, ImmutableMap.of());
 
       try {
@@ -217,7 +249,8 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       throw new RuntimeException("Interrupted during commit", e);
 
     } finally {
-      cleanupMetadataAndUnlock(commitStatus, newMetadataLocation, lockId);
+      cleanupMetadataAndUnlock(commitStatus, newMetadataLocation, lockId, tableLevelMutex);
+      tableLevelMutex.unlock();
     }
   }
 
@@ -315,9 +348,6 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
         EnvironmentContext envContext = new EnvironmentContext(
             ImmutableMap.of(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE)
         );
-        LOG.debug("Updating the metadata location of the following table:");
-        logTable(tbl);
-        LOG.debug("Metadata Location: {}", tbl.getParameters().get(METADATA_LOCATION_PROP));
         ALTER_TABLE.invoke(client, database, tableName, tbl, envContext);
         return null;
       });

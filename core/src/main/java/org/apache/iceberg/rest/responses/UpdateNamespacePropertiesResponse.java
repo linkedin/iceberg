@@ -135,4 +135,3 @@ public class UpdateNamespacePropertiesResponse implements RESTResponse {
     }
   }
 }
-

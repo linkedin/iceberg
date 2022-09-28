@@ -245,7 +245,7 @@ public class TableMetadata implements Serializable {
   private final List<MetadataUpdate> changes;
 
   @SuppressWarnings("checkstyle:CyclomaticComplexity")
-  TableMetadata(InputFile file,
+  public TableMetadata(String metadataFileLocation,
                 int formatVersion,
                 String uuid,
                 String location,
