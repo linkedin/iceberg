@@ -24,6 +24,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -33,7 +34,6 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.TableType;
@@ -54,10 +54,9 @@ import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.hive.HiveTableOperations;
+import org.apache.iceberg.hive.MetastoreUtil;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.Strings;
-import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
-import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
@@ -210,14 +209,12 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
             baseMetadataLocation, metadataLocation, database, tableName);
       }
 
-      // [LINKEDIN] comply to the new signature of setting Hive table's properties by
-      // setting newly added parameters as empty container.
-      setHmsTableParameters(newMetadataLocation, tbl,
-          TableMetadata.buildFromEmpty().withMetadataLocation(newMetadataLocation).addPartitionSpec(LegacyHiveTableUtils.getPartitionSpec(tbl, metadata.schema())).discardChanges().build(),
-          ImmutableSet.of(), false, ImmutableMap.of());
+      // [LINKEDIN] Only updates the metadata location property in HMS, instead of copying all
+      // iceberg properties to HMS
+      updateMetadataLocationInHms(newMetadataLocation, tbl);
 
       try {
-        persistTableVerbal(tbl, tableExists);
+        persistTable(tbl, tableExists);
         commitStatus = CommitStatus.SUCCESS;
       } catch (Throwable persistFailure) {
         LOG.error("Cannot tell if commit to {}.{} succeeded, attempting to reconnect and check.",
@@ -340,13 +337,10 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
    * [LINKEDIN] a log-enhanced persistTable as a refactoring inspired by
    * org.apache.iceberg.hive.HiveTableOperations#persistTable
    */
-  void persistTableVerbal(Table tbl, boolean tableExists) throws TException, InterruptedException {
+  void persistTable(Table tbl, boolean tableExists) throws TException, InterruptedException {
     if (tableExists) {
       metaClients.run(client -> {
-        EnvironmentContext envContext = new EnvironmentContext(
-            ImmutableMap.of(StatsSetupConst.DO_NOT_UPDATE_STATS, StatsSetupConst.TRUE)
-        );
-        ALTER_TABLE.invoke(client, database, tableName, tbl, envContext);
+        MetastoreUtil.alterTable(client, database, tableName, tbl);
         return null;
       });
     } else {
@@ -355,5 +349,18 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
         return null;
       });
     }
+  }
+
+  private void updateMetadataLocationInHms(String newMetadataLocation, Table tbl) {
+    Map<String, String> parameters = Optional.ofNullable(tbl.getParameters())
+        .orElseGet(Maps::newHashMap);
+
+    parameters.put(TABLE_TYPE_PROP, ICEBERG_TABLE_TYPE_VALUE.toUpperCase(Locale.ENGLISH));
+    parameters.put(METADATA_LOCATION_PROP, newMetadataLocation);
+
+    if (currentMetadataLocation() != null && !currentMetadataLocation().isEmpty()) {
+      parameters.put(PREVIOUS_METADATA_LOCATION_PROP, currentMetadataLocation());
+    }
+    tbl.setParameters(parameters);
   }
 }

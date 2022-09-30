@@ -512,6 +512,13 @@ project(':iceberg-hivelink-core') {
     implementation project(':iceberg-common')
 
     implementation "com.github.ben-manes.caffeine:caffeine"
+    implementation("org.apache.orc:orc-core::nohive") {
+      exclude group: 'org.apache.hadoop'
+      exclude group: 'commons-lang'
+      // These artifacts are shaded and included in the orc-core fat jar
+      exclude group: 'com.google.protobuf', module: 'protobuf-java'
+      exclude group: 'org.apache.hive', module: 'hive-storage-api'
+    }
 
     compileOnly "org.apache.avro:avro"
     compileOnly("org.apache.hadoop:hadoop-client") {

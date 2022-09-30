@@ -84,6 +84,7 @@ public class TestHiveMetadataPreservingCatalog extends HiveMetastoreTest {
     }
 
     HiveMetastoreTest.catalog.createTable(TABLE_IDENTIFIER, SCHEMA);
+    HiveMetastoreTest.catalog.loadTable(TABLE_IDENTIFIER);
   }
 
   @Test
