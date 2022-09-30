@@ -19,11 +19,11 @@
 
 package org.apache.iceberg.hivelink.core;
 
-import java.util.HashMap;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.iceberg.hive.HiveCatalog;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
@@ -34,6 +34,7 @@ import org.junit.BeforeClass;
  */
 public abstract class HiveMetastoreTest {
 
+  private static final String CATALOG_NAME = "test_hive_catalog";
   protected static final String DB_NAME = "hivedb";
 
   protected static HiveMetaStoreClient metastoreClient;
@@ -48,14 +49,15 @@ public abstract class HiveMetastoreTest {
     HiveMetastoreTest.hiveConf = metastore.hiveConf();
     HiveMetastoreTest.metastoreClient = new HiveMetaStoreClient(hiveConf);
     String dbPath = metastore.getDatabasePath(DB_NAME);
-    Database db = new Database(DB_NAME, "description", dbPath, new HashMap<>());
+    Database db = new Database(DB_NAME, "description", dbPath, Maps.newHashMap());
     metastoreClient.createDatabase(db);
-    HiveMetastoreTest.catalog = new HiveCatalog(hiveConf);
+    catalog = new HiveCatalog();
+    catalog.setConf(hiveConf);
+    catalog.initialize(CATALOG_NAME, Maps.newHashMap());
   }
 
   @AfterClass
   public static void stopMetastore() {
-    catalog.close();
     HiveMetastoreTest.catalog = null;
 
     metastoreClient.close();

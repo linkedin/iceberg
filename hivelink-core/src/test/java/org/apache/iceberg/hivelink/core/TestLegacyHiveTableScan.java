@@ -31,7 +31,6 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -56,6 +55,7 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Type;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -92,6 +92,7 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
       new FieldSchema("pCharCol", "char(1)", ""),
       new FieldSchema("pVarcharCol", "varchar(10)", ""),
       new FieldSchema("pDateCol", "date", ""));
+  private static final String CATALOG_NAME = "test_legacy_hive_catalog";
 
   private static HiveCatalog legacyCatalog;
   private static Path dbPath;
@@ -99,12 +100,12 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
   @BeforeClass
   public static void beforeClass() throws Exception {
     legacyCatalog = new LegacyHiveCatalog(HiveMetastoreTest.hiveConf);
+    legacyCatalog.initialize(CATALOG_NAME, Maps.newHashMap());
     dbPath = Paths.get(URI.create(metastoreClient.getDatabase(DB_NAME).getLocationUri()));
   }
 
   @AfterClass
   public static void afterClass() {
-    legacyCatalog.close();
     TestLegacyHiveTableScan.legacyCatalog = null;
   }
 
@@ -267,7 +268,7 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
         Integer.MAX_VALUE,
         storageDescriptor(columns, tableLocation.toString(), format),
         partitionColumns,
-        new HashMap<>(),
+        Maps.newHashMap(),
         null,
         null,
         TableType.EXTERNAL_TABLE.toString());
@@ -339,7 +340,7 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
         (int) currentTimeMillis / 1000,
         (int) currentTimeMillis / 1000,
         storageDescriptor(table.getSd().getCols(), partitionLocation.toString(), format),
-        new HashMap<>()
+        Maps.newHashMap()
     ));
     for (String fileName : fileNames) {
       Path filePath = partitionLocation.resolve(format.addExtension(fileName));

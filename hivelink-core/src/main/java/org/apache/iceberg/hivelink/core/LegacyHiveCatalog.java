@@ -48,7 +48,6 @@ public class LegacyHiveCatalog extends HiveCatalog {
   private static final Cache<String, HiveCatalog> LEGACY_CATALOG_CACHE = Caffeine.newBuilder().build();
 
   public LegacyHiveCatalog(Configuration conf) {
-    super();
     this.setConf(conf);
   }
 

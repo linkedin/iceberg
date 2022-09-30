@@ -53,7 +53,6 @@ import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
-import org.apache.iceberg.hive.HiveClientPool;
 import org.apache.iceberg.hivelink.core.utils.FileSystemUtils;
 import org.apache.iceberg.hivelink.core.utils.MappingUtil;
 import org.apache.iceberg.io.FileIO;
@@ -76,6 +75,9 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
   private static final long INITIAL_SEQUENCE_NUMBER = 0;
   private static final int DEFAULT_TABLE_FORMAT_VERSION = 1;
   private static final int INITIAL_SPEC_ID = 0;
+  private static final int INITIAL_SCHEMA_ID = 0;
+  private static final int PARTITION_DATA_ID_START = 1000;
+
 
   private final ClientPool<IMetaStoreClient, TException> metaClients;
   private final String databaseName;
@@ -301,9 +303,9 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
                                                               Map<String, String> properties) {
     return new TableMetadata(null, DEFAULT_TABLE_FORMAT_VERSION, UUID.randomUUID().toString(), location,
             INITIAL_SEQUENCE_NUMBER, System.currentTimeMillis(),
-            -1, schema, INITIAL_SPEC_ID, ImmutableList.of(spec),
-            SortOrder.unsorted().orderId(), ImmutableList.of(SortOrder.unsorted()),
+            -1, INITIAL_SCHEMA_ID, ImmutableList.of(schema), INITIAL_SPEC_ID, ImmutableList.of(spec),
+            PARTITION_DATA_ID_START, SortOrder.unsorted().orderId(), ImmutableList.of(SortOrder.unsorted()),
             ImmutableMap.copyOf(properties), -1, ImmutableList.of(),
-            ImmutableList.of(), ImmutableList.of());
+            ImmutableList.of(), ImmutableList.of(), ImmutableMap.of(), ImmutableList.of());
   }
 }

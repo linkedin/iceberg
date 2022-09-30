@@ -19,9 +19,10 @@
 
 package org.apache.iceberg.hivelink.core;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import java.net.UnknownHostException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -30,9 +31,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.StatsSetupConst;
@@ -195,7 +193,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
             Integer.MAX_VALUE,
             storageDescriptor(metadata, false),
             Collections.emptyList(),
-            new HashMap<>(),
+            Maps.newHashMap(),
             null,
             null,
             TableType.EXTERNAL_TABLE.toString());
@@ -214,7 +212,8 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
 
       // [LINKEDIN] comply to the new signature of setting Hive table's properties by
       // setting newly added parameters as empty container.
-      setHmsTableParameters(newMetadataLocation, tbl, TableMetadata.buildFromEmpty().build(),
+      setHmsTableParameters(newMetadataLocation, tbl,
+          TableMetadata.buildFromEmpty().withMetadataLocation(newMetadataLocation).addPartitionSpec(LegacyHiveTableUtils.getPartitionSpec(tbl, metadata.schema())).discardChanges().build(),
           ImmutableSet.of(), false, ImmutableMap.of());
 
       try {
@@ -250,7 +249,6 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
 
     } finally {
       cleanupMetadataAndUnlock(commitStatus, newMetadataLocation, lockId, tableLevelMutex);
-      tableLevelMutex.unlock();
     }
   }
 

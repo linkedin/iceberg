@@ -27,14 +27,12 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.TableScanContext;
 import org.apache.iceberg.events.Listeners;
 import org.apache.iceberg.events.ScanEvent;
-import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
@@ -86,12 +84,5 @@ public class LegacyHiveTableScan extends DataTableScan {
                 file -> new BaseFileScanTask(file, new DeleteFile[0], schemaString, specString, residuals)));
 
     return new ParallelIterable<>(tasks, ThreadPools.getWorkerPool());
-  }
-
-  @Override
-  public CloseableIterable<FileScanTask> planFiles(TableOperations ops, Snapshot snapshot,
-      Expression rowFilter, boolean ignoreResiduals,
-      boolean caseSensitive, boolean colStats) {
-    throw new IllegalStateException("Control flow should never reach here");
   }
 }

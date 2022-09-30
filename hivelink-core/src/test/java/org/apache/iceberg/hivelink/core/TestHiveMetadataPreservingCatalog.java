@@ -21,7 +21,6 @@ package org.apache.iceberg.hivelink.core;
 
 import java.io.IOException;
 import java.util.Collections;
-import java.util.HashMap;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
@@ -31,6 +30,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Types;
 import org.apache.thrift.TException;
 import org.junit.After;
@@ -52,6 +52,7 @@ public class TestHiveMetadataPreservingCatalog extends HiveMetastoreTest {
       required(3, "id", Types.IntegerType.get()),
       required(4, "data", Types.StringType.get())
   );
+  private static final String CATALOG_NAME = "test_hive_preserve_catalog";
 
   @Rule
   public TemporaryFolder temp = new TemporaryFolder();
@@ -61,6 +62,7 @@ public class TestHiveMetadataPreservingCatalog extends HiveMetastoreTest {
   @BeforeClass
   public static void setCustomHiveCatalog() {
     HiveMetastoreTest.catalog = new HiveMetadataPreservingCatalog(HiveMetastoreTest.hiveConf);
+    HiveMetastoreTest.catalog.initialize(CATALOG_NAME, Maps.newHashMap());
   }
 
   @Before
@@ -130,7 +132,7 @@ public class TestHiveMetadataPreservingCatalog extends HiveMetastoreTest {
         Integer.MAX_VALUE,
         storageDescriptor,
         Collections.emptyList(),
-        new HashMap<>(),
+        Maps.newHashMap(),
         null,
         null,
         TableType.EXTERNAL_TABLE.toString());

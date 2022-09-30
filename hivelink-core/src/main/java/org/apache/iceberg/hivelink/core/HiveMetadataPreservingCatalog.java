@@ -38,7 +38,6 @@ import org.apache.iceberg.hive.HiveCatalog;
 public class HiveMetadataPreservingCatalog extends HiveCatalog {
 
   public HiveMetadataPreservingCatalog(Configuration conf) {
-    super();
     this.setConf(conf);
   }
 

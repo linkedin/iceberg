@@ -19,7 +19,6 @@
 
 package org.apache.iceberg.hivelink.core.schema;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -35,6 +34,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.UnionTypeInfo;
 import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 
 
 /**
@@ -132,7 +132,7 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
   @Override
   public Schema union(UnionTypeInfo union, Schema partner, List<Schema> results) {
     if (AvroSchemaUtil.nullExistInUnion(partner)) {
-      List<Schema> toAddNull = new ArrayList<>();
+      List<Schema> toAddNull = Lists.newArrayList();
       toAddNull.add(Schema.create(Schema.Type.NULL));
       toAddNull.addAll(results);
       return Schema.createUnion(toAddNull);

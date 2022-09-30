@@ -87,6 +87,11 @@ public class LegacyHiveTable implements Table, HasTableOperations {
   }
 
   @Override
+  public Map<Integer, Schema> schemas() {
+    return ops.current().schemasById();
+  }
+
+  @Override
   public PartitionSpec spec() {
     return ops.current().spec();
   }

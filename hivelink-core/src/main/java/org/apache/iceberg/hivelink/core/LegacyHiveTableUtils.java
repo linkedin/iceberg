@@ -20,7 +20,6 @@
 package org.apache.iceberg.hivelink.core;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -160,7 +159,7 @@ class LegacyHiveTableUtils {
   }
 
   static Map<String, String> getTableProperties(org.apache.hadoop.hive.metastore.api.Table table) {
-    Map<String, String> props = new HashMap<>();
+    Map<String, String> props = Maps.newHashMap();
     props.putAll(table.getSd().getParameters());
     props.putAll(table.getParameters());
     props.putAll(table.getSd().getSerdeInfo().getParameters());
