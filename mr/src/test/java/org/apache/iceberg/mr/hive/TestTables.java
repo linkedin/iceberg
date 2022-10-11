@@ -457,8 +457,9 @@ abstract class TestTables {
 
     private static class HiveCatalogUnqualifiedURI extends HiveCatalog {
 
-      HiveCatalogUnqualifiedURI(Configuration conf) {
-        super(conf);
+      HiveCatalogUnqualifiedURI(String catalogName, Configuration conf) {
+        initialize(catalogName, ImmutableMap.of());
+        this.setConf(conf);
       }
 
       @Override
@@ -471,8 +472,8 @@ abstract class TestTables {
       }
     }
 
-    HiveTestTablesUnqualifiedURI(Configuration conf, TemporaryFolder temp) {
-      super(new HiveCatalogUnqualifiedURI(conf), temp);
+    HiveTestTablesUnqualifiedURI(Configuration conf, TemporaryFolder temp, String catalogName) {
+      super(new HiveCatalogUnqualifiedURI(catalogName, conf), temp, catalogName);
     }
 
     @Override
@@ -537,8 +538,8 @@ abstract class TestTables {
       }
     },
     HIVE_CATALOG_UNQUALIFIED_URI {
-      public TestTables instance(Configuration conf, TemporaryFolder temporaryFolder) {
-        return new HiveTestTablesUnqualifiedURI(conf, temporaryFolder);
+      public TestTables instance(Configuration conf, TemporaryFolder temporaryFolder, String catalogName) {
+        return new HiveTestTablesUnqualifiedURI(conf, temporaryFolder, catalogName);
       }
     };
 
