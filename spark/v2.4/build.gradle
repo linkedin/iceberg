@@ -60,6 +60,7 @@ project(':iceberg-spark:iceberg-spark-2.4') {
     implementation project(':iceberg-orc')
     implementation project(':iceberg-parquet')
     implementation project(':iceberg-arrow')
+    implementation project(':iceberg-hivelink-core')
     implementation "com.github.ben-manes.caffeine:caffeine"
 
     compileOnly "com.google.errorprone:error_prone_annotations"

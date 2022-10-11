@@ -25,7 +25,6 @@ import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +37,6 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.encryption.EncryptedFiles;
 import org.apache.iceberg.encryption.EncryptedInputFile;
@@ -49,7 +47,6 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
-import org.apache.iceberg.types.Types.NestedField;
 import org.apache.iceberg.types.Types.StructType;
 import org.apache.iceberg.util.ByteBuffers;
 import org.apache.iceberg.util.PartitionUtil;
@@ -161,7 +158,6 @@ public abstract class BaseDataReader<T> implements Closeable {
     }
   }
 
-  protected static Object convertConstant(Type type, Object value) {
   public static Object convertConstant(Type type, Object value) {
     if (value == null) {
       return null;
@@ -207,24 +203,6 @@ public abstract class BaseDataReader<T> implements Closeable {
         return ByteBuffers.toByteArray((ByteBuffer) value);
       case BINARY:
         return ByteBuffers.toByteArray((ByteBuffer) value);
-      case STRUCT:
-        StructType structType = (StructType) type;
-
-        if (structType.fields().isEmpty()) {
-          return new GenericInternalRow();
-        }
-
-        List<NestedField> fields = structType.fields();
-        Object[] values = new Object[fields.size()];
-        StructLike struct = (StructLike) value;
-
-        for (int index = 0; index < fields.size(); index++) {
-          NestedField field = fields.get(index);
-          Type fieldType = field.type();
-          values[index] = convertConstant(fieldType, struct.get(index, fieldType.typeId().javaClass()));
-        }
-
-        return new GenericInternalRow(values);
       default:
     }
     return value;

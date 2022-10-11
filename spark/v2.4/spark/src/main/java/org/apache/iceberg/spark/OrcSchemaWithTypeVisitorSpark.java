@@ -47,11 +47,11 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
 
   @Override
   protected T visitRecord(
-          Types.StructType struct, TypeDescription record, OrcSchemaWithTypeVisitor<T> visitor) {
+      Types.StructType struct, TypeDescription record, OrcSchemaWithTypeVisitor<T> visitor) {
     Preconditions.checkState(
-            icebergFiledIdsContainOrcFieldIdsInOrder(struct, record),
-            "Iceberg schema and ORC schema doesn't align, please call ORCSchemaUtil.buildOrcProjection" +
-                    "to get an aligned ORC schema first!"
+        icebergFiledIdsContainOrcFieldIdsInOrder(struct, record),
+        "Iceberg schema and ORC schema doesn't align, please call ORCSchemaUtil.buildOrcProjection" +
+            "to get an aligned ORC schema first!"
     );
     List<Types.NestedField> iFields = struct.fields();
     List<TypeDescription> fields = record.getChildren();
@@ -68,8 +68,8 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
         // 3. The field should be read using the default value, where we build a ConstantReader
         // Here we should only need to update idToConstant when it's the 3rd case,
         // because the first 2 cases have been handled by logic in PartitionUtil.constantsMap
-        if (!iField.equals(MetadataColumns.ROW_POSITION) &&
-                !idToConstant.containsKey(iField.fieldId())) {
+        if (MetadataColumns.nonMetadataColumn(iField.name())
+            && !idToConstant.containsKey(iField.fieldId())) {
           idToConstant.put(iField.fieldId(), BaseDataReader.convertConstant(iField.type(), iField.getDefaultValue()));
         }
       } else {
@@ -94,8 +94,8 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
    * but the ones that exist in the second list should occur in the
    * same relative order in the first list.
    *
-   * @param  list1  the first list
-   * @param  list2  the second list
+   * @param list1 the first list
+   * @param list2 the second list
    * @return the condition check result
    */
   private static boolean containsInOrder(List<Integer> list1, List<Integer> list2) {

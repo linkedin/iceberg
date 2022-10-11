@@ -87,6 +87,11 @@ public class SparkOrcReader implements OrcRowReader<InternalRow> {
     }
 
     @Override
+    public OrcValueReader<?> union(Type expected, TypeDescription union, List<OrcValueReader<?>> options) {
+      return SparkOrcValueReaders.union(options);
+    }
+
+    @Override
     public OrcValueReader<?> primitive(Type.PrimitiveType iPrimitive, TypeDescription primitive) {
       switch (primitive.getCategory()) {
         case BOOLEAN:
