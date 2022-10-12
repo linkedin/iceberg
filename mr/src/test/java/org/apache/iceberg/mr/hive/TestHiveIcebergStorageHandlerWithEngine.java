@@ -112,7 +112,8 @@ public class TestHiveIcebergStorageHandlerWithEngine {
         // include Tez tests only for Java 8
         if (javaVersion.equals("1.8") || "mr".equals(engine)) {
 //          testParams.add(new Object[] {fileFormat, engine, TestTables.TestTableType.HIVE_CATALOG, false});
-          testParams.add(new Object[] {fileFormat, engine, TestTables.TestTableType.HIVE_CATALOG_UNQUALIFIED_URI, false});
+          testParams.add(new Object[]{fileFormat, engine,
+              TestTables.TestTableType.HIVE_CATALOG_UNQUALIFIED_URI, false});
           // test for vectorization=ON in case of ORC format and Tez engine
           if ((fileFormat == FileFormat.PARQUET || fileFormat == FileFormat.ORC) &&
               "tez".equals(engine) && MetastoreUtil.hive3PresentOnClasspath()) {

@@ -74,6 +74,7 @@ public class HiveIcebergInputFormat extends MapredIcebergInputFormat<Record>
       HIVE_VECTORIZED_RECORDREADER_CTOR = null;
     }
   }
+
   private static final DynMethods.StaticMethod DESERIALIZE_OBJECT = DynMethods.builder("deserializeObject")
       .impl("org.apache.hadoop.hive.ql.exec.SerializationUtilities", String.class, Class.class)
       .impl("org.apache.hadoop.hive.ql.exec.Utilities", String.class, Class.class)

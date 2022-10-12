@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
 import org.apache.iceberg.mr.Catalogs;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.util.SerializationUtil;
 
 
@@ -51,7 +52,7 @@ class HiveIcebergConfigUtil {
     Map<String, String> tableToSchema =
         Optional.ofNullable(configuration.get(TABLE_SCHEMA_MAP))
             .map(x -> (HashMap<String, String>) SerializationUtil.deserializeFromBase64(x))
-            .orElseGet(() -> new HashMap<>());
+            .orElseGet(() -> Maps.newHashMap());
     if (!tableToSchema.containsKey(tableName)) {
       tableToSchema.put(tableName, SchemaParser.toJson(schemaSupplier.get()));
     }
