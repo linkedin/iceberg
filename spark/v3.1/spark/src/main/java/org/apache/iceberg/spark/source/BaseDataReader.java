@@ -36,6 +36,7 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.encryption.EncryptedFiles;
 import org.apache.iceberg.encryption.EncryptedInputFile;
@@ -166,10 +167,21 @@ public abstract class BaseDataReader<T> implements Closeable {
     switch (type.typeId()) {
       case STRUCT:
         Types.StructType structType = type.asStructType();
+
+        if (structType.fields().isEmpty()) {
+          return new GenericInternalRow();
+        }
+
         InternalRow ret = new GenericInternalRow(structType.fields().size());
         for (int i = 0; i < structType.fields().size(); i++) {
-          Types.NestedField nestedField = structType.fields().get(i);
-          ret.update(i, convertConstant(nestedField.type(), ((Map<?, ?>) value).get(nestedField.name())));
+          Types.NestedField field = structType.fields().get(i);
+          Type fieldType = field.type();
+          if (value instanceof Map) {
+            ret.update(i, convertConstant(field.type(), ((Map<?, ?>) value).get(field.name())));
+          } else {
+            ret.update(i, convertConstant(fieldType,
+                ((StructLike) value).get(i, fieldType.typeId().javaClass())));
+          }
         }
         return ret;
       case LIST:
