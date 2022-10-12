@@ -20,9 +20,9 @@
 package org.apache.iceberg.orc;
 
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
 import org.apache.orc.storage.ql.exec.vector.ColumnVector;
@@ -45,7 +45,7 @@ class RowFilterValueReader implements OrcRowReader<Object[]> {
     int[] index = new int[filterSchema.getChildren().size()];
     List<String> filterFieldNames = filterSchema.getFieldNames();
     List<String> readSchemaFieldNames = readSchema.getFieldNames();
-    Map<String, Integer> readSchemaFieldNameToIndex = new HashMap<>();
+    Map<String, Integer> readSchemaFieldNameToIndex = Maps.newHashMap();
     for (int i = 0; i < readSchemaFieldNames.size(); i++) {
       readSchemaFieldNameToIndex.put(readSchemaFieldNames.get(i), i);
     }
