@@ -19,7 +19,6 @@
 
 package org.apache.iceberg.spark;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -28,6 +27,7 @@ import org.apache.iceberg.orc.ORCSchemaUtil;
 import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.spark.source.BaseDataReader;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
@@ -41,7 +41,7 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
   }
 
   protected OrcSchemaWithTypeVisitorSpark(Map<Integer, ?> idToConstant) {
-    this.idToConstant = new HashMap<>();
+    this.idToConstant = Maps.newHashMap();
     this.idToConstant.putAll(idToConstant);
   }
 
@@ -68,8 +68,8 @@ public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithType
         // 3. The field should be read using the default value, where we build a ConstantReader
         // Here we should only need to update idToConstant when it's the 3rd case,
         // because the first 2 cases have been handled by logic in PartitionUtil.constantsMap
-        if (MetadataColumns.nonMetadataColumn(iField.name())
-            && !idToConstant.containsKey(iField.fieldId())) {
+        if (MetadataColumns.nonMetadataColumn(iField.name()) &&
+            !idToConstant.containsKey(iField.fieldId())) {
           idToConstant.put(iField.fieldId(), BaseDataReader.convertConstant(iField.type(), iField.getDefaultValue()));
         }
       } else {

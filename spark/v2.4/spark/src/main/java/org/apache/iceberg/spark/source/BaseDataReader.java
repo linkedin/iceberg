@@ -23,7 +23,6 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -44,6 +43,7 @@ import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
@@ -177,8 +177,8 @@ public abstract class BaseDataReader<T> implements Closeable {
             .map(e -> convertConstant(type.asListType().elementType(), e)).collect(Collectors.toList());
         return ArrayData.toArrayData(JavaConverters.collectionAsScalaIterableConverter(javaList).asScala().toSeq());
       case MAP:
-        List<Object> keyList = new ArrayList<>();
-        List<Object> valueList = new ArrayList<>();
+        List<Object> keyList = Lists.newArrayList();
+        List<Object> valueList = Lists.newArrayList();
         for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
           keyList.add(convertConstant(type.asMapType().keyType(), entry.getKey()));
           valueList.add(convertConstant(type.asMapType().valueType(), entry.getValue()));
