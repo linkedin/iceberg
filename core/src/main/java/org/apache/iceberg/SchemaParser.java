@@ -20,14 +20,18 @@
 package org.apache.iceberg;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import org.apache.avro.util.internal.JacksonUtils;
+import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
@@ -59,6 +63,19 @@ public class SchemaParser {
   private static final String REQUIRED = "required";
   private static final String ELEMENT_REQUIRED = "element-required";
   private static final String VALUE_REQUIRED = "value-required";
+  private static final String DEFAULT = "default";
+
+  private static void writeDefaultValue(Object defaultValue, Type type, JsonGenerator generator) throws IOException {
+    if (defaultValue == null) {
+      return;
+    }
+    generator.writeFieldName(DEFAULT);
+    if (isFixedOrBinary(type)) {
+      generator.writeRawValue(defaultValueToJsonString((byte[]) defaultValue));
+    } else {
+      generator.writeRawValue(defaultValueToJsonString(defaultValue));
+    }
+  }
 
   private static void toJson(Types.StructType struct, JsonGenerator generator) throws IOException {
     toJson(struct, null, null, generator);
@@ -89,6 +106,7 @@ public class SchemaParser {
       generator.writeBooleanField(REQUIRED, field.isRequired());
       generator.writeFieldName(TYPE);
       toJson(field.type(), generator);
+      writeDefaultValue(field.getDefaultValue(), field.type(), generator);
       if (field.doc() != null) {
         generator.writeStringField(DOC, field.doc());
       }
@@ -196,6 +214,27 @@ public class SchemaParser {
     throw new IllegalArgumentException("Cannot parse type from json: " + json);
   }
 
+  private static boolean isFixedOrBinary(Type type) {
+    return type.typeId() == Type.TypeID.FIXED || type.typeId() == Type.TypeID.BINARY;
+  }
+
+  private static Object defaultValueFromJson(JsonNode field, Type type) {
+    if (!field.has(DEFAULT)) {
+      return null;
+    }
+
+    if (isFixedOrBinary(type)) {
+      try {
+        return field.get(DEFAULT).binaryValue();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    return AvroSchemaUtil.convertToJavaDefaultValue(JacksonUtils.toObject(field.get(DEFAULT),
+        AvroSchemaUtil.convert(type)));
+  }
+
   private static Types.StructType structFromJson(JsonNode json) {
     JsonNode fieldArray = json.get(FIELDS);
     Preconditions.checkArgument(fieldArray.isArray(),
@@ -211,13 +250,13 @@ public class SchemaParser {
       int id = JsonUtil.getInt(ID, field);
       String name = JsonUtil.getString(NAME, field);
       Type type = typeFromJson(field.get(TYPE));
-
+      Object defaultValue = defaultValueFromJson(field, type);
       String doc = JsonUtil.getStringOrNull(DOC, field);
       boolean isRequired = JsonUtil.getBool(REQUIRED, field);
       if (isRequired) {
-        fields.add(Types.NestedField.required(id, name, type, doc));
+        fields.add(Types.NestedField.required(id, name, type, defaultValue, doc));
       } else {
-        fields.add(Types.NestedField.optional(id, name, type, doc));
+        fields.add(Types.NestedField.optional(id, name, type, defaultValue, doc));
       }
     }
 
@@ -279,5 +318,21 @@ public class SchemaParser {
         throw new RuntimeIOException(e);
       }
     });
+  }
+
+  private static String defaultValueToJsonString(byte[] bytes) {
+    try {
+      return JsonUtil.mapper().writeValueAsString(ByteBuffer.wrap(bytes));
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static String defaultValueToJsonString(Object value) {
+    try {
+      return JsonUtil.mapper().writeValueAsString(value);
+    } catch (JsonProcessingException e) {
+      throw new RuntimeException(e);
+    }
   }
 }

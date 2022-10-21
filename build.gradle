@@ -23,6 +23,8 @@ import java.util.regex.Pattern
 
 buildscript {
   repositories {
+    maven { url "https://plugins.gradle.org/m2/" }
+    jcenter()
     gradlePluginPortal()
   }
   dependencies {
@@ -35,6 +37,9 @@ buildscript {
     classpath "com.github.alisiikh:gradle-scalastyle-plugin:3.4.1"
     classpath 'com.palantir.gradle.revapi:gradle-revapi:1.7.0'
     classpath 'com.gorylenko.gradle-git-properties:gradle-git-properties:2.4.1'
+    classpath 'io.github.gradle-nexus:publish-plugin:1.1.0'
+    classpath 'org.shipkit:shipkit-auto-version:1.2.0'
+    classpath 'org.shipkit:shipkit-changelog:1.1.10'
   }
 }
 
@@ -86,8 +91,7 @@ dependencyRecommendations {
 }
 
 allprojects {
-  group = "org.apache.iceberg"
-  version = getProjectVersion()
+  group = "com.linkedin.iceberg"
   repositories {
     mavenCentral()
     mavenLocal()
@@ -218,7 +222,7 @@ project(':iceberg-bundled-guava') {
 }
 
 project(':iceberg-api') {
-  apply plugin: 'com.palantir.revapi'
+//  apply plugin: 'com.palantir.revapi'
 
   dependencies {
     implementation project(path: ':iceberg-bundled-guava', configuration: 'shadow')
@@ -500,6 +504,81 @@ project(':iceberg-hive-metastore') {
   }
 }
 
+project(':iceberg-hivelink-core') {
+  dependencies {
+    implementation project(path: ':iceberg-bundled-guava', configuration: 'shadow')
+    implementation project(':iceberg-core')
+    implementation project(':iceberg-hive-metastore')
+    implementation project(':iceberg-common')
+
+    implementation "com.github.ben-manes.caffeine:caffeine"
+    implementation("org.apache.orc:orc-core::nohive") {
+      exclude group: 'org.apache.hadoop'
+      exclude group: 'commons-lang'
+      // These artifacts are shaded and included in the orc-core fat jar
+      exclude group: 'com.google.protobuf', module: 'protobuf-java'
+      exclude group: 'org.apache.hive', module: 'hive-storage-api'
+    }
+
+    compileOnly "org.apache.avro:avro"
+    compileOnly("org.apache.hadoop:hadoop-client") {
+      exclude group: 'org.apache.avro', module: 'avro'
+      exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+    }
+
+    compileOnly("org.apache.hive:hive-metastore") {
+      exclude group: 'org.apache.avro', module: 'avro'
+      exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+      exclude group: 'org.pentaho' // missing dependency
+      exclude group: 'org.apache.hbase'
+      exclude group: 'org.apache.logging.log4j'
+      exclude group: 'co.cask.tephra'
+      exclude group: 'com.google.code.findbugs', module: 'jsr305'
+      exclude group: 'org.eclipse.jetty.aggregate', module: 'jetty-all'
+      exclude group: 'org.eclipse.jetty.orbit', module: 'javax.servlet'
+      exclude group: 'org.apache.parquet', module: 'parquet-hadoop-bundle'
+      exclude group: 'com.tdunning', module: 'json'
+      exclude group: 'javax.transaction', module: 'transaction-api'
+      exclude group: 'com.zaxxer', module: 'HikariCP'
+    }
+
+    testImplementation project(':iceberg-data')
+    testImplementation project(':iceberg-orc')
+
+    // By default, hive-exec is a fat/uber jar and it exports a guava library
+    // that's really old. We use the core classifier to be able to override our guava
+    // version. Luckily, hive-exec seems to work okay so far with this version of guava
+    // See: https://github.com/apache/hive/blob/master/ql/pom.xml#L911 for more context.
+    testImplementation("org.apache.hive:hive-exec::core") {
+      exclude group: 'org.apache.avro', module: 'avro'
+      exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+      exclude group: 'org.pentaho' // missing dependency
+      exclude group: 'org.apache.hive', module: 'hive-llap-tez'
+      exclude group: 'org.apache.logging.log4j'
+      exclude group: 'com.google.protobuf', module: 'protobuf-java'
+      exclude group: 'org.apache.calcite'
+      exclude group: 'org.apache.calcite.avatica'
+      exclude group: 'com.google.code.findbugs', module: 'jsr305'
+    }
+
+    testImplementation("org.apache.hive:hive-metastore") {
+      exclude group: 'org.apache.avro', module: 'avro'
+      exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+      exclude group: 'org.pentaho' // missing dependency
+      exclude group: 'org.apache.hbase'
+      exclude group: 'org.apache.logging.log4j'
+      exclude group: 'co.cask.tephra'
+      exclude group: 'com.google.code.findbugs', module: 'jsr305'
+      exclude group: 'org.eclipse.jetty.aggregate', module: 'jetty-all'
+      exclude group: 'org.eclipse.jetty.orbit', module: 'javax.servlet'
+      exclude group: 'org.apache.parquet', module: 'parquet-hadoop-bundle'
+      exclude group: 'com.tdunning', module: 'json'
+      exclude group: 'javax.transaction', module: 'transaction-api'
+      exclude group: 'com.zaxxer', module: 'HikariCP'
+    }
+  }
+}
+
 project(':iceberg-orc') {
   dependencies {
     implementation project(path: ':iceberg-bundled-guava', configuration: 'shadow')
@@ -592,6 +671,8 @@ project(':iceberg-arrow') {
   }
 }
 
+
+
 project(':iceberg-pig') {
   dependencies {
     implementation project(path: ':iceberg-bundled-guava', configuration: 'shadow')
@@ -648,6 +729,70 @@ project(':iceberg-nessie') {
     // Only there to prevent "warning: unknown enum constant SchemaType.OBJECT" compile messages
     compileOnly "org.eclipse.microprofile.openapi:microprofile-openapi-api:3.0"
     testCompileOnly "org.eclipse.microprofile.openapi:microprofile-openapi-api:3.0"
+  }
+}
+
+project(':iceberg-runtime') {
+  apply plugin: 'com.github.johnrengelman.shadow'
+
+  tasks.jar.dependsOn tasks.shadowJar
+
+  configurations {
+    compile {
+      exclude group: 'org.apache.spark'
+      // included in Spark
+      exclude group: 'org.slf4j'
+      exclude group: 'org.apache.commons'
+      exclude group: 'commons-pool'
+      exclude group: 'commons-codec'
+      exclude group: 'org.xerial.snappy'
+      exclude group: 'javax.xml.bind'
+      exclude group: 'javax.annotation'
+    }
+  }
+
+  dependencies {
+    compile project(':iceberg-data')
+    compile project(':iceberg-hive-metastore')
+    compile project(':iceberg-orc')
+  }
+
+  shadowJar {
+    configurations = [project.configurations.compile]
+
+    zip64 true
+
+    // include the LICENSE and NOTICE files for the shaded Jar
+    from(projectDir) {
+      include 'LICENSE'
+      include 'NOTICE'
+    }
+
+    // Relocate dependencies to avoid conflicts
+    relocate 'com.google', 'org.apache.iceberg.shaded.com.google'
+    relocate 'com.fasterxml', 'org.apache.iceberg.shaded.com.fasterxml'
+    relocate 'com.github.benmanes', 'org.apache.iceberg.shaded.com.github.benmanes'
+    relocate 'org.checkerframework', 'org.apache.iceberg.shaded.org.checkerframework'
+    relocate 'org.apache.avro', 'org.apache.iceberg.shaded.org.apache.avro'
+    relocate 'avro.shaded', 'org.apache.iceberg.shaded.org.apache.avro.shaded'
+    relocate 'com.thoughtworks.paranamer', 'org.apache.iceberg.shaded.com.thoughtworks.paranamer'
+    relocate 'org.apache.parquet', 'org.apache.iceberg.shaded.org.apache.parquet'
+    relocate 'shaded.parquet', 'org.apache.iceberg.shaded.org.apache.parquet.shaded'
+    // relocate Avro's jackson dependency to share parquet-jackson locations
+    relocate 'org.codehaus.jackson', 'org.apache.iceberg.shaded.org.apache.parquet.shaded.org.codehaus.jackson'
+    relocate 'org.apache.orc', 'org.apache.iceberg.shaded.org.apache.orc'
+    relocate 'io.airlift', 'org.apache.iceberg.shaded.io.airlift'
+    // relocate Arrow and related deps to shade Iceberg specific version
+    relocate 'io.netty.buffer', 'org.apache.iceberg.shaded.io.netty.buffer'
+    relocate 'org.apache.arrow', 'org.apache.iceberg.shaded.org.apache.arrow'
+    relocate 'com.carrotsearch', 'org.apache.iceberg.shaded.com.carrotsearch'
+    relocate 'org.threeten.extra', 'org.apache.iceberg.shaded.org.threeten.extra'
+
+    classifier null
+  }
+
+  jar {
+    classifier = 'empty'
   }
 }
 
@@ -712,5 +857,5 @@ String getJavadocVersion() {
 apply from: 'jmh.gradle'
 apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
-apply from: 'tasks.gradle'
+apply from: 'shipkit.gradle'
 

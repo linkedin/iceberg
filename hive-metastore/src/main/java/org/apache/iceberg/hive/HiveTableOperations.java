@@ -330,7 +330,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     }
   }
 
-  private Table loadHmsTable() throws TException, InterruptedException {
+  protected Table loadHmsTable() throws TException, InterruptedException {
     try {
       return metaClients.run(client -> client.getTable(database, tableName));
     } catch (NoSuchObjectException nte) {
@@ -339,7 +339,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     }
   }
 
-  private Table newHmsTable() {
+  protected Table newHmsTable() {
     final long currentTimeMillis = System.currentTimeMillis();
 
     Table newTable = new Table(tableName,
@@ -359,7 +359,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return newTable;
   }
 
-  private void setHmsTableParameters(String newMetadataLocation, Table tbl, TableMetadata metadata,
+  protected void setHmsTableParameters(String newMetadataLocation, Table tbl, TableMetadata metadata,
                                      Set<String> obsoleteProps, boolean hiveEngineEnabled,
                                      Map<String, String> summary) {
     Map<String, String> parameters = Optional.ofNullable(tbl.getParameters())
@@ -482,7 +482,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return maxHiveTablePropertySize > 0;
   }
 
-  private StorageDescriptor storageDescriptor(TableMetadata metadata, boolean hiveEngineEnabled) {
+  protected StorageDescriptor storageDescriptor(TableMetadata metadata, boolean hiveEngineEnabled) {
 
     final StorageDescriptor storageDescriptor = new StorageDescriptor();
     storageDescriptor.setCols(HiveSchemaUtil.convert(metadata.schema()));
@@ -503,8 +503,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
   }
 
   @SuppressWarnings("ReverseDnsLookup")
-  @VisibleForTesting
-  long acquireLock() throws UnknownHostException, TException, InterruptedException {
+  protected long acquireLock() throws UnknownHostException, TException, InterruptedException {
     final LockComponent lockComponent = new LockComponent(LockType.EXCLUSIVE, LockLevel.TABLE, database);
     lockComponent.setTablename(tableName);
     final LockRequest lockRequest = new LockRequest(Lists.newArrayList(lockComponent),
@@ -571,7 +570,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
     return lockId;
   }
 
-  private void cleanupMetadataAndUnlock(CommitStatus commitStatus, String metadataLocation, Optional<Long> lockId,
+  protected void cleanupMetadataAndUnlock(CommitStatus commitStatus, String metadataLocation, Optional<Long> lockId,
       ReentrantLock tableLevelMutex) {
     try {
       if (commitStatus == CommitStatus.FAILURE) {

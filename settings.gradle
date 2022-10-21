@@ -31,9 +31,11 @@ include 'bundled-guava'
 include 'spark'
 include 'pig'
 include 'hive-metastore'
+include 'hivelink-core'
 include 'nessie'
 include 'gcp'
 include 'dell'
+include 'runtime'
 
 project(':api').name = 'iceberg-api'
 project(':common').name = 'iceberg-common'
@@ -48,9 +50,11 @@ project(':bundled-guava').name = 'iceberg-bundled-guava'
 project(':spark').name = 'iceberg-spark'
 project(':pig').name = 'iceberg-pig'
 project(':hive-metastore').name = 'iceberg-hive-metastore'
+project(':hivelink-core').name = 'iceberg-hivelink-core'
 project(':nessie').name = 'iceberg-nessie'
 project(':gcp').name = 'iceberg-gcp'
 project(':dell').name = 'iceberg-dell'
+project(':runtime').name = 'iceberg-runtime'
 
 List<String> knownFlinkVersions = System.getProperty("knownFlinkVersions").split(",")
 String flinkVersionsString = System.getProperty("flinkVersions") != null ? System.getProperty("flinkVersions") : System.getProperty("defaultFlinkVersions")

@@ -171,7 +171,7 @@ public class BaseFileScanTask implements FileScanTask {
     }
   }
 
-  private static final class SplitScanTask implements FileScanTask, MergeableScanTask<SplitScanTask> {
+  public static final class SplitScanTask implements FileScanTask, MergeableScanTask<SplitScanTask> {
     private final long len;
     private final long offset;
     private final FileScanTask fileScanTask;
@@ -231,6 +231,10 @@ public class BaseFileScanTask implements FileScanTask {
     public SplitScanTask merge(ScanTask other) {
       SplitScanTask that = (SplitScanTask) other;
       return new SplitScanTask(offset, len + that.length(), fileScanTask);
+    }
+
+    public FileScanTask underlyingFileScanTask() {
+      return fileScanTask;
     }
   }
 }

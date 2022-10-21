@@ -23,9 +23,11 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.util.Utf8;
@@ -34,7 +36,6 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.encryption.EncryptedFiles;
 import org.apache.iceberg.encryption.EncryptedInputFile;
@@ -42,25 +43,31 @@ import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Type;
-import org.apache.iceberg.types.Types.NestedField;
+import org.apache.iceberg.types.Types;
 import org.apache.iceberg.types.Types.StructType;
 import org.apache.iceberg.util.ByteBuffers;
 import org.apache.iceberg.util.PartitionUtil;
 import org.apache.spark.rdd.InputFileBlockHolder;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.catalyst.util.ArrayBasedMapData;
+import org.apache.spark.sql.catalyst.util.ArrayData;
+import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.collection.JavaConverters;
 
 /**
  * Base class of Spark readers.
  *
  * @param <T> is the Java class returned by this reader whose objects contain one or more rows.
  */
-abstract class BaseDataReader<T> implements Closeable {
+public abstract class BaseDataReader<T> implements Closeable {
   private static final Logger LOG = LoggerFactory.getLogger(BaseDataReader.class);
 
   private final Table table;
@@ -151,12 +158,34 @@ abstract class BaseDataReader<T> implements Closeable {
     }
   }
 
-  protected static Object convertConstant(Type type, Object value) {
+  public static Object convertConstant(Type type, Object value) {
     if (value == null) {
       return null;
     }
 
     switch (type.typeId()) {
+      case STRUCT:
+        Types.StructType structType = type.asStructType();
+        InternalRow ret = new GenericInternalRow(structType.fields().size());
+        for (int i = 0; i < structType.fields().size(); i++) {
+          Types.NestedField nestedField = structType.fields().get(i);
+          ret.update(i, convertConstant(nestedField.type(), ((Map<?, ?>) value).get(nestedField.name())));
+        }
+        return ret;
+      case LIST:
+        List<?> javaList = ((Collection<?>) value).stream()
+            .map(e -> convertConstant(type.asListType().elementType(), e)).collect(Collectors.toList());
+        return ArrayData.toArrayData(JavaConverters.collectionAsScalaIterableConverter(javaList).asScala().toSeq());
+      case MAP:
+        List<Object> keyList = Lists.newArrayList();
+        List<Object> valueList = Lists.newArrayList();
+        for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+          keyList.add(convertConstant(type.asMapType().keyType(), entry.getKey()));
+          valueList.add(convertConstant(type.asMapType().valueType(), entry.getValue()));
+        }
+        return new ArrayBasedMapData(
+            new GenericArrayData(keyList.toArray()),
+            new GenericArrayData(valueList.toArray()));
       case DECIMAL:
         return Decimal.apply((BigDecimal) value);
       case STRING:
@@ -174,24 +203,6 @@ abstract class BaseDataReader<T> implements Closeable {
         return ByteBuffers.toByteArray((ByteBuffer) value);
       case BINARY:
         return ByteBuffers.toByteArray((ByteBuffer) value);
-      case STRUCT:
-        StructType structType = (StructType) type;
-
-        if (structType.fields().isEmpty()) {
-          return new GenericInternalRow();
-        }
-
-        List<NestedField> fields = structType.fields();
-        Object[] values = new Object[fields.size()];
-        StructLike struct = (StructLike) value;
-
-        for (int index = 0; index < fields.size(); index++) {
-          NestedField field = fields.get(index);
-          Type fieldType = field.type();
-          values[index] = convertConstant(fieldType, struct.get(index, fieldType.typeId().javaClass()));
-        }
-
-        return new GenericInternalRow(values);
       default:
     }
     return value;

@@ -100,4 +100,3 @@ public class GetNamespaceResponse implements RESTResponse {
     }
   }
 }
-

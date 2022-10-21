@@ -59,4 +59,3 @@ class SortOrderToSpark implements SortOrderVisitor<OrderField> {
     return OrderField.hour(sourceName, direction, nullOrder);
   }
 }
-

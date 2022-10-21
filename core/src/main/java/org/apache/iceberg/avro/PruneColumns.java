@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import org.apache.avro.JsonProperties;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaNormalization;
 import org.apache.iceberg.mapping.NameMapping;
@@ -119,26 +118,9 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
 
   @Override
   public Schema union(Schema union, List<Schema> options) {
-    Preconditions.checkState(AvroSchemaUtil.isOptionSchema(union),
-        "Invalid schema: non-option unions are not supported: %s", union);
-
-    // only unions with null are allowed, and a null schema results in null
-    Schema pruned = null;
-    if (options.get(0) != null) {
-      pruned = options.get(0);
-    } else if (options.get(1) != null) {
-      pruned = options.get(1);
-    }
-
-    if (pruned != null) {
-      if (!Objects.equals(pruned, AvroSchemaUtil.fromOption(union))) {
-        return AvroSchemaUtil.toOption(pruned);
-      }
-      return union;
-    }
-
-    return null;
+    return copyUnion(union, options);
   }
+
 
   @Override
   @SuppressWarnings("checkstyle:CyclomaticComplexity")
@@ -292,17 +274,8 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
   }
 
   private static Schema.Field copyField(Schema.Field field, Schema newSchema, Integer fieldId) {
-    Schema newSchemaReordered;
-    // if the newSchema is an optional schema, make sure the NULL option is always the first
-    if (isOptionSchemaWithNonNullFirstOption(newSchema)) {
-      newSchemaReordered = AvroSchemaUtil.toOption(AvroSchemaUtil.fromOption(newSchema));
-    } else {
-      newSchemaReordered = newSchema;
-    }
-    // do not copy over default values as the file is expected to have values for fields already in the file schema
-    Schema.Field copy = new Schema.Field(field.name(),
-        newSchemaReordered, field.doc(),
-        AvroSchemaUtil.isOptionSchema(newSchemaReordered) ? JsonProperties.NULL_VALUE : null, field.order());
+    // always copy over default values
+    Schema.Field copy = new Schema.Field(field.name(), newSchema, field.doc(), field.defaultVal(), field.order());
 
     for (Map.Entry<String, Object> prop : field.getObjectProps().entrySet()) {
       copy.addProp(prop.getKey(), prop.getValue());
@@ -322,5 +295,20 @@ class PruneColumns extends AvroSchemaVisitor<Schema> {
 
   private static boolean isOptionSchemaWithNonNullFirstOption(Schema schema) {
     return AvroSchemaUtil.isOptionSchema(schema) && schema.getTypes().get(0).getType() != Schema.Type.NULL;
+  }
+
+  // for primitive types, the visitResult will be null, we want to reuse the primitive types from the original
+  // schema, while for nested types, we want to use the visitResult because they have content from the previous
+  // recursive calls.
+  private static Schema copyUnion(Schema record, List<Schema> visitResults) {
+    List<Schema> alts = Lists.newArrayListWithExpectedSize(visitResults.size());
+    for (int i = 0; i < visitResults.size(); i++) {
+      if (visitResults.get(i) == null) {
+        alts.add(record.getTypes().get(i));
+      } else {
+        alts.add(visitResults.get(i));
+      }
+    }
+    return Schema.createUnion(alts);
   }
 }

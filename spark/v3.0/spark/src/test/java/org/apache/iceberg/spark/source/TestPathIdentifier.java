@@ -85,4 +85,3 @@ public class TestPathIdentifier extends SparkTestBase {
     Assert.assertTrue(sparkCatalog.dropTable(identifier));
   }
 }
-

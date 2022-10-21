@@ -79,11 +79,32 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
   private static <T> T visitUnion(Type type, Schema union, AvroSchemaWithTypeVisitor<T> visitor) {
     List<Schema> types = union.getTypes();
     List<T> options = Lists.newArrayListWithExpectedSize(types.size());
-    for (Schema branch : types) {
+
+    // simple union case
+    if (AvroSchemaUtil.isOptionSchema(union)) {
+      for (Schema branch : types) {
+        if (branch.getType() == Schema.Type.NULL) {
+          options.add(visit((Type) null, branch, visitor));
+        } else {
+          options.add(visit(type, branch, visitor));
+        }
+      }
+    } else if (AvroSchemaUtil.isSingleTypeUnion(union)) { // single type union case
+      Schema branch = types.get(0);
       if (branch.getType() == Schema.Type.NULL) {
         options.add(visit((Type) null, branch, visitor));
       } else {
         options.add(visit(type, branch, visitor));
+      }
+    } else { // complex union case
+      int index = 1;
+      for (Schema branch : types) {
+        if (branch.getType() == Schema.Type.NULL) {
+          options.add(visit((Type) null, branch, visitor));
+        } else {
+          options.add(visit(type.asStructType().fields().get(index).type(), branch, visitor));
+          index += 1;
+        }
       }
     }
     return visitor.union(type, union, options);

@@ -24,12 +24,10 @@ import java.util.Arrays;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.exec.SerializationUtilities;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedInputFormatInterface;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedSupport;
 import org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
-import org.apache.hadoop.hive.ql.io.sarg.ConvertAstToSearchArg;
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
@@ -39,6 +37,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.iceberg.common.DynConstructors;
+import org.apache.iceberg.common.DynMethods;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.hive.MetastoreUtil;
@@ -76,14 +75,28 @@ public class HiveIcebergInputFormat extends MapredIcebergInputFormat<Record>
     }
   }
 
+  private static final DynMethods.StaticMethod DESERIALIZE_OBJECT = DynMethods.builder("deserializeObject")
+      .impl("org.apache.hadoop.hive.ql.exec.SerializationUtilities", String.class, Class.class)
+      .impl("org.apache.hadoop.hive.ql.exec.Utilities", String.class, Class.class)
+      .buildStatic();
+  private static final DynMethods.StaticMethod CONSTRUCT_SARG_HIVE_1 = DynMethods.builder("create")
+      .impl("org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory", ExprNodeGenericFuncDesc.class)
+      .orNoop()
+      .buildStatic();
+  private static final DynMethods.StaticMethod CONSTRUCT_SARG_HIVE_2 = DynMethods.builder("create")
+      .impl("org.apache.hadoop.hive.ql.io.sarg.ConvertAstToSearchArg",
+          Configuration.class, ExprNodeGenericFuncDesc.class)
+      .orNoop()
+      .buildStatic();
+  static final String SPLIT_LOCATION = "iceberg.hive.split.location";
+
   @Override
   public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
     // Convert Hive filter to Iceberg filter
     String hiveFilter = job.get(TableScanDesc.FILTER_EXPR_CONF_STR);
     if (hiveFilter != null) {
-      ExprNodeGenericFuncDesc exprNodeDesc = SerializationUtilities
-              .deserializeObject(hiveFilter, ExprNodeGenericFuncDesc.class);
-      SearchArgument sarg = ConvertAstToSearchArg.create(job, exprNodeDesc);
+      ExprNodeGenericFuncDesc exprNodeDesc = DESERIALIZE_OBJECT.invoke(hiveFilter, ExprNodeGenericFuncDesc.class);
+      SearchArgument sarg = constructSearchArgument(job, exprNodeDesc);
       try {
         Expression filter = HiveIcebergFilterFactory.generateFilterExpression(sarg);
         job.set(InputFormatConfig.FILTER_EXPRESSION, SerializationUtil.serializeToBase64(filter));
@@ -95,7 +108,7 @@ public class HiveIcebergInputFormat extends MapredIcebergInputFormat<Record>
     String[] selectedColumns = ColumnProjectionUtils.getReadColumnNames(job);
     job.setStrings(InputFormatConfig.SELECTED_COLUMNS, selectedColumns);
 
-    String location = job.get(InputFormatConfig.TABLE_LOCATION);
+    String location = job.get(SPLIT_LOCATION);
     return Arrays.stream(super.getSplits(job, numSplits))
                  .map(split -> new HiveIcebergSplit((IcebergSplit) split, location))
                  .toArray(InputSplit[]::new);
@@ -137,4 +150,12 @@ public class HiveIcebergInputFormat extends MapredIcebergInputFormat<Record>
     return new VectorizedSupport.Support[0];
   }
 
+
+  private SearchArgument constructSearchArgument(JobConf job, ExprNodeGenericFuncDesc exprNodeDesc) {
+    SearchArgument searchArgument = CONSTRUCT_SARG_HIVE_2.invoke(job, exprNodeDesc);
+    if (searchArgument == null) {
+      searchArgument = CONSTRUCT_SARG_HIVE_1.invoke(exprNodeDesc);
+    }
+    return searchArgument;
+  }
 }

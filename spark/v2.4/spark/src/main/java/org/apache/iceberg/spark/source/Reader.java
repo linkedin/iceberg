@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.OptionalLong;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -44,7 +45,9 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hadoop.Util;
+import org.apache.iceberg.hivelink.core.LegacyHiveTable;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.orc.OrcRowFilterUtils;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
@@ -329,6 +332,11 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
   @Override
   public Statistics estimateStatistics() {
+    if (table instanceof LegacyHiveTable) {
+      // We currently don't have reliable stats for Hive tables
+      return EMPTY_STATS;
+    }
+
     // its a fresh table, no data
     if (table.currentSnapshot() == null) {
       return new Stats(0L, 0L);
@@ -355,6 +363,18 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
     return new Stats(sizeInBytes, numRows);
   }
 
+  private static final Statistics EMPTY_STATS = new Statistics() {
+    @Override
+    public OptionalLong sizeInBytes() {
+      return OptionalLong.empty();
+    }
+
+    @Override
+    public OptionalLong numRows() {
+      return OptionalLong.empty();
+    }
+  };
+
   @Override
   public boolean enableBatchRead() {
     if (readUsingBatch == null) {
@@ -372,6 +392,12 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
                   .allMatch(fileScanTask -> fileScanTask.file().format().equals(
                       FileFormat.ORC)));
 
+      boolean hasNoRowFilters =
+          tasks().stream()
+              .allMatch(combinedScanTask -> !combinedScanTask.isDataTask() && combinedScanTask.files()
+                  .stream()
+                  .allMatch(fileScanTask -> OrcRowFilterUtils.rowFilterFromTask(fileScanTask) == null));
+
       boolean atLeastOneColumn = lazySchema().columns().size() > 0;
 
       boolean onlyPrimitives = lazySchema().columns().stream().allMatch(c -> c.type().isPrimitiveType());
@@ -380,7 +406,7 @@ class Reader implements DataSourceReader, SupportsScanColumnarBatch, SupportsPus
 
       boolean batchReadsEnabled = batchReadsEnabled(allParquetFileScanTasks, allOrcFileScanTasks);
 
-      this.readUsingBatch = batchReadsEnabled && hasNoDeleteFiles && (allOrcFileScanTasks ||
+      this.readUsingBatch = batchReadsEnabled && hasNoDeleteFiles && (allOrcFileScanTasks && hasNoRowFilters ||
           (allParquetFileScanTasks && atLeastOneColumn && onlyPrimitives));
 
       if (readUsingBatch) {

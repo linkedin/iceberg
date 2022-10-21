@@ -55,4 +55,3 @@ class MockInputStream extends ByteArrayInputStream {
     return this.pos;
   }
 }
-
