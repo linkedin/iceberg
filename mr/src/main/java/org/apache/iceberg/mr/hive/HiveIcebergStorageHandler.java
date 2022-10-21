@@ -133,6 +133,10 @@ public class HiveIcebergStorageHandler implements HiveStoragePredicateHandler, H
       if (catalogName != null) {
         jobConf.set(InputFormatConfig.TABLE_CATALOG_PREFIX + tableName, catalogName);
       }
+      HiveIcebergConfigUtil.copySchemaToConf(
+          () -> Catalogs.loadTable(conf, tableDesc.getProperties()).schema(),
+          jobConf,
+          tableDesc.getProperties());
     }
   }
 
@@ -301,6 +305,8 @@ public class HiveIcebergStorageHandler implements HiveStoragePredicateHandler, H
     // this is an exception to the interface documentation, but it's a safe operation to add this
     // property
     props.put(InputFormatConfig.TABLE_SCHEMA, schemaJson);
+
+    map.put(HiveIcebergInputFormat.SPLIT_LOCATION, props.getProperty(Catalogs.LOCATION));
   }
 
   private static class NonSerializingConfig implements Serializable {

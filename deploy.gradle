@@ -64,8 +64,8 @@ subprojects {
 
     publishing {
       publications {
-        apache(MavenPublication) {
-          if (tasks.matching({task -> task.name == 'shadowJar'}).isEmpty()) {
+        javaLibrary(MavenPublication) {
+          if (tasks.matching({ task -> task.name == 'shadowJar' }).isEmpty()) {
             from components.java
           } else {
             project.shadow.component(it)
@@ -81,53 +81,64 @@ subprojects {
             }
           }
 
-          groupId = 'org.apache.iceberg'
-          pom {
-            name = 'Apache Iceberg'
-            description = 'A table format for huge analytic datasets'
-            url = 'https://iceberg.apache.org'
-            licenses {
-              license {
-                name = 'The Apache Software License, Version 2.0'
-                url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-              }
-            }
-            mailingLists {
-              mailingList {
-                name = 'Dev Mailing List'
-                post = 'dev@iceberg.apache.org'
-                subscribe = 'dev-subscribe@iceberg.apache.org'
-                unsubscribe = 'dev-unsubscribe@iceberg.apache.org'
-              }
-            }
-            issueManagement {
-              system = 'GitHub'
-              url = 'https://github.com/apache/iceberg/issues'
-            }
-          }
-        }
-      }
+        groupId = 'com.linkedin.iceberg'
+        artifactId = project.archivesBaseName
 
-      repositories {
-        maven {
-          credentials {
-            username project.hasProperty('mavenUser') ? "$mavenUser" : ""
-            password project.hasProperty('mavenPassword') ? "$mavenPassword" : ""
+        pom {
+          name = artifactId
+          description = 'A table format for huge analytic datasets'
+          url = 'https://github.com/linkedin/iceberg'
+          licenses {
+            license {
+              name = 'The Apache Software License, Version 2.0'
+              url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+            }
           }
-          // upload to the releases repository using ./gradlew -Prelease publish
-          def apacheSnapshotsRepoUrl = 'https://repository.apache.org/content/repositories/snapshots'
-          def apacheReleasesRepoUrl = 'https://repository.apache.org/service/local/staging/deploy/maven2'
-          def snapshotsRepoUrl = project.hasProperty('mavenSnapshotsRepo') ? "$mavenSnapshotsRepo" : "$apacheSnapshotsRepoUrl"
-          def releasesRepoUrl = project.hasProperty('mavenReleasesRepo') ? "$mavenReleasesRepo" : "$apacheReleasesRepoUrl"
-          url = project.hasProperty('release') ? releasesRepoUrl : snapshotsRepoUrl
+          developers {
+            [
+              'wmoustafa:Walaa Eldin Moustafa',
+              'funcheetah:Wenye Zhang',
+              'shardulm94:Shardul Mahadik',
+              'hotsushi:Sushant Raikar',
+              'rzhang10:Raymond Zhang',
+              'yiqiangin:Yiqiang Ding',
+              'ljfgem:Jiefan Li'
+            ].each { devData ->
+              developer {
+                def devInfo = devData.split(':')
+                id = devInfo[0]
+                name = devInfo[1]
+                url = 'https://github.com/' + devInfo[0]
+                roles = ["Core developer"]
+              }
+            }
+          }
+          scm {
+            url = 'https://github.com/linkedin/iceberg.git'
+          }
+          issueManagement {
+            system = 'GitHub'
+            url = 'https://github.com/linkedin/iceberg/issues'
+          }
+          ciManagement {
+            url = 'https://github.com/linkedin/iceberg/actions'
+            system = 'GitHub Actions'
+          }
         }
       }
     }
 
-    if (project.hasProperty('release')) {
-      signing {
-        useGpgCmd()
-        sign publishing.publications.apache
+    //useful for testing - running "publish" will create artifacts/pom in a local dir
+    repositories { maven { url = "$rootProject.buildDir/repo" } }
+  }
+
+  //fleshes out problems with Maven pom generation when building
+  tasks.build.dependsOn("publishJavaLibraryPublicationToMavenLocal")
+
+  signing {
+    if (System.getenv("PGP_KEY")) {
+      useInMemoryPgpKeys(System.getenv("PGP_KEY"), System.getenv("PGP_PWD"))
+      sign publishing.publications.javaLibrary
       }
     }
   }

@@ -21,8 +21,7 @@ name: "Spark CI"
 on:
   push:
     branches:
-    - 'master'
-    - '0.**'
+    - 'li-1.0.x'
     tags:
     - 'apache-iceberg-**'
   pull_request:
@@ -83,7 +82,7 @@ jobs:
     strategy:
       matrix:
         jvm: [8, 11]
-        spark: ['3.0', '3.1', '3.2', '3.3']
+        spark: ['3.1']
     env:
       SPARK_LOCAL_IP: localhost
     steps:
@@ -107,6 +106,7 @@ jobs:
             **/build/testlogs
 
   spark-3x-scala-2-13-tests:
+    if: ${{ false }}
     runs-on: ubuntu-20.04
     strategy:
       matrix:

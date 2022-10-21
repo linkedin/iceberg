@@ -262,8 +262,8 @@ public class MappingUtil {
     return visitor.fields(mapping, fieldResults);
   }
 
-  private static class CreateMapping extends TypeUtil.SchemaVisitor<MappedFields> {
-    private static final CreateMapping INSTANCE = new CreateMapping();
+  public static class CreateMapping extends TypeUtil.SchemaVisitor<MappedFields> {
+    public static final CreateMapping INSTANCE = new CreateMapping();
 
     private CreateMapping() {}
 

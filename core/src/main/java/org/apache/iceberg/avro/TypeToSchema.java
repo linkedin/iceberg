@@ -100,12 +100,12 @@ class TypeToSchema extends TypeUtil.SchemaVisitor<Schema> {
       String origFieldName = structField.name();
       boolean isValidFieldName = AvroSchemaUtil.validAvroName(origFieldName);
       String fieldName = isValidFieldName ? origFieldName : AvroSchemaUtil.sanitize(origFieldName);
+      Object defaultValue =
+          structField.hasDefaultValue()
+              ? structField.getDefaultValue()
+              : (structField.isOptional() ? JsonProperties.NULL_VALUE : null);
       Schema.Field field =
-          new Schema.Field(
-              fieldName,
-              fieldSchemas.get(i),
-              structField.doc(),
-              structField.isOptional() ? JsonProperties.NULL_VALUE : null);
+          new Schema.Field(fieldName, fieldSchemas.get(i), structField.doc(), defaultValue);
       if (!isValidFieldName) {
         field.addProp(AvroSchemaUtil.ICEBERG_FIELD_NAME_PROP, origFieldName);
       }
@@ -123,7 +123,7 @@ class TypeToSchema extends TypeUtil.SchemaVisitor<Schema> {
   @Override
   public Schema field(Types.NestedField field, Schema fieldSchema) {
     if (field.isOptional()) {
-      return AvroSchemaUtil.toOption(fieldSchema);
+      return AvroSchemaUtil.toOption(fieldSchema, field.hasDefaultValue());
     } else {
       return fieldSchema;
     }

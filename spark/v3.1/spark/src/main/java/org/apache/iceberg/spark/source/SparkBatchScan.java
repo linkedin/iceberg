@@ -22,6 +22,7 @@ import java.io.Serializable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.OptionalLong;
 import java.util.stream.Collectors;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileFormat;
@@ -33,6 +34,8 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.Util;
+import org.apache.iceberg.hivelink.core.LegacyHiveTable;
+import org.apache.iceberg.orc.OrcRowFilterUtils;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.spark.Spark3Util;
 import org.apache.iceberg.spark.SparkReadConf;
@@ -184,6 +187,16 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
                                 fileScanTask ->
                                     fileScanTask.file().format().equals(FileFormat.ORC)));
 
+    boolean hasNoRowFilters =
+        tasks().stream()
+            .allMatch(
+                combinedScanTask ->
+                    !combinedScanTask.isDataTask()
+                        && combinedScanTask.files().stream()
+                            .allMatch(
+                                fileScanTask ->
+                                    OrcRowFilterUtils.rowFilterFromTask(fileScanTask) == null));
+
     boolean atLeastOneColumn = expectedSchema.columns().size() > 0;
 
     boolean onlyPrimitives =
@@ -196,7 +209,7 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
     boolean readUsingBatch =
         batchReadsEnabled
             && hasNoDeleteFiles
-            && (allOrcFileScanTasks
+            && (allOrcFileScanTasks && hasNoRowFilters
                 || (allParquetFileScanTasks && atLeastOneColumn && onlyPrimitives));
 
     int batchSize = readUsingBatch ? batchSize(allParquetFileScanTasks, allOrcFileScanTasks) : 0;
@@ -226,6 +239,11 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
 
   @Override
   public Statistics estimateStatistics() {
+    if (table instanceof LegacyHiveTable) {
+      // We currently don't have reliable stats for Hive tables
+      return EMPTY_STATS;
+    }
+
     // its a fresh table, no data
     if (table.currentSnapshot() == null) {
       return new Stats(0L, 0L);
@@ -256,6 +274,19 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
     long sizeInBytes = SparkSchemaUtil.estimateSize(readSchema(), numRows);
     return new Stats(sizeInBytes, numRows);
   }
+
+  private static final Statistics EMPTY_STATS =
+      new Statistics() {
+        @Override
+        public OptionalLong sizeInBytes() {
+          return OptionalLong.empty();
+        }
+
+        @Override
+        public OptionalLong numRows() {
+          return OptionalLong.empty();
+        }
+      };
 
   @Override
   public String description() {

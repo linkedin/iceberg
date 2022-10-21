@@ -60,6 +60,7 @@ project(':iceberg-spark:iceberg-spark-3.0_2.12') {
     implementation project(':iceberg-orc')
     implementation project(':iceberg-parquet')
     implementation project(':iceberg-arrow')
+    implementation project(':iceberg-hivelink-core')
 
     compileOnly "com.google.errorprone:error_prone_annotations"
     compileOnly "org.apache.avro:avro"

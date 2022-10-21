@@ -138,7 +138,7 @@ public final class IcebergRecordObjectInspector extends StructObjectInspector {
 
     @Override
     public String getFieldName() {
-      return field.name();
+      return field.name().toLowerCase();
     }
 
     @Override

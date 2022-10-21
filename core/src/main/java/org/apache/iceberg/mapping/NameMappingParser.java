@@ -41,6 +41,19 @@ import org.apache.iceberg.util.JsonUtil;
  *       { "field-id": 5, "names": ["longitude", "long"] }
  *     ] } ]
  * </pre>
+ *
+ * or
+ *
+ * <pre>
+ * { "case-sensitive": false,
+ *   "mapping": [ { "field-id": 1, "names": ["id", "record_id"] },
+ *       { "field-id": 2, "names": ["data"] },
+ *       { "field-id": 3, "names": ["location"], "fields": [
+ *           { "field-id": 4, "names": ["latitude", "lat"] },
+ *           { "field-id": 5, "names": ["longitude", "long"] }
+ *       ] } ]
+ * }
+ * </pre>
  */
 public class NameMappingParser {
 
@@ -49,6 +62,8 @@ public class NameMappingParser {
   private static final String FIELD_ID = "field-id";
   private static final String NAMES = "names";
   private static final String FIELDS = "fields";
+  private static final String CASE_SENSITIVE = "case-sensitive";
+  private static final String MAPPING = "mapping";
 
   public static String toJson(NameMapping mapping) {
     try {
@@ -64,7 +79,11 @@ public class NameMappingParser {
   }
 
   static void toJson(NameMapping nameMapping, JsonGenerator generator) throws IOException {
+    generator.writeStartObject();
+    generator.writeBooleanField(CASE_SENSITIVE, nameMapping.isCaseSensitive());
+    generator.writeFieldName(MAPPING);
     toJson(nameMapping.asMappedFields(), generator);
+    generator.writeEndObject();
   }
 
   private static void toJson(MappedFields mapping, JsonGenerator generator) throws IOException {
@@ -106,7 +125,16 @@ public class NameMappingParser {
   }
 
   static NameMapping fromJson(JsonNode node) {
-    return new NameMapping(fieldsFromJson(node));
+    Preconditions.checkArgument(
+        node.isObject() || node.isArray(),
+        "Cannot parse non-object or non-array name mapping: %s",
+        node);
+    if (node.isObject()) {
+      boolean caseSensitive = JsonUtil.getBool(CASE_SENSITIVE, node);
+      return new NameMapping(fieldsFromJson(node.get(MAPPING)), caseSensitive);
+    } else {
+      return new NameMapping(fieldsFromJson(node));
+    }
   }
 
   private static MappedFields fieldsFromJson(JsonNode node) {
