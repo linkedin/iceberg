@@ -19,19 +19,19 @@
 
 package org.apache.iceberg.hivelink.core;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.hive.HiveCatalog;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,18 +44,18 @@ public class LegacyHiveCatalog extends HiveCatalog {
 
   private static final Logger LOG = LoggerFactory.getLogger(LegacyHiveCatalog.class);
 
-  // hivelink refactoring: this is moved from HiveCatalogs
-  private static final Cache<String, HiveCatalog> LEGACY_CATALOG_CACHE = Caffeine.newBuilder().build();
+  private static final String DEFAULT_NAME = "hive_legacy";
 
-  public LegacyHiveCatalog(Configuration conf) {
-    this.setConf(conf);
+  public LegacyHiveCatalog() {
   }
 
-  // hivelink refactoring: this is moved from HiveCatalogs
-  public static HiveCatalog loadLegacyCatalog(Configuration conf) {
-    // metastore URI can be null in local mode
-    String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
-    return LEGACY_CATALOG_CACHE.get(metastoreUri, uri -> new LegacyHiveCatalog(conf));
+  public static Catalog loadLegacyCatalog(Configuration conf) {
+    return loadLegacyCatalog(DEFAULT_NAME, conf);
+  }
+
+  public static Catalog loadLegacyCatalog(String name, Configuration conf) {
+    return CatalogUtil.loadCatalog(LegacyHiveCatalog.class.getName(), name,
+        ImmutableMap.of(), conf);
   }
 
   @Override

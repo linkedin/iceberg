@@ -61,8 +61,8 @@ public class TestHiveMetadataPreservingCatalog extends HiveMetastoreTest {
 
   @BeforeClass
   public static void setCustomHiveCatalog() {
-    HiveMetastoreTest.catalog = new HiveMetadataPreservingCatalog(HiveMetastoreTest.hiveConf);
-    HiveMetastoreTest.catalog.initialize(CATALOG_NAME, Maps.newHashMap());
+    HiveMetastoreTest.catalog = HiveMetadataPreservingCatalog.loadHiveMetadataPreservingCatalog(CATALOG_NAME,
+        HiveMetastoreTest.hiveConf);
   }
 
   @Before

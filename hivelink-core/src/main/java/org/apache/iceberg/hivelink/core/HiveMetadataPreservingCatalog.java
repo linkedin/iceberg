@@ -22,12 +22,13 @@ package org.apache.iceberg.hivelink.core;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.TableOperations;
+import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.hive.HiveCatalog;
-
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 
 /**
  * A {@link HiveCatalog} which uses {@link HiveMetadataPreservingTableOperations} underneath.
@@ -37,8 +38,9 @@ import org.apache.iceberg.hive.HiveCatalog;
  */
 public class HiveMetadataPreservingCatalog extends HiveCatalog {
 
-  public HiveMetadataPreservingCatalog(Configuration conf) {
-    this.setConf(conf);
+  private static final String DEFAULT_NAME = "hive_meta_preserving";
+
+  public HiveMetadataPreservingCatalog() {
   }
 
   private static final Cache<String, HiveMetadataPreservingCatalog> HIVE_METADATA_PRESERVING_CATALOG_CACHE =
@@ -52,18 +54,12 @@ public class HiveMetadataPreservingCatalog extends HiveCatalog {
         tableName);
   }
 
-
-  /**
-   * @deprecated Use {@link #loadHiveMetadataPreservingCatalog(Configuration)} instead
-   */
-  @Deprecated
-  public static HiveCatalog loadCustomCatalog(Configuration conf) {
-    return loadHiveMetadataPreservingCatalog(conf);
+  public static Catalog loadHiveMetadataPreservingCatalog(Configuration conf) {
+    return loadHiveMetadataPreservingCatalog(DEFAULT_NAME, conf);
   }
 
-  public static HiveCatalog loadHiveMetadataPreservingCatalog(Configuration conf) {
-    // metastore URI can be null in local mode
-    String metastoreUri = conf.get(HiveConf.ConfVars.METASTOREURIS.varname, "");
-    return HIVE_METADATA_PRESERVING_CATALOG_CACHE.get(metastoreUri, uri -> new HiveMetadataPreservingCatalog(conf));
+  public static Catalog loadHiveMetadataPreservingCatalog(String name, Configuration conf) {
+    return CatalogUtil.loadCatalog(HiveMetadataPreservingCatalog.class.getName(), name,
+        ImmutableMap.of(), conf);
   }
 }

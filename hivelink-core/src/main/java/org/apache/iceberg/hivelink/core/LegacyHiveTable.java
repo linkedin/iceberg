@@ -50,7 +50,7 @@ import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.LocationProvider;
-
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 
 /**
  * A {@link Table} which uses Hive table/partition metadata to perform scans using {@link LegacyHiveTableScan}.
@@ -98,18 +98,17 @@ public class LegacyHiveTable implements Table, HasTableOperations {
 
   @Override
   public Map<Integer, PartitionSpec> specs() {
-    throw new UnsupportedOperationException(
-        "Multiple partition specs not supported for Hive tables without Iceberg metadata");
+    return ImmutableMap.of(spec().specId(), spec());
   }
 
   @Override
   public SortOrder sortOrder() {
-    throw new UnsupportedOperationException("Sort order not supported for Hive tables without Iceberg metadata");
+    return ops.current().sortOrder();
   }
 
   @Override
   public Map<Integer, SortOrder> sortOrders() {
-    throw new UnsupportedOperationException("Sort orders not supported for Hive tables without Iceberg metadata");
+    return ops.current().sortOrdersById();
   }
 
   @Override

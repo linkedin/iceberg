@@ -22,7 +22,9 @@ package org.apache.iceberg.hivelink.core;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Database;
-import org.apache.iceberg.hive.HiveCatalog;
+import org.apache.iceberg.CatalogUtil;
+import org.apache.iceberg.catalog.Catalog;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -38,7 +40,7 @@ public abstract class HiveMetastoreTest {
   protected static final String DB_NAME = "hivedb";
 
   protected static HiveMetaStoreClient metastoreClient;
-  protected static HiveCatalog catalog;
+  protected static Catalog catalog;
   protected static HiveConf hiveConf;
   protected static TestHiveMetastore metastore;
 
@@ -51,9 +53,7 @@ public abstract class HiveMetastoreTest {
     String dbPath = metastore.getDatabasePath(DB_NAME);
     Database db = new Database(DB_NAME, "description", dbPath, Maps.newHashMap());
     metastoreClient.createDatabase(db);
-    catalog = new HiveCatalog();
-    catalog.setConf(hiveConf);
-    catalog.initialize(CATALOG_NAME, Maps.newHashMap());
+    catalog = CatalogUtil.buildIcebergCatalog(CATALOG_NAME, ImmutableMap.of(), hiveConf);
   }
 
   @AfterClass

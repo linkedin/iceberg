@@ -46,10 +46,10 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.avro.AvroSchemaUtil;
+import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hivelink.core.utils.HiveTypeUtil;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
@@ -94,13 +94,12 @@ public class TestLegacyHiveTableScan extends HiveMetastoreTest {
       new FieldSchema("pDateCol", "date", ""));
   private static final String CATALOG_NAME = "test_legacy_hive_catalog";
 
-  private static HiveCatalog legacyCatalog;
+  private static Catalog legacyCatalog;
   private static Path dbPath;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    legacyCatalog = new LegacyHiveCatalog(HiveMetastoreTest.hiveConf);
-    legacyCatalog.initialize(CATALOG_NAME, Maps.newHashMap());
+    legacyCatalog = LegacyHiveCatalog.loadLegacyCatalog(CATALOG_NAME, HiveMetastoreTest.hiveConf);
     dbPath = Paths.get(URI.create(metastoreClient.getDatabase(DB_NAME).getLocationUri()));
   }
 

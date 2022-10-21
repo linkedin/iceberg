@@ -40,6 +40,7 @@ import org.apache.iceberg.ClientPool;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.LocationProviders;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -294,7 +295,7 @@ public class LegacyHiveTableOperations extends BaseMetastoreTableOperations {
 
   @Override
   public LocationProvider locationProvider() {
-    throw new UnsupportedOperationException("Writes not supported for Hive tables without Iceberg metadata");
+    return LocationProviders.locationsFor(current().location(), current().properties());
   }
 
   private TableMetadata newTableMetadataWithoutFreshIds(Schema schema,
