@@ -116,7 +116,7 @@ jobs:
           && github.repository == 'linkedin/iceberg'
           && !contains(toJSON(github.event.commits.*.message), '[skip release]') }}
 
-        run: ./gradlew githubRelease publishToSonatype closeAndReleaseStagingRepository
+        run: ./gradlew -DflinkVersions= -DsparkVersions=2.4,3.1 -DhiveVersions= githubRelease publishToSonatype closeAndReleaseStagingRepository
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
           SONATYPE_USER: ${{secrets.SONATYPE_USER}}
