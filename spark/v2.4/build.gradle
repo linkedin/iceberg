@@ -124,6 +124,7 @@ project(':iceberg-spark:iceberg-spark-runtime-2.4') {
       exclude group: 'org.xerial.snappy'
       exclude group: 'javax.xml.bind'
       exclude group: 'javax.annotation'
+      exclude group: 'io.netty', module: 'netty-common'
     }
   }
 
