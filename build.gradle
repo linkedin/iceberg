@@ -810,6 +810,25 @@ project(':iceberg-dell') {
   }
 }
 
+project(':li-iceberg-depend-all') {
+  dependencies {
+    runtimeOnly project(':iceberg-api')
+    runtimeOnly project(':iceberg-arrow')
+    runtimeOnly project(':iceberg-common')
+    runtimeOnly project(':iceberg-core')
+    runtimeOnly project(':iceberg-data')
+    runtimeOnly project(':iceberg-hive-metastore')
+    runtimeOnly project(':iceberg-hivelink-core')
+    runtimeOnly project(':iceberg-mr')
+    runtimeOnly project(':iceberg-orc')
+    runtimeOnly project(':iceberg-parquet')
+
+    // engine runtimes
+    runtimeOnly project(':iceberg-spark:iceberg-spark-runtime-3.1_2.12')
+    runtimeOnly project(":iceberg-flink:iceberg-flink-runtime-1.15")
+  }
+}
+
 @Memoized
 boolean versionFileExists() {
   return file('version.txt').exists()
