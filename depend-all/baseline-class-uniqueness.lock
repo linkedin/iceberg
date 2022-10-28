@@ -2,7 +2,7 @@
 # Run ./gradlew checkClassUniqueness --write-locks to update this file
 
 ## runtimeClasspath
-[com.github.luben:zstd-jni, com.linkedin.iceberg:iceberg-flink-runtime-1.15]
+[com.github.luben:zstd-jni, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4]
   - com.github.luben.zstd.AutoCloseBase
   - com.github.luben.zstd.BufferPool
   - com.github.luben.zstd.NoPool
@@ -23,7 +23,7 @@
   - com.github.luben.zstd.ZstdOutputStreamNoFinalizer
   - com.github.luben.zstd.util.Native
   - com.github.luben.zstd.util.ZstdVersion
-[com.github.stephenc.findbugs:findbugs-annotations, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.github.stephenc.findbugs:findbugs-annotations, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - edu.umd.cs.findbugs.annotations.CheckForNull
   - edu.umd.cs.findbugs.annotations.CheckReturnValue
   - edu.umd.cs.findbugs.annotations.CleanupObligation
@@ -46,7 +46,7 @@
   - edu.umd.cs.findbugs.annotations.SuppressWarnings
   - edu.umd.cs.findbugs.annotations.UnknownNullness
   - edu.umd.cs.findbugs.annotations.When
-[com.linkedin.iceberg:iceberg-aliyun, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-aliyun, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.aliyun.AliyunClientFactories
   - org.apache.iceberg.aliyun.AliyunClientFactories$DefaultAliyunClientFactory
   - org.apache.iceberg.aliyun.AliyunClientFactory
@@ -58,7 +58,7 @@
   - org.apache.iceberg.aliyun.oss.OSSOutputFile
   - org.apache.iceberg.aliyun.oss.OSSOutputStream
   - org.apache.iceberg.aliyun.oss.OSSURI
-[com.linkedin.iceberg:iceberg-api, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-api, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.Accessor
   - org.apache.iceberg.Accessors
   - org.apache.iceberg.Accessors$1
@@ -448,7 +448,7 @@
   - org.apache.iceberg.util.StructProjection$1
   - org.apache.iceberg.util.UUIDUtil
   - org.apache.iceberg.util.UnicodeUtil
-[com.linkedin.iceberg:iceberg-arrow, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-arrow, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.arrow.ArrowAllocation
   - org.apache.iceberg.arrow.ArrowSchemaUtil
   - org.apache.iceberg.arrow.ArrowSchemaUtil$1
@@ -570,7 +570,7 @@
   - org.apache.iceberg.arrow.vectorized.parquet.VectorizedParquetDefinitionLevelReader$NumericBaseReader
   - org.apache.iceberg.arrow.vectorized.parquet.VectorizedParquetDefinitionLevelReader$TimestampMillisReader
   - org.apache.iceberg.arrow.vectorized.parquet.VectorizedParquetDefinitionLevelReader$VarWidthReader
-[com.linkedin.iceberg:iceberg-aws, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-aws, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.aws.AssumeRoleAwsClientFactory
   - org.apache.iceberg.aws.AwsClientFactories
   - org.apache.iceberg.aws.AwsClientFactories$DefaultAwsClientFactory
@@ -599,7 +599,7 @@
   - org.apache.iceberg.aws.s3.S3OutputStream$FileAndDigest
   - org.apache.iceberg.aws.s3.S3RequestUtil
   - org.apache.iceberg.aws.s3.S3URI
-[com.linkedin.iceberg:iceberg-bundled-guava, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-bundled-guava, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.relocated.com.google.common.base.AbstractIterator
   - org.apache.iceberg.relocated.com.google.common.base.Converter
   - org.apache.iceberg.relocated.com.google.common.base.Equivalence
@@ -1074,7 +1074,7 @@
   - org.apache.iceberg.relocated.com.google.common.util.concurrent.WrappingScheduledExecutorService
   - org.apache.iceberg.relocated.com.google.common.util.concurrent.package-info
   - org.apache.iceberg.relocated.com.google.common.xml.package-info
-[com.linkedin.iceberg:iceberg-common, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-common, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.common.DynClasses
   - org.apache.iceberg.common.DynClasses$1
   - org.apache.iceberg.common.DynClasses$Builder
@@ -1099,7 +1099,7 @@
   - org.apache.iceberg.common.DynMethods$StaticMethod
   - org.apache.iceberg.common.DynMethods$UnboundMethod
   - org.apache.iceberg.common.DynMethods$UnboundMethod$1
-[com.linkedin.iceberg:iceberg-core, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-core, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.AllDataFilesTable
   - org.apache.iceberg.AllDataFilesTable$AllDataFilesTableScan
   - org.apache.iceberg.AllDeleteFilesTable
@@ -1825,7 +1825,7 @@
   - org.apache.iceberg.util.ThreadPools
   - org.apache.iceberg.util.WapUtil
   - org.apache.iceberg.util.ZOrderByteUtils
-[com.linkedin.iceberg:iceberg-data, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-data, com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.data.BaseFileWriterFactory
   - org.apache.iceberg.data.BaseFileWriterFactory$1
   - org.apache.iceberg.data.DeleteFilter
@@ -2064,7 +2064,7 @@
   - org.apache.iceberg.flink.source.split.IcebergSourceSplitStatus
   - org.apache.iceberg.flink.source.split.SplitRequestEvent
   - org.apache.iceberg.flink.util.FlinkCompatibilityUtil
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-hive-metastore, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-hive-metastore, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.hive.CachedClientPool
   - org.apache.iceberg.hive.HiveCatalog
   - org.apache.iceberg.hive.HiveClientPool
@@ -2077,13 +2077,13 @@
   - org.apache.iceberg.hive.HiveTableOperations$WaitingForLockException
   - org.apache.iceberg.hive.MetastoreUtil
   - org.apache.iceberg.hive.RuntimeMetaException
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-nessie, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-nessie, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.nessie.NessieCatalog
   - org.apache.iceberg.nessie.NessieIcebergClient
   - org.apache.iceberg.nessie.NessieTableOperations
   - org.apache.iceberg.nessie.NessieUtil
   - org.apache.iceberg.nessie.UpdateableReference
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-orc, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-orc, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.data.orc.GenericOrcReader
   - org.apache.iceberg.data.orc.GenericOrcReader$1
   - org.apache.iceberg.data.orc.GenericOrcReader$ReadBuilder
@@ -2187,7 +2187,7 @@
   - org.apache.iceberg.orc.RowFilterValueReader$LongConverter
   - org.apache.iceberg.orc.RowFilterValueReader$StringConverter
   - org.apache.iceberg.orc.VectorizedRowBatchIterator
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-parquet, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-parquet, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.data.parquet.BaseParquetReaders
   - org.apache.iceberg.data.parquet.BaseParquetReaders$1
   - org.apache.iceberg.data.parquet.BaseParquetReaders$DateReader
@@ -2383,7 +2383,7 @@
   - org.apache.iceberg.parquet.VectorizedParquetReader
   - org.apache.iceberg.parquet.VectorizedParquetReader$FileIterator
   - org.apache.iceberg.parquet.VectorizedReader
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.apache.httpcomponents.client5:httpclient5]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.apache.httpcomponents.client5:httpclient5]
   - org.apache.hc.client5.http.AuthenticationStrategy
   - org.apache.hc.client5.http.CircularRedirectException
   - org.apache.hc.client5.http.ClientProtocolException
@@ -2858,7 +2858,7 @@
   - org.apache.hc.client5.httpic.methods.HttpTrace
   - org.apache.hc.client5.httpic.methods.HttpUriRequest
   - org.apache.hc.client5.httpic.methods.HttpUriRequestBase
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.apache.httpcomponents.core5:httpcore5-h2]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.apache.httpcomponents.core5:httpcore5-h2]
   - org.apache.hc.core5.http2.H2ConnectionException
   - org.apache.hc.core5.http2.H2CorruptFrameException
   - org.apache.hc.core5.http2.H2Error
@@ -2999,7 +2999,7 @@
   - org.apache.hc.core5.http2.ssl.H2TlsSupport
   - org.apache.hc.core5.http2.ssl.H2TlsSupport$1
   - org.apache.hc.core5.http2.ssl.H2TlsSupport$2
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.apache.httpcomponents.core5:httpcore5]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.apache.httpcomponents.core5:httpcore5]
   - org.apache.hc.core5.annotation.Contract
   - org.apache.hc.core5.annotation.Experimental
   - org.apache.hc.core5.annotation.Internal
@@ -3632,7 +3632,7 @@
   - org.apache.hc.core5.util.Tokenizer
   - org.apache.hc.core5.util.Tokenizer$Cursor
   - org.apache.hc.core5.util.VersionInfo
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.apache.yetus:audience-annotations]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.apache.yetus:audience-annotations]
   - org.apache.yetus.audience.InterfaceAudience
   - org.apache.yetus.audience.InterfaceAudience$LimitedPrivate
   - org.apache.yetus.audience.InterfaceAudience$Private
@@ -3646,7 +3646,7 @@
   - org.apache.yetus.audience.tools.RootDocProcessor
   - org.apache.yetus.audience.tools.RootDocProcessor$ExcludeHandler
   - org.apache.yetus.audience.tools.StabilityOptions
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.jetbrains:annotations]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.jetbrains:annotations]
   - org.intellij.lang.annotations.Flow
   - org.intellij.lang.annotations.Identifier
   - org.intellij.lang.annotations.JdkConstants
@@ -3686,7 +3686,7 @@
   - org.jetbrains.annotations.PropertyKey
   - org.jetbrains.annotations.Range
   - org.jetbrains.annotations.TestOnly
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.projectnessie:nessie-client]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.projectnessie:nessie-client]
   - org.projectnessie.client.NessieClientBuilder
   - org.projectnessie.client.NessieConfigConstants
   - org.projectnessie.client.ResultStreamPaginator
@@ -3796,7 +3796,7 @@
   - org.projectnessie.client.rest.NessieServiceException
   - org.projectnessie.client.rest.ResponseCheckFilter
   - org.projectnessie.client.rest.ResponseCheckFilter$1
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.projectnessie:nessie-model]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12, org.projectnessie:nessie-model]
   - org.projectnessie.api.ConfigApi
   - org.projectnessie.api.ContentApi
   - org.projectnessie.api.DiffApi
@@ -4033,7 +4033,7 @@
   - org.projectnessie.model.Transplant
   - org.projectnessie.model.UriUtil
   - org.projectnessie.model.Validation
-[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-flink-runtime-1.15, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.shaded.com.fasterxml.jackson.annotation.JacksonInject$Value
   - org.apache.iceberg.shaded.com.fasterxml.jackson.annotation.JsonAnyGetter
   - org.apache.iceberg.shaded.com.fasterxml.jackson.annotation.JsonEnumDefaultValue
@@ -4544,7 +4544,7 @@
 [com.linkedin.iceberg:iceberg-flink-runtime-1.15, org.roaringbitmap:shims]
   - META-INF.versions.11.org.roaringbitmap.ArraysShim
   - org.roaringbitmap.ArraysShim
-[com.linkedin.iceberg:iceberg-hivelink-core, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+[com.linkedin.iceberg:iceberg-hivelink-core, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.hivelink.core.DirectoryInfo
   - org.apache.iceberg.hivelink.core.HiveExpressions
   - org.apache.iceberg.hivelink.core.HiveExpressions$1
@@ -4576,31 +4576,15 @@
   - org.apache.iceberg.hivelink.core.utils.HiveTypeUtil$1
   - org.apache.iceberg.hivelink.core.utils.HiveTypeUtil$HiveSchemaVisitor
   - org.apache.iceberg.hivelink.core.utils.MappingUtil
-[com.linkedin.iceberg:iceberg-spark-3.1_2.12, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
-  - org.apache.iceberg.spark.BaseCatalog
-  - org.apache.iceberg.spark.CommitMetadata
-  - org.apache.iceberg.spark.FileRewriteCoordinator
-  - org.apache.iceberg.spark.FileScanTaskSetManager
+[com.linkedin.iceberg:iceberg-spark-2.4, com.linkedin.iceberg:iceberg-spark-3.1_2.12, com.linkedin.iceberg:iceberg-spark-runtime-2.4, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
   - org.apache.iceberg.spark.IcebergSpark
   - org.apache.iceberg.spark.JobGroupInfo
   - org.apache.iceberg.spark.JobGroupUtils
   - org.apache.iceberg.spark.OrcSchemaWithTypeVisitorSpark
-  - org.apache.iceberg.spark.OrderField
-  - org.apache.iceberg.spark.PathIdentifier
   - org.apache.iceberg.spark.PruneColumnsWithReordering
   - org.apache.iceberg.spark.PruneColumnsWithReordering$1
   - org.apache.iceberg.spark.PruneColumnsWithoutReordering
   - org.apache.iceberg.spark.PruneColumnsWithoutReordering$1
-  - org.apache.iceberg.spark.RollbackStagedTable
-  - org.apache.iceberg.spark.SortOrderToSpark
-  - org.apache.iceberg.spark.Spark3Util
-  - org.apache.iceberg.spark.Spark3Util$1
-  - org.apache.iceberg.spark.Spark3Util$2
-  - org.apache.iceberg.spark.Spark3Util$CatalogAndIdentifier
-  - org.apache.iceberg.spark.Spark3Util$DescribeExpressionVisitor
-  - org.apache.iceberg.spark.Spark3Util$DescribeSchemaVisitor
-  - org.apache.iceberg.spark.Spark3Util$DescribeSortOrderVisitor
-  - org.apache.iceberg.spark.SparkCatalog
   - org.apache.iceberg.spark.SparkConfParser
   - org.apache.iceberg.spark.SparkConfParser$BooleanConfParser
   - org.apache.iceberg.spark.SparkConfParser$ConfParser
@@ -4618,7 +4602,6 @@
   - org.apache.iceberg.spark.SparkReadOptions
   - org.apache.iceberg.spark.SparkSQLProperties
   - org.apache.iceberg.spark.SparkSchemaUtil
-  - org.apache.iceberg.spark.SparkSessionCatalog
   - org.apache.iceberg.spark.SparkStructLike
   - org.apache.iceberg.spark.SparkTableUtil
   - org.apache.iceberg.spark.SparkTableUtil$1
@@ -4638,21 +4621,12 @@
   - org.apache.iceberg.spark.actions.BaseDeleteReachableFilesSparkAction$1
   - org.apache.iceberg.spark.actions.BaseExpireSnapshotsSparkAction
   - org.apache.iceberg.spark.actions.BaseExpireSnapshotsSparkAction$1
-  - org.apache.iceberg.spark.actions.BaseMigrateTableSparkAction
-  - org.apache.iceberg.spark.actions.BaseRewriteDataFilesSpark3Action
-  - org.apache.iceberg.spark.actions.BaseRewriteDataFilesSparkAction
-  - org.apache.iceberg.spark.actions.BaseRewriteDataFilesSparkAction$1
-  - org.apache.iceberg.spark.actions.BaseRewriteDataFilesSparkAction$RewriteExecutionContext
   - org.apache.iceberg.spark.actions.BaseRewriteManifestsSparkAction
-  - org.apache.iceberg.spark.actions.BaseSnapshotTableSparkAction
   - org.apache.iceberg.spark.actions.BaseSnapshotUpdateSparkAction
   - org.apache.iceberg.spark.actions.BaseSparkAction
   - org.apache.iceberg.spark.actions.BaseSparkAction$ReadManifest
   - org.apache.iceberg.spark.actions.BaseSparkActions
-  - org.apache.iceberg.spark.actions.BaseTableCreationSparkAction
   - org.apache.iceberg.spark.actions.ManifestFileBean
-  - org.apache.iceberg.spark.actions.Spark3BinPackStrategy
-  - org.apache.iceberg.spark.actions.Spark3SortStrategy
   - org.apache.iceberg.spark.actions.SparkActions
   - org.apache.iceberg.spark.data.AvroWithSparkSchemaVisitor
   - org.apache.iceberg.spark.data.ParquetWithSparkSchemaVisitor
@@ -4765,6 +4739,74 @@
   - org.apache.iceberg.spark.data.vectorized.VectorizedSparkOrcReaders$UnionConverter
   - org.apache.iceberg.spark.data.vectorized.VectorizedSparkOrcReaders$UnionConverter$1
   - org.apache.iceberg.spark.data.vectorized.VectorizedSparkParquetReaders
+  - org.apache.iceberg.spark.source.BaseDataReader
+  - org.apache.iceberg.spark.source.BaseDataReader$1
+  - org.apache.iceberg.spark.source.BatchDataReader
+  - org.apache.iceberg.spark.source.EqualityDeleteRowReader
+  - org.apache.iceberg.spark.source.IcebergSource
+  - org.apache.iceberg.spark.source.InternalRowWrapper
+  - org.apache.iceberg.spark.source.RowDataReader
+  - org.apache.iceberg.spark.source.RowDataReader$1
+  - org.apache.iceberg.spark.source.RowDataReader$SparkDeleteFilter
+  - org.apache.iceberg.spark.source.RowDataRewriter
+  - org.apache.iceberg.spark.source.SparkAppenderFactory
+  - org.apache.iceberg.spark.source.SparkAppenderFactory$1
+  - org.apache.iceberg.spark.source.SparkAppenderFactory$Builder
+  - org.apache.iceberg.spark.source.SparkFileWriterFactory
+  - org.apache.iceberg.spark.source.SparkFileWriterFactory$Builder
+  - org.apache.iceberg.spark.source.SparkPartitionedFanoutWriter
+  - org.apache.iceberg.spark.source.SparkPartitionedWriter
+  - org.apache.iceberg.spark.source.Stats
+  - org.apache.iceberg.spark.source.StreamingOffset
+  - org.apache.iceberg.spark.source.StructInternalRow
+  - org.apache.iceberg.spark.source.StructInternalRow$1
+[com.linkedin.iceberg:iceberg-spark-2.4, com.linkedin.iceberg:iceberg-spark-runtime-2.4]
+  - org.apache.iceberg.actions.Actions
+  - org.apache.iceberg.actions.RewriteDataFilesAction
+  - org.apache.iceberg.actions.SparkActions
+  - org.apache.iceberg.spark.source.CustomCatalogs
+  - org.apache.iceberg.spark.source.Reader
+  - org.apache.iceberg.spark.source.Reader$1
+  - org.apache.iceberg.spark.source.Reader$BatchReader
+  - org.apache.iceberg.spark.source.Reader$BatchReaderFactory
+  - org.apache.iceberg.spark.source.Reader$InternalRowReaderFactory
+  - org.apache.iceberg.spark.source.Reader$ReadTask
+  - org.apache.iceberg.spark.source.Reader$ReaderFactory
+  - org.apache.iceberg.spark.source.Reader$RowReader
+  - org.apache.iceberg.spark.source.StreamingWriter
+  - org.apache.iceberg.spark.source.Writer
+  - org.apache.iceberg.spark.source.Writer$Partitioned24Writer
+  - org.apache.iceberg.spark.source.Writer$PartitionedFanout24Writer
+  - org.apache.iceberg.spark.source.Writer$TaskCommit
+  - org.apache.iceberg.spark.source.Writer$Unpartitioned24Writer
+  - org.apache.iceberg.spark.source.Writer$WriterFactory
+[com.linkedin.iceberg:iceberg-spark-3.1_2.12, com.linkedin.iceberg:iceberg-spark-runtime-3.1_2.12]
+  - org.apache.iceberg.spark.BaseCatalog
+  - org.apache.iceberg.spark.CommitMetadata
+  - org.apache.iceberg.spark.FileRewriteCoordinator
+  - org.apache.iceberg.spark.FileScanTaskSetManager
+  - org.apache.iceberg.spark.OrderField
+  - org.apache.iceberg.spark.PathIdentifier
+  - org.apache.iceberg.spark.RollbackStagedTable
+  - org.apache.iceberg.spark.SortOrderToSpark
+  - org.apache.iceberg.spark.Spark3Util
+  - org.apache.iceberg.spark.Spark3Util$1
+  - org.apache.iceberg.spark.Spark3Util$2
+  - org.apache.iceberg.spark.Spark3Util$CatalogAndIdentifier
+  - org.apache.iceberg.spark.Spark3Util$DescribeExpressionVisitor
+  - org.apache.iceberg.spark.Spark3Util$DescribeSchemaVisitor
+  - org.apache.iceberg.spark.Spark3Util$DescribeSortOrderVisitor
+  - org.apache.iceberg.spark.SparkCatalog
+  - org.apache.iceberg.spark.SparkSessionCatalog
+  - org.apache.iceberg.spark.actions.BaseMigrateTableSparkAction
+  - org.apache.iceberg.spark.actions.BaseRewriteDataFilesSpark3Action
+  - org.apache.iceberg.spark.actions.BaseRewriteDataFilesSparkAction
+  - org.apache.iceberg.spark.actions.BaseRewriteDataFilesSparkAction$1
+  - org.apache.iceberg.spark.actions.BaseRewriteDataFilesSparkAction$RewriteExecutionContext
+  - org.apache.iceberg.spark.actions.BaseSnapshotTableSparkAction
+  - org.apache.iceberg.spark.actions.BaseTableCreationSparkAction
+  - org.apache.iceberg.spark.actions.Spark3BinPackStrategy
+  - org.apache.iceberg.spark.actions.Spark3SortStrategy
   - org.apache.iceberg.spark.procedures.AddFilesProcedure
   - org.apache.iceberg.spark.procedures.AddFilesProcedure$1
   - org.apache.iceberg.spark.procedures.AncestorsOfProcedure
@@ -4795,21 +4837,8 @@
   - org.apache.iceberg.spark.procedures.SnapshotTableProcedure$1
   - org.apache.iceberg.spark.procedures.SparkProcedures
   - org.apache.iceberg.spark.procedures.SparkProcedures$ProcedureBuilder
-  - org.apache.iceberg.spark.source.BaseDataReader
-  - org.apache.iceberg.spark.source.BaseDataReader$1
-  - org.apache.iceberg.spark.source.BatchDataReader
-  - org.apache.iceberg.spark.source.EqualityDeleteRowReader
-  - org.apache.iceberg.spark.source.IcebergSource
-  - org.apache.iceberg.spark.source.InternalRowWrapper
-  - org.apache.iceberg.spark.source.RowDataReader
-  - org.apache.iceberg.spark.source.RowDataReader$1
-  - org.apache.iceberg.spark.source.RowDataReader$SparkDeleteFilter
-  - org.apache.iceberg.spark.source.RowDataRewriter
   - org.apache.iceberg.spark.source.SerializableTableWithSize
   - org.apache.iceberg.spark.source.SerializableTableWithSize$SerializableMetadataTableWithSize
-  - org.apache.iceberg.spark.source.SparkAppenderFactory
-  - org.apache.iceberg.spark.source.SparkAppenderFactory$1
-  - org.apache.iceberg.spark.source.SparkAppenderFactory$Builder
   - org.apache.iceberg.spark.source.SparkBatchQueryScan
   - org.apache.iceberg.spark.source.SparkBatchScan
   - org.apache.iceberg.spark.source.SparkBatchScan$1
@@ -4817,8 +4846,6 @@
   - org.apache.iceberg.spark.source.SparkBatchScan$ReadTask
   - org.apache.iceberg.spark.source.SparkBatchScan$ReaderFactory
   - org.apache.iceberg.spark.source.SparkBatchScan$RowReader
-  - org.apache.iceberg.spark.source.SparkFileWriterFactory
-  - org.apache.iceberg.spark.source.SparkFileWriterFactory$Builder
   - org.apache.iceberg.spark.source.SparkFilesScan
   - org.apache.iceberg.spark.source.SparkFilesScanBuilder
   - org.apache.iceberg.spark.source.SparkMergeBuilder
@@ -4826,8 +4853,6 @@
   - org.apache.iceberg.spark.source.SparkMergeScan
   - org.apache.iceberg.spark.source.SparkMicroBatchStream
   - org.apache.iceberg.spark.source.SparkMicroBatchStream$InitialOffsetStore
-  - org.apache.iceberg.spark.source.SparkPartitionedFanoutWriter
-  - org.apache.iceberg.spark.source.SparkPartitionedWriter
   - org.apache.iceberg.spark.source.SparkRewriteBuilder
   - org.apache.iceberg.spark.source.SparkScanBuilder
   - org.apache.iceberg.spark.source.SparkTable
@@ -4848,10 +4873,6 @@
   - org.apache.iceberg.spark.source.SparkWrite$WriterFactory
   - org.apache.iceberg.spark.source.SparkWriteBuilder
   - org.apache.iceberg.spark.source.StagedSparkTable
-  - org.apache.iceberg.spark.source.Stats
-  - org.apache.iceberg.spark.source.StreamingOffset
-  - org.apache.iceberg.spark.source.StructInternalRow
-  - org.apache.iceberg.spark.source.StructInternalRow$1
   - org.apache.spark.sql.catalyst.analysis.NoSuchProcedureException
   - org.apache.spark.sql.catalyst.expressions.IcebergBucketTransform
   - org.apache.spark.sql.catalyst.expressions.IcebergBucketTransform$
