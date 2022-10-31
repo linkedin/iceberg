@@ -859,3 +859,31 @@ apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
 apply from: 'shipkit.gradle'
 
+project(':li-iceberg-depend-all') {
+  checkClassUniqueness {
+    enabled = false
+  }
+
+  dependencies {
+    runtimeOnly project(':iceberg-api')
+    runtimeOnly project(':iceberg-arrow')
+    runtimeOnly project(':iceberg-common')
+    runtimeOnly project(':iceberg-core')
+    runtimeOnly project(':iceberg-data')
+    runtimeOnly project(':iceberg-hive-metastore')
+    runtimeOnly project(':iceberg-hivelink-core')
+    runtimeOnly project(':iceberg-orc')
+    runtimeOnly project(':iceberg-parquet')
+
+    // engine runtimes
+    if (findProject(':iceberg-spark:iceberg-spark-runtime-3.1_2.12') != null) {
+      runtimeOnly project(':iceberg-spark:iceberg-spark-runtime-3.1_2.12')
+    }
+    if (findProject(':iceberg-spark:iceberg-spark-runtime-2.4') != null) {
+      runtimeOnly project(':iceberg-spark:iceberg-spark-runtime-2.4')
+    }
+    if (findProject(':iceberg-flink:iceberg-flink-runtime-1.15') != null) {
+      runtimeOnly project(":iceberg-flink:iceberg-flink-runtime-1.15")
+    }
+  }
+}
