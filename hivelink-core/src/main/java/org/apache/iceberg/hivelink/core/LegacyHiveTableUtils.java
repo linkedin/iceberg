@@ -91,7 +91,9 @@ class LegacyHiveTableUtils {
     Schema partitionSchema = partitionSchema(table.getPartitionKeys(), schema);
     Types.StructType partitionStructType = partitionSchema.asStruct();
     fields.addAll(partitionStructType.fields());
-    return new Schema(fields);
+    Schema retSchema = new Schema(fields);
+    retSchema.setFromHiveTable(true);
+    return retSchema;
   }
 
   static StructTypeInfo structTypeInfoFromCols(List<FieldSchema> cols) {

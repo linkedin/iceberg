@@ -53,6 +53,16 @@ public class Schema implements Serializable {
   private transient Map<Integer, Accessor<StructLike>> idToAccessor = null;
   private transient Map<Integer, String> idToName = null;
 
+  private transient boolean isFromHiveTable = false;
+
+  public boolean isFromHiveTable() {
+    return isFromHiveTable;
+  }
+
+  public void setFromHiveTable(boolean fromHiveTable) {
+    isFromHiveTable = fromHiveTable;
+  }
+
   public Schema(List<NestedField> columns, Map<String, Integer> aliases) {
     this.struct = StructType.of(columns);
     this.aliasToId = aliases != null ? ImmutableBiMap.copyOf(aliases) : null;
