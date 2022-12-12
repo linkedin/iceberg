@@ -43,6 +43,9 @@ import org.apache.orc.TypeDescription;
 import org.apache.orc.Writer;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 
+import static org.apache.iceberg.TableProperties.ORC_DO_NOT_WRITE_FIELD_IDS;
+import static org.apache.iceberg.TableProperties.ORC_DO_NOT_WRITE_FIELD_IDS_DEFAULT;
+
 /**
  * Create a file appender for ORC.
  */
@@ -66,13 +69,19 @@ class OrcFileAppender<D> implements FileAppender<D> {
     this.metricsConfig = metricsConfig;
 
     TypeDescription orcSchema = ORCSchemaUtil.convert(schema);
+    TypeDescription orcSchemaWithoutIds = ORCSchemaUtil.removeIds(orcSchema);
+
     this.batch = orcSchema.createRowBatch(this.batchSize);
 
     OrcFile.WriterOptions options = OrcFile.writerOptions(conf).useUTCTimestamp(true);
     if (file instanceof HadoopOutputFile) {
       options.fileSystem(((HadoopOutputFile) file).getFileSystem());
     }
-    options.setSchema(orcSchema);
+    if (conf.getBoolean(ORC_DO_NOT_WRITE_FIELD_IDS, ORC_DO_NOT_WRITE_FIELD_IDS_DEFAULT)) {
+      options.setSchema(orcSchemaWithoutIds);
+    } else {
+      options.setSchema(orcSchema);
+    }
     this.writer = newOrcWriter(file, options, metadata);
     this.valueWriter = newOrcRowWriter(schema, orcSchema, createWriterFunc);
   }

@@ -184,4 +184,8 @@ public class TableProperties {
 
   public static final String MERGE_CARDINALITY_CHECK_ENABLED = "write.merge.cardinality-check.enabled";
   public static final boolean MERGE_CARDINALITY_CHECK_ENABLED_DEFAULT = true;
+
+  public static final String ORC_DO_NOT_WRITE_FIELD_IDS = "write.orc.no-field-ids.enabled";
+
+  public static final boolean ORC_DO_NOT_WRITE_FIELD_IDS_DEFAULT = false;
 }

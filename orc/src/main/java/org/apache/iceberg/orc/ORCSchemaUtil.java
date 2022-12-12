@@ -506,7 +506,7 @@ public final class ORCSchemaUtil {
     return OrcSchemaVisitor.visit(type, new RemoveIds());
   }
 
-  static boolean hasIds(TypeDescription orcSchema) {
+  public static boolean hasIds(TypeDescription orcSchema) {
     return OrcSchemaVisitor.visit(orcSchema, new HasIds());
   }
 
