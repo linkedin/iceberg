@@ -63,6 +63,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.iceberg.TableProperties.READ_ORC_IGNORE_FILE_FIELD_IDS;
+import static org.apache.iceberg.TableProperties.READ_ORC_IGNORE_FILE_FIELD_IDS_DEFAULT;
+
 abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
   private static final Logger LOG = LoggerFactory.getLogger(SparkBatchScan.class);
 
@@ -135,13 +138,17 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
     String tableSchemaString = SchemaParser.toJson(table.schema());
     String expectedSchemaString = SchemaParser.toJson(expectedSchema);
     String nameMappingString = table.properties().get(TableProperties.DEFAULT_NAME_MAPPING);
+    boolean ignoreFileFieldIds = PropertyUtil.propertyAsBoolean(
+        table.properties(),
+        READ_ORC_IGNORE_FILE_FIELD_IDS,
+        READ_ORC_IGNORE_FILE_FIELD_IDS_DEFAULT);
 
     List<CombinedScanTask> scanTasks = tasks();
     InputPartition[] readTasks = new InputPartition[scanTasks.size()];
     for (int i = 0; i < scanTasks.size(); i++) {
       readTasks[i] = new ReadTask(
           scanTasks.get(i), tableSchemaString, expectedSchemaString, nameMappingString, io, encryptionManager,
-          caseSensitive, localityPreferred);
+          caseSensitive, localityPreferred, ignoreFileFieldIds);
     }
 
     return readTasks;
@@ -271,14 +278,14 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
   private static class RowReader extends RowDataReader implements PartitionReader<InternalRow> {
     RowReader(ReadTask task) {
       super(task.task, task.tableSchema(), task.expectedSchema(), task.nameMappingString, task.io(), task.encryption(),
-          task.isCaseSensitive());
+          task.isCaseSensitive(), task.getIgnoreFileFieldIds());
     }
   }
 
   private static class BatchReader extends BatchDataReader implements PartitionReader<ColumnarBatch> {
     BatchReader(ReadTask task, int batchSize) {
       super(task.task, task.expectedSchema(), task.nameMappingString, task.io(), task.encryption(),
-          task.isCaseSensitive(), batchSize);
+          task.isCaseSensitive(), batchSize, task.getIgnoreFileFieldIds());
     }
   }
 
@@ -290,6 +297,7 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
     private final Broadcast<FileIO> io;
     private final Broadcast<EncryptionManager> encryptionManager;
     private final boolean caseSensitive;
+    private final boolean ignoreFileFieldIds;
 
     private transient Schema tableSchema = null;
     private transient Schema expectedSchema = null;
@@ -297,7 +305,7 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
 
     ReadTask(CombinedScanTask task, String tableSchemaString, String expectedSchemaString, String nameMappingString,
              Broadcast<FileIO> io, Broadcast<EncryptionManager> encryptionManager, boolean caseSensitive,
-             boolean localityPreferred) {
+             boolean localityPreferred, boolean ignoreFileFieldIds) {
       this.task = task;
       this.tableSchemaString = tableSchemaString;
       this.expectedSchemaString = expectedSchemaString;
@@ -310,6 +318,7 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
       } else {
         this.preferredLocations = HadoopInputFile.NO_LOCATION_PREFERENCE;
       }
+      this.ignoreFileFieldIds = ignoreFileFieldIds;
     }
 
     @Override
@@ -345,6 +354,10 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
         this.expectedSchema = SchemaParser.fromJson(expectedSchemaString);
       }
       return expectedSchema;
+    }
+
+    public boolean getIgnoreFileFieldIds() {
+      return ignoreFileFieldIds;
     }
   }
 }

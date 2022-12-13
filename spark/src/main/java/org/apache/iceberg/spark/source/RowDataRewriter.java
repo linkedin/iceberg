@@ -50,6 +50,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.iceberg.TableProperties.DEFAULT_NAME_MAPPING;
+import static org.apache.iceberg.TableProperties.READ_ORC_IGNORE_FILE_FIELD_IDS;
+import static org.apache.iceberg.TableProperties.READ_ORC_IGNORE_FILE_FIELD_IDS_DEFAULT;
 
 public class RowDataRewriter implements Serializable {
 
@@ -64,6 +66,7 @@ public class RowDataRewriter implements Serializable {
   private final LocationProvider locations;
   private final String nameMapping;
   private final boolean caseSensitive;
+  private final boolean ignoreFileFieldIds;
 
   public RowDataRewriter(Table table, PartitionSpec spec, boolean caseSensitive,
                          Broadcast<FileIO> io, Broadcast<EncryptionManager> encryptionManager) {
@@ -80,6 +83,11 @@ public class RowDataRewriter implements Serializable {
     String formatString = table.properties().getOrDefault(
         TableProperties.DEFAULT_FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
     this.format = FileFormat.valueOf(formatString.toUpperCase(Locale.ENGLISH));
+
+    this.ignoreFileFieldIds = PropertyUtil.propertyAsBoolean(
+        table.properties(),
+        READ_ORC_IGNORE_FILE_FIELD_IDS,
+        READ_ORC_IGNORE_FILE_FIELD_IDS_DEFAULT);
   }
 
   public List<DataFile> rewriteDataForTasks(JavaRDD<CombinedScanTask> taskRDD) {
@@ -96,7 +104,7 @@ public class RowDataRewriter implements Serializable {
     long taskId = context.taskAttemptId();
 
     RowDataReader dataReader = new RowDataReader(
-        task, schema, schema, nameMapping, io.value(), encryptionManager.value(), caseSensitive);
+        task, schema, schema, nameMapping, io.value(), encryptionManager.value(), caseSensitive, ignoreFileFieldIds);
 
     StructType structType = SparkSchemaUtil.convert(schema);
     SparkAppenderFactory appenderFactory = new SparkAppenderFactory(properties, schema, structType, spec);

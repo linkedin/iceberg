@@ -137,6 +137,8 @@ public class ORC {
     private NameMapping nameMapping = null;
     private OrcRowFilter rowFilter = null;
 
+    private boolean ignoreFileFieldIds = false;
+
     private Function<TypeDescription, OrcRowReader<?>> readerFunc;
     private Function<TypeDescription, OrcBatchReader<?>> batchedReaderFunc;
     private int recordsPerBatch = VectorizedRowBatch.DEFAULT_SIZE;
@@ -217,10 +219,15 @@ public class ORC {
       return this;
     }
 
+    public ReadBuilder setIgnoreFileFieldIds(boolean ignoreFileFieldIds) {
+      this.ignoreFileFieldIds = ignoreFileFieldIds;
+      return this;
+    }
+
     public <D> CloseableIterable<D> build() {
       Preconditions.checkNotNull(schema, "Schema is required");
       return new OrcIterable<>(file, conf, schema, nameMapping, start, length, readerFunc, caseSensitive, filter,
-          batchedReaderFunc, recordsPerBatch, rowFilter);
+          batchedReaderFunc, recordsPerBatch, rowFilter, ignoreFileFieldIds);
     }
   }
 
