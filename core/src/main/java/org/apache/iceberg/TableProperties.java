@@ -186,6 +186,5 @@ public class TableProperties {
   public static final boolean MERGE_CARDINALITY_CHECK_ENABLED_DEFAULT = true;
 
   public static final String READ_ORC_IGNORE_FILE_FIELD_IDS = "read.orc.ignore.field-ids.enabled";
-
   public static final boolean READ_ORC_IGNORE_FILE_FIELD_IDS_DEFAULT = false;
 }
