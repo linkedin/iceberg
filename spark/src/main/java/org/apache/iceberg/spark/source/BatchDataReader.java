@@ -47,15 +47,17 @@ class BatchDataReader extends BaseDataReader<ColumnarBatch> {
   private final String nameMapping;
   private final boolean caseSensitive;
   private final int batchSize;
+  private final boolean ignoreFileFieldIds;
 
   BatchDataReader(
       CombinedScanTask task, Schema expectedSchema, String nameMapping, FileIO fileIo,
-      EncryptionManager encryptionManager, boolean caseSensitive, int size) {
+      EncryptionManager encryptionManager, boolean caseSensitive, int size, boolean ignoreFileFieldIds) {
     super(task, fileIo, encryptionManager);
     this.expectedSchema = expectedSchema;
     this.nameMapping = nameMapping;
     this.caseSensitive = caseSensitive;
     this.batchSize = size;
+    this.ignoreFileFieldIds = ignoreFileFieldIds;
   }
 
   @Override
@@ -98,7 +100,8 @@ class BatchDataReader extends BaseDataReader<ColumnarBatch> {
               idToConstant))
           .recordsPerBatch(batchSize)
           .filter(task.residual())
-          .caseSensitive(caseSensitive);
+          .caseSensitive(caseSensitive)
+          .setIgnoreFileFieldIds(ignoreFileFieldIds);
 
       if (nameMapping != null) {
         builder.withNameMapping(NameMappingParser.fromJson(nameMapping));

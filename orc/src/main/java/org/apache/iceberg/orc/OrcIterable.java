@@ -60,11 +60,13 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
   private NameMapping nameMapping;
   private final OrcRowFilter rowFilter;
 
+  private final boolean ignoreFileFieldIds;
+
   OrcIterable(InputFile file, Configuration config, Schema schema,
               NameMapping nameMapping, Long start, Long length,
               Function<TypeDescription, OrcRowReader<?>> readerFunction, boolean caseSensitive, Expression filter,
               Function<TypeDescription, OrcBatchReader<?>> batchReaderFunction, int recordsPerBatch,
-              OrcRowFilter rowFilter) {
+              OrcRowFilter rowFilter, boolean ignoreFileFieldIds) {
     this.schema = schema;
     this.readerFunction = readerFunction;
     this.file = file;
@@ -77,6 +79,7 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     this.batchReaderFunction = batchReaderFunction;
     this.recordsPerBatch = recordsPerBatch;
     this.rowFilter = rowFilter;
+    this.ignoreFileFieldIds = ignoreFileFieldIds;
   }
 
   @SuppressWarnings("unchecked")
@@ -88,7 +91,7 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     TypeDescription fileSchema = orcFileReader.getSchema();
     final TypeDescription readOrcSchema;
     final TypeDescription fileSchemaWithIds;
-    if (ORCSchemaUtil.hasIds(fileSchema)) {
+    if (!ignoreFileFieldIds && ORCSchemaUtil.hasIds(fileSchema)) {
       fileSchemaWithIds = fileSchema;
     } else {
       if (nameMapping == null) {

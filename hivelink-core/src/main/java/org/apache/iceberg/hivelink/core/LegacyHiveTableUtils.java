@@ -19,7 +19,6 @@
 
 package org.apache.iceberg.hivelink.core;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +42,6 @@ import org.apache.iceberg.hivelink.core.schema.MergeHiveSchemaWithAvro;
 import org.apache.iceberg.hivelink.core.utils.HiveTypeUtil;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
-import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
@@ -90,8 +88,7 @@ class LegacyHiveTableUtils {
     Types.StructType dataStructType = schema.asStruct();
     List<Types.NestedField> fields = Lists.newArrayList(dataStructType.fields());
 
-    String partitionColumnIdMappingString = props.get("partition.column.ids");
-    Schema partitionSchema = partitionSchema(table.getPartitionKeys(), schema, partitionColumnIdMappingString);
+    Schema partitionSchema = partitionSchema(table.getPartitionKeys(), schema);
     Types.StructType partitionStructType = partitionSchema.asStruct();
     fields.addAll(partitionStructType.fields());
     return new Schema(fields);
@@ -110,8 +107,7 @@ class LegacyHiveTableUtils {
     return (StructTypeInfo) TypeInfoFactory.getStructTypeInfo(fieldNames, fieldTypeInfos);
   }
 
-  private static Schema partitionSchema(List<FieldSchema> partitionKeys, Schema dataSchema, String idMapping) {
-    Map<String, Integer> nameToId = parsePartitionColId(idMapping);
+  private static Schema partitionSchema(List<FieldSchema> partitionKeys, Schema dataSchema) {
     AtomicInteger fieldId = new AtomicInteger(10000);
     List<Types.NestedField> partitionFields = Lists.newArrayList();
     partitionKeys.forEach(f -> {
@@ -121,37 +117,9 @@ class LegacyHiveTableUtils {
       }
       partitionFields.add(
           Types.NestedField.optional(
-              nameToId.containsKey(f.getName()) ? nameToId.get(f.getName()) : fieldId.incrementAndGet(),
-              f.getName(), primitiveIcebergType(f.getType()), f.getComment()));
+              fieldId.incrementAndGet(), f.getName(), primitiveIcebergType(f.getType()), f.getComment()));
     });
     return new Schema(partitionFields);
-  }
-
-  /**
-   *
-   * @param idMapping A comma separated string representation of column name
-   *                  and its id, e.g. partitionCol1:10,partitionCol2:11, no
-   *                  whitespace is allowed in the middle
-   * @return          The parsed in-mem Map representation of the name to
-   *                  id mapping
-   */
-  private static Map<String, Integer> parsePartitionColId(String idMapping) {
-    Map<String, Integer> nameToId = Maps.newHashMap();
-    if (idMapping != null) {
-      // parse idMapping string
-      Arrays.stream(idMapping.split(",")).forEach(kv -> {
-        String[] split = kv.split(":");
-        if (split.length != 2) {
-          throw new IllegalStateException(String.format(
-              "partition.column.ids property is invalid format: %s",
-              idMapping));
-        }
-        String name = split[0];
-        Integer id = Integer.parseInt(split[1]);
-        nameToId.put(name, id);
-      });
-    }
-    return nameToId;
   }
 
   private static Type primitiveIcebergType(String hiveTypeString) {
