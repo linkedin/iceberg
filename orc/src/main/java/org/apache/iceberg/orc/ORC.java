@@ -631,6 +631,7 @@ public class ORC {
     private Expression filter = null;
     private boolean caseSensitive = true;
     private NameMapping nameMapping = null;
+    private OrcRowFilter rowFilter = null;
 
     private Function<TypeDescription, OrcRowReader<?>> readerFunc;
     private Function<TypeDescription, OrcBatchReader<?>> batchedReaderFunc;
@@ -711,6 +712,11 @@ public class ORC {
       return this;
     }
 
+    public ReadBuilder rowFilter(OrcRowFilter newRowFilter) {
+      this.rowFilter = newRowFilter;
+      return this;
+    }
+
     public <D> CloseableIterable<D> build() {
       Preconditions.checkNotNull(schema, "Schema is required");
       return new OrcIterable<>(
@@ -724,7 +730,8 @@ public class ORC {
           caseSensitive,
           filter,
           batchedReaderFunc,
-          recordsPerBatch);
+          recordsPerBatch,
+          rowFilter);
     }
   }
 

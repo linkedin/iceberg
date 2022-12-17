@@ -18,9 +18,11 @@
  */
 package org.apache.iceberg.avro;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.avro.JsonProperties;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
@@ -158,17 +160,78 @@ public class AvroSchemaUtil {
     return false;
   }
 
-  static Schema toOption(Schema schema) {
+  /**
+   * This method decides whether a schema represents a single type union, i.e., a union that
+   * contains only one option
+   *
+   * @param schema input schema
+   * @return true if schema is single type union
+   */
+  public static boolean isSingleTypeUnion(Schema schema) {
+    return schema.getType() == UNION && schema.getTypes().size() == 1;
+  }
+
+  /**
+   * This method decides whether a schema is of type union and is complex union and is optional
+   *
+   * <p>Complex union: the number of options in union not equals to 2 Optional: null is present in
+   * union
+   *
+   * @param schema input schema
+   * @return true if schema is complex union and it is optional
+   */
+  public static boolean isOptionalComplexUnion(Schema schema) {
+    if (schema.getType() == UNION && schema.getTypes().size() != 2) {
+      for (Schema type : schema.getTypes()) {
+        if (type.getType() == Schema.Type.NULL) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  public static Schema discardNullFromUnionIfExist(Schema schema) {
+    Preconditions.checkArgument(
+        schema.getType() == UNION, "Expected union schema but was passed: %s", schema);
+    List<Schema> result = Lists.newArrayList();
+    for (Schema nested : schema.getTypes()) {
+      if (!(nested.getType() == Schema.Type.NULL)) {
+        result.add(nested);
+      }
+    }
+    return Schema.createUnion(result);
+  }
+
+  public static boolean nullExistInUnion(Schema schema) {
+    Preconditions.checkArgument(
+        schema.getType() == UNION, "Expected union schema but was passed: %s", schema);
+    for (Schema nested : schema.getTypes()) {
+      if (nested.getType() == Schema.Type.NULL) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public static Schema toOption(Schema schema) {
+    return toOption(schema, false);
+  }
+
+  public static Schema toOption(Schema schema, boolean nullIsSecondElement) {
     if (schema.getType() == UNION) {
       Preconditions.checkArgument(
           isOptionSchema(schema), "Union schemas are not supported: %s", schema);
       return schema;
+    } else if (nullIsSecondElement) {
+      return Schema.createUnion(schema, NULL);
     } else {
       return Schema.createUnion(NULL, schema);
     }
   }
 
-  static Schema fromOption(Schema schema) {
+  public static Schema fromOption(Schema schema) {
     Preconditions.checkArgument(
         schema.getType() == UNION, "Expected union schema but was passed: %s", schema);
     Preconditions.checkArgument(
@@ -366,7 +429,7 @@ public class AvroSchemaUtil {
     throw new UnsupportedOperationException("Cannot coerce value to int: " + value);
   }
 
-  static Schema copyRecord(Schema record, List<Schema.Field> newFields, String newName) {
+  public static Schema copyRecord(Schema record, List<Schema.Field> newFields, String newName) {
     Schema copy;
     if (newName != null) {
       copy = Schema.createRecord(newName, record.getDoc(), null, record.isError(), newFields);
@@ -391,7 +454,7 @@ public class AvroSchemaUtil {
     return copy;
   }
 
-  static Schema.Field copyField(Schema.Field field, Schema newSchema, String newName) {
+  public static Schema.Field copyField(Schema.Field field, Schema newSchema, String newName) {
     Schema.Field copy =
         new Schema.Field(newName, newSchema, field.doc(), field.defaultVal(), field.order());
 
@@ -476,5 +539,35 @@ public class AvroSchemaUtil {
       return "_" + character;
     }
     return "_x" + Integer.toHexString(character).toUpperCase();
+  }
+
+  static boolean hasNonNullDefaultValue(Schema.Field field) {
+    // the schema should use JsonProperties.NULL_VALUE (i.e., null) as the null default
+    // value, but a user might also use "null" to indicate null while it is actually a String, so
+    // need to account for it.
+    return field.hasDefaultValue()
+        && field.defaultVal() != JsonProperties.NULL_VALUE
+        && !(field.defaultVal() instanceof String
+            && ((String) field.defaultVal()).equalsIgnoreCase("null"));
+  }
+
+  public static Object convertToJavaDefaultValue(Object defaultValue) {
+    if (defaultValue instanceof List) {
+      return ((List<?>) defaultValue)
+          .stream().map(AvroSchemaUtil::convertToJavaDefaultValue).collect(Collectors.toList());
+    } else if (defaultValue instanceof Map) {
+      // can't seem to use the java8 stream api on map correctly because of setting null value in
+      // map
+      Map<Object, Object> retMap = new LinkedHashMap<>();
+      for (Map.Entry<Object, Object> entry : ((Map<Object, Object>) defaultValue).entrySet()) {
+        retMap.put(entry.getKey(), convertToJavaDefaultValue(entry.getValue()));
+      }
+      return retMap;
+    } else if (defaultValue == JsonProperties.NULL_VALUE) {
+      // convert the JsonProperties.NULL_VALUE whenever we see it
+      return null;
+    }
+    // don't touch any other primitive values
+    return defaultValue;
   }
 }

@@ -21,6 +21,7 @@ package org.apache.iceberg.mapping;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.iceberg.relocated.com.google.common.base.Joiner;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 
@@ -41,13 +42,23 @@ public class NameMapping implements Serializable {
   }
 
   private final MappedFields mapping;
+  private final boolean caseSensitive;
   private transient Map<Integer, MappedField> fieldsById;
   private transient Map<String, MappedField> fieldsByName;
+  private transient Map<String, MappedField> fieldsByNameLowercase;
 
   NameMapping(MappedFields mapping) {
+    this(mapping, true);
+  }
+
+  public NameMapping(MappedFields mapping, boolean caseSensitive) {
     this.mapping = mapping;
+    this.caseSensitive = caseSensitive;
     lazyFieldsById();
     lazyFieldsByName();
+    if (!caseSensitive) {
+      lazyFieldsByNameLowercase();
+    }
   }
 
   public MappedField find(int id) {
@@ -55,11 +66,23 @@ public class NameMapping implements Serializable {
   }
 
   public MappedField find(String... names) {
-    return lazyFieldsByName().get(DOT.join(names));
+    return find(DOT.join(names));
   }
 
   public MappedField find(List<String> names) {
-    return lazyFieldsByName().get(DOT.join(names));
+    return find(DOT.join(names));
+  }
+
+  private MappedField find(String qualifiedName) {
+    MappedField field = lazyFieldsByName().get(qualifiedName);
+    if (field == null && !caseSensitive) {
+      field = lazyFieldsByNameLowercase().get(qualifiedName.toLowerCase());
+    }
+    return field;
+  }
+
+  public boolean isCaseSensitive() {
+    return caseSensitive;
   }
 
   public MappedFields asMappedFields() {
@@ -78,6 +101,17 @@ public class NameMapping implements Serializable {
       this.fieldsByName = MappingUtil.indexByName(mapping);
     }
     return fieldsByName;
+  }
+
+  private Map<String, MappedField> lazyFieldsByNameLowercase() {
+    if (fieldsByNameLowercase == null) {
+      this.fieldsByNameLowercase =
+          lazyFieldsByName().entrySet().stream()
+              .collect(
+                  Collectors.toMap(
+                      x -> x.getKey().toLowerCase(), Map.Entry::getValue, (u, v) -> u));
+    }
+    return fieldsByNameLowercase;
   }
 
   @Override

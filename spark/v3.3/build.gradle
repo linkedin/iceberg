@@ -190,6 +190,7 @@ project(":iceberg-spark:iceberg-spark-runtime-${sparkMajorVersion}_${scalaVersio
       exclude group: 'org.antlr'
       exclude group: 'org.scala-lang'
       exclude group: 'org.scala-lang.modules'
+      exclude group: 'io.netty', module: 'netty-common'
     }
   }
 

@@ -204,7 +204,6 @@ public class TestAvroNameMapping extends TestAvroReadProjection {
     AssertHelpers.assertThrows(
         "Missing required field in nameMapping",
         IllegalArgumentException.class,
-        "Missing required field: x",
         // In this case, pruneColumns result is an empty record
         () -> writeAndRead(writeSchema, readSchema, record, nameMapping));
   }
