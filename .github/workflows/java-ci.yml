@@ -108,7 +108,7 @@ jobs:
           distribution: zulu
           java-version: 8
       - run: echo -e "$(ip addr show eth0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)\t$(hostname -f) $(hostname -s)" | sudo tee -a /etc/hosts
-      - run: ./gradlew build -DflinkVersions= -DsparkVersions=2.4,3.1 -DhiveVersions= -Pquick=true build -x javadoc
+      - run: ./gradlew build -DflinkVersions=1.14 -DsparkVersions=2.4,3.1 -DhiveVersions= -Pquick=true build -x javadoc
       - name: Perform release
         # Release job, only for pushes to the main development branch
         if: ${{ github.event_name == 'push'
@@ -116,7 +116,7 @@ jobs:
           && github.repository == 'linkedin/iceberg'
           && !contains(toJSON(github.event.commits.*.message), '[skip release]') }}
 
-        run: ./gradlew -DsparkVersions=2.4,3.1 -DhiveVersions= githubRelease publishToSonatype closeAndReleaseStagingRepository
+        run: ./gradlew -DflinkVersions=1.14 -DsparkVersions=2.4,3.1 -DhiveVersions= githubRelease publishToSonatype closeAndReleaseStagingRepository
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
           SONATYPE_USER: ${{secrets.SONATYPE_USER}}
