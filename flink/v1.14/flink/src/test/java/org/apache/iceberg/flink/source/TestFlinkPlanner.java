@@ -1,3 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 package org.apache.iceberg.flink.source;
 
 import java.io.File;
@@ -23,8 +41,7 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-
-public class TestFlinkPlanner  {
+public class TestFlinkPlanner {
 
   @ClassRule
   public static final MiniClusterWithClientResource MINI_CLUSTER_RESOURCE =
@@ -65,18 +82,22 @@ public class TestFlinkPlanner  {
 
     ScanContext scanContext = ScanContext.builder().planParallelism(2).build();
     ExecutorService workerPool = ThreadPools.newWorkerPool("test", scanContext.planParallelism());
-    List<IcebergSourceSplit> splits = FlinkSplitPlanner.planIcebergSourceSplits(table, scanContext, workerPool);
-    Assert.assertEquals("Expected 1 split but scan returned %d splits", 1 , splits.size());
-    Assert.assertEquals("Expected 2 FileScanTask in the split but has %d instead",
-        2 , splits.get(0).task().tasks().size());
+    List<IcebergSourceSplit> splits =
+        FlinkSplitPlanner.planIcebergSourceSplits(table, scanContext, workerPool);
+    Assert.assertEquals("Expected 1 split but scan returned %d splits", 1, splits.size());
+    Assert.assertEquals(
+        "Expected 2 FileScanTask in the split but has %d instead",
+        2, splits.get(0).task().tasks().size());
 
     // Enable planning single file per task
     scanContext = ScanContext.builder().planParallelism(2).planSingleWholeFilePerTask(true).build();
     splits = FlinkSplitPlanner.planIcebergSourceSplits(table, scanContext, workerPool);
     // There should be 2 splits with 1 FileScanTask each
-    Assert.assertEquals("Expected 2 splits but scan returned %d splits", 2 , splits.size());
-    splits.forEach(split
-        -> Assert.assertEquals("Expected a single file task in the split but task has %d tasks",
-            1 , split.task().tasks().size()));
+    Assert.assertEquals("Expected 2 splits but scan returned %d splits", 2, splits.size());
+    splits.forEach(
+        split ->
+            Assert.assertEquals(
+                "Expected a single file task in the split but task has %d tasks",
+                1, split.task().tasks().size()));
   }
 }
