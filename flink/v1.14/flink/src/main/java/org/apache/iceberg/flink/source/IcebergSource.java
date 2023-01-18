@@ -286,6 +286,11 @@ public class IcebergSource<T> implements Source<T, IcebergSourceSplit, IcebergEn
       return this;
     }
 
+    public Builder planSingleWholeFilePerTask(boolean singleWholeFilePerTask) {
+      this.contextBuilder.planSingleWholeFilePerTask(singleWholeFilePerTask);
+      return this;
+    }
+
     public Builder properties(Map<String, String> properties) {
       contextBuilder.fromProperties(properties);
       return this;

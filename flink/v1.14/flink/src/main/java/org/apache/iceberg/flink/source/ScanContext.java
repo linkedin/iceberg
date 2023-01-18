@@ -80,6 +80,9 @@ public class ScanContext implements Serializable {
   private static final ConfigOption<Boolean> INCLUDE_COLUMN_STATS =
       ConfigOptions.key("include-column-stats").booleanType().defaultValue(false);
 
+  private static final ConfigOption<Boolean> PLAN_SINGLE_WHOLE_FILE_PER_TASK =
+      ConfigOptions.key("plan-single-whole-file-per-task").booleanType().defaultValue(false);
+
   private final boolean caseSensitive;
   private final boolean exposeLocality;
   private final Long snapshotId;
@@ -100,6 +103,7 @@ public class ScanContext implements Serializable {
   private final long limit;
   private final boolean includeColumnStats;
   private final Integer planParallelism;
+  private final boolean planSingleWholeFilePerTask;
 
   private ScanContext(
       boolean caseSensitive,
@@ -120,7 +124,8 @@ public class ScanContext implements Serializable {
       long limit,
       boolean includeColumnStats,
       boolean exposeLocality,
-      Integer planParallelism) {
+      Integer planParallelism,
+      boolean planSingleWholeFilePerTask) {
     this.caseSensitive = caseSensitive;
     this.snapshotId = snapshotId;
     this.startingStrategy = startingStrategy;
@@ -141,6 +146,7 @@ public class ScanContext implements Serializable {
     this.includeColumnStats = includeColumnStats;
     this.exposeLocality = exposeLocality;
     this.planParallelism = planParallelism;
+    this.planSingleWholeFilePerTask = planSingleWholeFilePerTask;
 
     validate();
   }
@@ -242,6 +248,10 @@ public class ScanContext implements Serializable {
     return planParallelism;
   }
 
+  public boolean planSingleWholeFilePerTask() {
+    return planSingleWholeFilePerTask;
+  }
+
   public ScanContext copyWithAppendsBetween(Long newStartSnapshotId, long newEndSnapshotId) {
     return ScanContext.builder()
         .caseSensitive(caseSensitive)
@@ -261,6 +271,7 @@ public class ScanContext implements Serializable {
         .includeColumnStats(includeColumnStats)
         .exposeLocality(exposeLocality)
         .planParallelism(planParallelism)
+        .planSingleWholeFilePerTask(planSingleWholeFilePerTask)
         .build();
   }
 
@@ -283,6 +294,7 @@ public class ScanContext implements Serializable {
         .includeColumnStats(includeColumnStats)
         .exposeLocality(exposeLocality)
         .planParallelism(planParallelism)
+        .planSingleWholeFilePerTask(planSingleWholeFilePerTask)
         .build();
   }
 
@@ -311,6 +323,7 @@ public class ScanContext implements Serializable {
     private boolean exposeLocality;
     private Integer planParallelism =
         FlinkConfigOptions.TABLE_EXEC_ICEBERG_WORKER_POOL_SIZE.defaultValue();
+    private boolean planSingleWholeFilePerTask = PLAN_SINGLE_WHOLE_FILE_PER_TASK.defaultValue();
 
     private Builder() {}
 
@@ -409,6 +422,11 @@ public class ScanContext implements Serializable {
       return this;
     }
 
+    public Builder planSingleWholeFilePerTask(boolean singleWholeFilePerTask) {
+      this.planSingleWholeFilePerTask = singleWholeFilePerTask;
+      return this;
+    }
+
     public Builder fromProperties(Map<String, String> properties) {
       Configuration config = new Configuration();
       properties.forEach(config::setString);
@@ -426,7 +444,8 @@ public class ScanContext implements Serializable {
           .streaming(config.get(STREAMING))
           .monitorInterval(config.get(MONITOR_INTERVAL))
           .nameMapping(properties.get(DEFAULT_NAME_MAPPING))
-          .includeColumnStats(config.get(INCLUDE_COLUMN_STATS));
+          .includeColumnStats(config.get(INCLUDE_COLUMN_STATS))
+          .planSingleWholeFilePerTask(config.get(PLAN_SINGLE_WHOLE_FILE_PER_TASK));
     }
 
     public ScanContext build() {
@@ -449,7 +468,8 @@ public class ScanContext implements Serializable {
           limit,
           includeColumnStats,
           exposeLocality,
-          planParallelism);
+          planParallelism,
+          planSingleWholeFilePerTask);
     }
   }
 }

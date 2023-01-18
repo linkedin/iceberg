@@ -23,6 +23,7 @@ import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import org.apache.flink.annotation.Internal;
+import org.apache.iceberg.BaseCombinedScanTask;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.IncrementalAppendScan;
@@ -93,8 +94,7 @@ public class FlinkSplitPlanner {
       if (context.endSnapshotId() != null) {
         scan = scan.toSnapshot(context.endSnapshotId());
       }
-
-      return scan.planTasks();
+      return doPlanTask(context, scan);
     } else {
       TableScan scan = table.newScan();
       scan = refineScanWithBaseConfigs(scan, context, workerPool);
@@ -106,8 +106,7 @@ public class FlinkSplitPlanner {
       if (context.asOfTimestamp() != null) {
         scan = scan.asOfTime(context.asOfTimestamp());
       }
-
-      return scan.planTasks();
+      return doPlanTask(context, scan);
     }
   }
 
@@ -158,5 +157,14 @@ public class FlinkSplitPlanner {
     }
 
     return refinedScan;
+  }
+
+  private static CloseableIterable<CombinedScanTask> doPlanTask(ScanContext context, Scan scan) {
+    if (context.planSingleWholeFilePerTask()) {
+      return CloseableIterable.transform(
+          (CloseableIterable<FileScanTask>) scan.planFiles(), BaseCombinedScanTask::new);
+    } else {
+      return scan.planTasks();
+    }
   }
 }
