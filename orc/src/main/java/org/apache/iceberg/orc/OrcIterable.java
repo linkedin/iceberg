@@ -97,7 +97,9 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
       if (nameMapping == null) {
         nameMapping = MappingUtil.create(schema);
       }
-      fileSchemaWithIds = ORCSchemaUtil.applyNameMapping(fileSchema, nameMapping);
+      // Since in the above branch, if the ignoreFileFieldIds is true, fileSchema can still have ids,
+      // here we should first sanitize it by removing the existing ids.
+      fileSchemaWithIds = ORCSchemaUtil.applyNameMapping(ORCSchemaUtil.removeIds(fileSchema), nameMapping);
     }
     readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchemaWithIds);
     // If the projected ORC schema is an empty struct, it means we are only projecting columns
