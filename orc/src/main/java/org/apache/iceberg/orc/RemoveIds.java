@@ -21,6 +21,7 @@ package org.apache.iceberg.orc;
 
 import java.util.List;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.apache.iceberg.types.Type;
 import org.apache.orc.TypeDescription;
 
 class RemoveIds extends OrcSchemaVisitor<TypeDescription> {
@@ -44,6 +45,13 @@ class RemoveIds extends OrcSchemaVisitor<TypeDescription> {
   @Override
   public TypeDescription map(TypeDescription map, TypeDescription key, TypeDescription value) {
     return TypeDescription.createMap(key, value);
+  }
+
+  @Override
+  public TypeDescription union(TypeDescription union, List<TypeDescription> options) {
+    TypeDescription ret = TypeDescription.createUnion();
+    options.forEach(ret::addUnionChild);
+    return ret;
   }
 
   @Override
