@@ -47,6 +47,13 @@ class RemoveIds extends OrcSchemaVisitor<TypeDescription> {
   }
 
   @Override
+  public TypeDescription union(TypeDescription union, List<TypeDescription> options) {
+    TypeDescription ret = TypeDescription.createUnion();
+    options.forEach(ret::addUnionChild);
+    return ret;
+  }
+
+  @Override
   public TypeDescription primitive(TypeDescription primitive) {
     return removeIcebergAttributes(primitive.clone());
   }
