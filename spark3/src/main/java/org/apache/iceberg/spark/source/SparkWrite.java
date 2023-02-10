@@ -216,7 +216,7 @@ class SparkWrite {
               2.0 /* exponential */)
           .throwFailureWhenFinished()
           .run(file -> {
-            table.io().deleteFile(file.path().toString());
+            io.value().deleteFile(file.path().toString());
           });
     } else {
       LOG.warn("Skipping cleaning up of data files because Iceberg was unable to determine the final commit state");
