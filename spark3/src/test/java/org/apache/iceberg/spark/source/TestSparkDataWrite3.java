@@ -19,6 +19,9 @@
 
 package org.apache.iceberg.spark.source;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.AssertHelpers;
 import org.apache.iceberg.PartitionSpec;
@@ -35,13 +38,12 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runners.Parameterized;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
-
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 public class TestSparkDataWrite3 extends TestSparkDataWrite {
+
   public TestSparkDataWrite3(String format) {
     super(format);
   }
@@ -61,9 +63,9 @@ public class TestSparkDataWrite3 extends TestSparkDataWrite {
     Table table = tables.create(SCHEMA, spec, location.toString());
 
     List<SimpleRecord> records = Lists.newArrayList(
-            new SimpleRecord(1, "a"),
-            new SimpleRecord(2, "b"),
-            new SimpleRecord(3, "c")
+        new SimpleRecord(1, "a"),
+        new SimpleRecord(2, "b"),
+        new SimpleRecord(3, "c")
     );
 
     Dataset<Row> df = spark.createDataFrame(records, SimpleRecord.class);
@@ -84,19 +86,20 @@ public class TestSparkDataWrite3 extends TestSparkDataWrite {
 
     // Although an exception is thrown here, write and commit have succeeded
     AssertHelpers.assertThrowsWithCause("Should throw a Commit State Unknown Exception",
-            SparkException.class,
-            "Writing job aborted",
-            CommitStateUnknownException.class,
-            "Datacenter on Fire",
-            () -> df.select("id", "data").sort("data").write()
-                    .format("org.apache.iceberg.spark.source.ManualSource")
-                    .option(ManualSource.TABLE_NAME, manualTableName)
-                    .mode(SaveMode.Append)
-                    .save(location.toString()));
+        SparkException.class,
+        "Writing job aborted",
+        CommitStateUnknownException.class,
+        "Datacenter on Fire",
+        () -> df.select("id", "data").sort("data").write()
+            .format("org.apache.iceberg.spark.source.ManualSource")
+            .option(ManualSource.TABLE_NAME, manualTableName)
+            .mode(SaveMode.Append)
+            .save(location.toString()));
 
     // Since write and commit succeeded, the rows should be readable
     Dataset<Row> result = spark.read().format("iceberg").load(location.toString());
-    List<SimpleRecord> actual = result.orderBy("id").as(Encoders.bean(SimpleRecord.class)).collectAsList();
+    List<SimpleRecord> actual = result.orderBy("id").as(Encoders.bean(SimpleRecord.class))
+        .collectAsList();
     Assert.assertEquals("Number of rows should match", records.size(), actual.size());
     Assert.assertEquals("Result rows should match", records, actual);
   }
