@@ -20,7 +20,6 @@
 package org.apache.iceberg;
 
 import java.util.concurrent.Callable;
-
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.assertj.core.api.Assertions;
 import org.junit.Assert;
