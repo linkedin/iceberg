@@ -47,9 +47,9 @@ public class TestHiveMetadataPreservingTableOperations {
 
     long currentTimeMillis = System.currentTimeMillis();
     StorageDescriptor storageDescriptor = new StorageDescriptor();
-    FieldSchema field1 = new FieldSchema("name", "string", "");
-    FieldSchema field2 = new FieldSchema("id", "int", "");
-    FieldSchema field3 = new FieldSchema("nested", "struct<field1:string,field2:string>", "");
+    FieldSchema field1 = new FieldSchema("name", "string", null);
+    FieldSchema field2 = new FieldSchema("id", "int", null);
+    FieldSchema field3 = new FieldSchema("nested", "struct<field1:string,field2:string>", null);
     // Set cols with incorrect nested type
     storageDescriptor.setCols(ImmutableList.of(field1, field2, new FieldSchema("nested", "struct<field1:int," +
         "field2:string>", "")));
