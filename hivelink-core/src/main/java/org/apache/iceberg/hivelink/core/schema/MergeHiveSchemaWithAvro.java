@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.avro.JsonProperties;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
+import org.apache.avro.Schema.Type;
 import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.ListTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.MapTypeInfo;
@@ -97,12 +98,12 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
    * If the schema is not an option schema or if there is no default value, schema is returned as-is
    */
   private Schema reorderOptionIfRequired(Schema schema, Object defaultValue) {
-    if (AvroSchemaUtil.isOptionSchema(schema) && defaultValue != null) {
-      boolean isNullFirstOption = schema.getTypes().get(0).getType() == Schema.Type.NULL;
-      if (isNullFirstOption && defaultValue.equals(JsonProperties.NULL_VALUE)) {
-        return schema;
+    if (AvroSchemaUtil.isOptionSchema(schema)) {
+      int nullIndex = AvroSchemaUtil.getNullIndex(schema);
+      if (defaultValue != null && !defaultValue.equals(JsonProperties.NULL_VALUE)) {
+        return Schema.createUnion(schema.getTypes().get(1 - nullIndex), Schema.create(Type.NULL));
       } else {
-        return Schema.createUnion(schema.getTypes().get(1), schema.getTypes().get(0));
+        return Schema.createUnion(Schema.create(Type.NULL), schema.getTypes().get(1 - nullIndex));
       }
     } else {
       return schema;
@@ -143,10 +144,14 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
   @Override
   public Schema primitive(PrimitiveTypeInfo primitive, Schema partner) {
     boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
+    int nullIndex = 0;
+    if (partner != null && AvroSchemaUtil.isOptionSchema(partner)) {
+      nullIndex = AvroSchemaUtil.getNullIndex(partner);
+    }
     Schema hivePrimitive = hivePrimitiveToAvro(primitive);
     // if there was no matching Avro primitive, use the Hive primitive
     Schema result = partner == null ? hivePrimitive : checkCompatibilityAndPromote(hivePrimitive, partner);
-    return shouldResultBeOptional ? AvroSchemaUtil.toOption(result) : result;
+    return shouldResultBeOptional ? AvroSchemaUtil.toOption(result, nullIndex == 1) : result;
   }
 
   private Schema checkCompatibilityAndPromote(Schema schema, Schema partner) {
