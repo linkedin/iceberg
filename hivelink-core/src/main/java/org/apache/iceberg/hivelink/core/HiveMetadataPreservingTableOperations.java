@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.StatsSetupConst;
@@ -37,15 +38,17 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.avro.AvroObjectInspectorGenerator;
+import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.iceberg.TableMetadata;
-import org.apache.iceberg.avro.AvroSchemaUtil;
 import org.apache.iceberg.common.DynMethods;
 import org.apache.iceberg.exceptions.AlreadyExistsException;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.hive.HiveClientPool;
-import org.apache.iceberg.hive.HiveSchemaUtil;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.base.Strings;
@@ -83,8 +86,6 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       .build();
   public static final String ORC_COLUMNS = "columns";
   public static final String ORC_COLUMNS_TYPES = "columns.types";
-  // Redefine avro.schema.literal to avoid dependency on hive-serde
-  public static final String AVRO_SCHEMA_LITERAL_KEY = "avro.schema.literal";
 
   protected HiveMetadataPreservingTableOperations(Configuration conf, HiveClientPool metaClients, FileIO fileIO,
       String catalogName, String database, String table) {
@@ -235,7 +236,13 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       return false;
     }
     Schema schema = new Schema.Parser().parse(avroSchemaLiteral);
-    List<FieldSchema> hiveCols = HiveSchemaUtil.convert(AvroSchemaUtil.toIceberg(schema));
+    List<FieldSchema> hiveCols;
+    try {
+      hiveCols = getColsFromAvroSchema(schema);
+    } catch (SerDeException e) {
+      LOG.error("Failed to get get columns from avro schema when checking schema", e);
+      return false;
+    }
 
     boolean schemaMismatched;
     if (table.getSd().getCols().size() != hiveCols.size()) {
@@ -263,10 +270,25 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
     return schemaMismatched;
   }
 
+  private static List<FieldSchema> getColsFromAvroSchema(Schema schema)
+      throws SerDeException {
+    AvroObjectInspectorGenerator avroOI = new AvroObjectInspectorGenerator(schema);
+    List<String> columnNames = avroOI.getColumnNames();
+    List<TypeInfo> columnTypes = avroOI.getColumnTypes();
+    if (columnNames.size() != columnTypes.size()) {
+      throw new IllegalStateException();
+    }
+
+    return IntStream.range(0, columnNames.size())
+        .mapToObj(i -> new FieldSchema(columnNames.get(i), columnTypes.get(i).getTypeName(), ""))
+        .collect(Collectors.toList());
+  }
+
   private static String getAvroSchemaLiteral(Table table) {
-    String schemaStr = table.getParameters().get(AVRO_SCHEMA_LITERAL_KEY);
+    String schemaStr = table.getParameters().get(AvroSerdeUtils.AvroTableProperties.SCHEMA_LITERAL.getPropName());
     if (Strings.isNullOrEmpty(schemaStr)) {
-      schemaStr = table.getSd().getSerdeInfo().getParameters().get(AVRO_SCHEMA_LITERAL_KEY);
+      schemaStr = table.getSd().getSerdeInfo().getParameters()
+          .get(AvroSerdeUtils.AvroTableProperties.SCHEMA_LITERAL.getPropName());
     }
     return schemaStr;
   }
