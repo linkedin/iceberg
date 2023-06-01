@@ -19,6 +19,7 @@
 package org.apache.iceberg.hivelink.core;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -45,19 +46,60 @@ public class TestHiveMetadataPreservingTableOperations {
             + ",{\"name\":\"Nested\", \"type\":{\"name\":\"Nested\",\"type\":\"record\",\"fields\":[{\"name\":\"Field1\","
             + "\"type\":\"string\"}, {\"name\":\"Field2\",\"type\":\"string\"}]}}]}";
 
+    FieldSchema field1 = new FieldSchema("name", "string", "");
+    FieldSchema field2 = new FieldSchema("id", "int", "");
+    FieldSchema field3 = new FieldSchema("nested", "struct<field1:string,field2:string>", "");
+    Table tbl =
+        createTestTable(
+            ImmutableList.of(
+                field1,
+                field2,
+                new FieldSchema("nested", "struct<field1:int," + "field2:string>", "")),
+            testSchemaLiteral);
+
+    Assert.assertTrue(HiveMetadataPreservingTableOperations.fixMismatchedSchema(tbl));
+    Assert.assertEquals(3, tbl.getSd().getColsSize());
+    Assert.assertEquals(field1, tbl.getSd().getCols().get(0));
+    Assert.assertEquals(field2, tbl.getSd().getCols().get(1));
+    Assert.assertEquals(field3, tbl.getSd().getCols().get(2));
+    Assert.assertTrue(
+        tbl.getSd()
+            .getSerdeInfo()
+            .getParameters()
+            .containsKey(HiveMetadataPreservingTableOperations.ORC_COLUMNS));
+    Assert.assertTrue(
+        tbl.getSd()
+            .getSerdeInfo()
+            .getParameters()
+            .containsKey(HiveMetadataPreservingTableOperations.ORC_COLUMNS_TYPES));
+
+    // Use same schema literal but containing uppercase and check no mismatch detected
+    tbl.setParameters(ImmutableMap.of("avro.schema.literal", testSchemaLiteralWithUppercase));
+    Assert.assertFalse(HiveMetadataPreservingTableOperations.fixMismatchedSchema(tbl));
+  }
+
+  @Test
+  public void testFixMismatchedSchemaWithUnionType() {
+    // Schema literal with 2 fields (name, uniontest)
+    String testSchemaLiteral =
+        "{\"name\":\"testSchema\",\"type\":\"record\",\"namespace\":\"com.linkedin.test\","
+            + "\"fields\":[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"testunion\","
+            + "\"type\":[{\"type\":\"string\"}]}]}";
+
+    FieldSchema field1 = new FieldSchema("name", "string", "");
+    FieldSchema field2 = new FieldSchema("testunion", "uniontype<string>", "");
+    Table tbl = createTestTable(ImmutableList.of(field1, field2), testSchemaLiteral);
+
+    // Make sure that uniontype info is not lost and detected as a mismatch
+    Assert.assertFalse(HiveMetadataPreservingTableOperations.fixMismatchedSchema(tbl));
+  }
+
+  Table createTestTable(List<FieldSchema> fields, String schemaLiteral) {
     long currentTimeMillis = System.currentTimeMillis();
     StorageDescriptor storageDescriptor = new StorageDescriptor();
-    FieldSchema field1 = new FieldSchema("name", "string", null);
-    FieldSchema field2 = new FieldSchema("id", "int", null);
-    FieldSchema field3 = new FieldSchema("nested", "struct<field1:string,field2:string>", null);
-    // Set cols with incorrect nested type
-    storageDescriptor.setCols(
-        ImmutableList.of(
-            field1,
-            field2,
-            new FieldSchema("nested", "struct<field1:int," + "field2:string>", "")));
+    storageDescriptor.setCols(fields);
     storageDescriptor.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
-    Map<String, String> parameters = ImmutableMap.of("avro.schema.literal", testSchemaLiteral);
+    Map<String, String> parameters = ImmutableMap.of("avro.schema.literal", schemaLiteral);
     Table tbl =
         new Table(
             "tableName",
@@ -72,25 +114,6 @@ public class TestHiveMetadataPreservingTableOperations {
             null,
             null,
             TableType.EXTERNAL_TABLE.toString());
-
-    Assert.assertTrue(HiveMetadataPreservingTableOperations.fixMismatchedSchema(tbl));
-    Assert.assertEquals(3, tbl.getSd().getColsSize());
-    Assert.assertEquals(field1, tbl.getSd().getCols().get(0));
-    Assert.assertEquals(field2, tbl.getSd().getCols().get(1));
-    Assert.assertEquals(field3, tbl.getSd().getCols().get(2));
-    Assert.assertTrue(
-        storageDescriptor
-            .getSerdeInfo()
-            .getParameters()
-            .containsKey(HiveMetadataPreservingTableOperations.ORC_COLUMNS));
-    Assert.assertTrue(
-        storageDescriptor
-            .getSerdeInfo()
-            .getParameters()
-            .containsKey(HiveMetadataPreservingTableOperations.ORC_COLUMNS_TYPES));
-
-    // Use same schema literal but containing uppercase and check no mismatch detected
-    tbl.setParameters(ImmutableMap.of("avro.schema.literal", testSchemaLiteralWithUppercase));
-    Assert.assertFalse(HiveMetadataPreservingTableOperations.fixMismatchedSchema(tbl));
+    return tbl;
   }
 }
