@@ -79,7 +79,7 @@ public class TestHiveMetadataPreservingTableOperations {
   }
 
   @Test
-  public void testFixMismatchedSchemaWithUnionType() {
+  public void testFixMismatchedSchemaWithSingleUnionType() {
     // Schema literal with 2 fields (name, uniontest)
     String testSchemaLiteral =
         "{\"name\":\"testSchema\",\"type\":\"record\",\"namespace\":\"com.linkedin.test\","
