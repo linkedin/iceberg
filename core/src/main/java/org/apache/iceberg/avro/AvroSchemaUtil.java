@@ -498,4 +498,20 @@ public class AvroSchemaUtil {
     // don't touch any other primitive values
     return defaultValue;
   }
+
+  public static boolean isPrimitiveType(Schema schema) {
+    switch (schema.getType()) {
+      case STRING:
+      case BYTES:
+      case INT:
+      case LONG:
+      case FLOAT:
+      case DOUBLE:
+      case BOOLEAN:
+      case NULL:
+        return true;
+      default:
+        return false;
+    }
+  }
 }
