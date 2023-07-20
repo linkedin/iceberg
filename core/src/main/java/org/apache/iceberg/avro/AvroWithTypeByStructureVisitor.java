@@ -23,6 +23,12 @@ import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.Pair;
 
+/**
+ * This class extends {@link AvroWithPartnerByStructureVisitor} to override some functions
+ * related to some nested data types which help the generation of name mapping from Iceberg schema.
+ *
+ *  @param <T> Return T.
+ */
 public class AvroWithTypeByStructureVisitor<T> extends AvroWithPartnerByStructureVisitor<Type, T> {
   @Override
   protected boolean isMapType(Type type) {

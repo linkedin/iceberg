@@ -108,6 +108,9 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
   /*
   A complex union with multiple types of Avro schema is converted into a struct with multiple fields of Iceberg schema.
   Also an extra tag field is added into the struct of Iceberg schema during the conversion.
+  Given an example of complex union in both Avro and Iceberg:
+  Avro schema: {"name":"unionCol","type":["int","string"]}
+  Iceberg schema:  struct<0: tag: required int, 1: field0: optional int, 2: field1: optional string>
   The fields in the struct of Iceberg schema are expected to be stored in the same order
   as the corresponding types in the union of Avro schema.
   Except the tag field, the fields in the struct of Iceberg schema are the same as the types in the union of Avro schema

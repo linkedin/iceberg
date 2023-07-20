@@ -28,6 +28,12 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 
+/**
+ * This class extends {@link AvroWithTypeByStructureVisitor} to generate the name mapping from
+ * Iceberg schema and the corresponding Avro schema.
+ *
+ *  param Return MappedFields
+ */
 public class NameMappingWithAvroSchema extends AvroWithTypeByStructureVisitor<MappedFields> {
   @Override
   public MappedFields record(

@@ -120,7 +120,6 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       return options.get(0);
     } else {
       // Complex union
-      // List<Types.NestedField> newFields = new ArrayList<>();
       List<Types.NestedField> newFields  = Lists.newArrayListWithExpectedSize(options.size());
       newFields.add(Types.NestedField.required(allocateId(), "tag", Types.IntegerType.get()));
 
