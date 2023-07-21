@@ -21,6 +21,7 @@ package org.apache.iceberg.avro;
 
 import java.util.Deque;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.avro.Schema;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
@@ -88,14 +89,22 @@ public abstract class AvroWithPartnerByStructureVisitor<P, T> {
 
   private static <P, T> T visitUnion(P type, Schema union, AvroWithPartnerByStructureVisitor<P, T> visitor) {
     List<Schema> types = union.getTypes();
-    Preconditions.checkArgument(AvroSchemaUtil.isOptionSchema(union),
-        "Cannot visit non-option union: %s", union);
     List<T> options = Lists.newArrayListWithExpectedSize(types.size());
-    for (Schema branch : types) {
-      if (branch.getType() == Schema.Type.NULL) {
-        options.add(visit(visitor.nullType(), branch, visitor));
-      } else {
-        options.add(visit(type, branch, visitor));
+    if (AvroSchemaUtil.isOptionSchema(union)) {
+      for (Schema branch : types) {
+        if (branch.getType() == Schema.Type.NULL) {
+          options.add(visit(visitor.nullType(), branch, visitor));
+        } else {
+          options.add(visit(type, branch, visitor));
+        }
+      }
+    } else {
+      List<Schema> nonNullTypes =
+              types.stream().filter(t -> t.getType() != Schema.Type.NULL).collect(Collectors.toList());
+      for (int i = 0; i < nonNullTypes.size(); i++) {
+        // In the case of complex union, the corresponding "type" is a struct. Non-null type i in
+        // the union maps to struct field i + 1 because the first struct field is the "tag".
+        options.add(visit(visitor.fieldNameAndType(type, i + 1).second(), nonNullTypes.get(i), visitor));
       }
     }
     return visitor.union(type, union, options);

@@ -22,12 +22,15 @@ package org.apache.iceberg.avro;
 import java.util.Deque;
 import java.util.List;
 import org.apache.avro.Schema;
+import org.apache.iceberg.mapping.MappedFields;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 
 public abstract class AvroSchemaWithTypeVisitor<T> {
+  private static final String UNION_TAG_FIELD_NAME = "tag";
+
   public static <T> T visit(org.apache.iceberg.Schema iSchema, Schema schema, AvroSchemaWithTypeVisitor<T> visitor) {
     return visit(iSchema.asStruct(), schema, visitor);
   }
@@ -97,17 +100,92 @@ public abstract class AvroSchemaWithTypeVisitor<T> {
         options.add(visit(type, branch, visitor));
       }
     } else { // complex union case
-      int index = 1;
-      for (Schema branch : types) {
-        if (branch.getType() == Schema.Type.NULL) {
-          options.add(visit((Type) null, branch, visitor));
-        } else {
-          options.add(visit(type.asStructType().fields().get(index).type(), branch, visitor));
-          index += 1;
+      visitComplexUnion(type, union, visitor, options);
+    }
+    return visitor.union(type, union, options);
+  }
+
+  /*
+  A complex union with multiple types of Avro schema is converted into a struct with multiple fields of Iceberg schema.
+  Also an extra tag field is added into the struct of Iceberg schema during the conversion.
+  Given an example of complex union in both Avro and Iceberg:
+  Avro schema: {"name":"unionCol","type":["int","string"]}
+  Iceberg schema:  struct<0: tag: required int, 1: field0: optional int, 2: field1: optional string>
+  The fields in the struct of Iceberg schema are expected to be stored in the same order
+  as the corresponding types in the union of Avro schema.
+  Except the tag field, the fields in the struct of Iceberg schema are the same as the types in the union of Avro schema
+  in the general case. In case of field projection, the fields in the struct of Iceberg schema only contains
+  the fields to be projected which equals to a subset of the types in the union of Avro schema.
+  Therefore, this function visits the complex union with the consideration of both cases.
+   */
+  private static <T> void visitComplexUnion(Type type, Schema union,
+                                            AvroSchemaWithTypeVisitor<T> visitor, List<T> options) {
+    boolean nullTypeFound = false;
+    int typeIndex = 0;
+    int fieldIndexInStruct = 0;
+    while (typeIndex < union.getTypes().size()) {
+      Schema schema = union.getTypes().get(typeIndex);
+      // in some cases, a NULL type exists in the union of Avro schema besides the actual types,
+      // and it affects the index of the actual types of the order in the union
+      if (schema.getType() == Schema.Type.NULL) {
+        nullTypeFound = true;
+        options.add(visit((Type) null, schema, visitor));
+      } else {
+        boolean relatedFieldInStructFound = false;
+        Types.StructType struct = type.asStructType();
+        if (fieldIndexInStruct < struct.fields().size() &&
+                UNION_TAG_FIELD_NAME.equals(struct.fields().get(fieldIndexInStruct).name())) {
+          fieldIndexInStruct++;
+        }
+
+        if (fieldIndexInStruct < struct.fields().size()) {
+          // If a NULL type is found before current type, the type index is one larger than the actual type index which
+          // can be used to track the corresponding field in the struct of Iceberg schema.
+          int actualTypeIndex = nullTypeFound ? typeIndex - 1 : typeIndex;
+          String structFieldName = type.asStructType().fields().get(fieldIndexInStruct).name();
+          int indexFromStructFieldName = Integer.valueOf(structFieldName.substring(5));
+          if (actualTypeIndex == indexFromStructFieldName) {
+            relatedFieldInStructFound = true;
+            options.add(visit(type.asStructType().fields().get(fieldIndexInStruct).type(), schema, visitor));
+            fieldIndexInStruct++;
+          }
+        }
+
+        if (!relatedFieldInStructFound) {
+          visitNotProjectedTypeInComplexUnion(schema, visitor, options);
+        }
+      }
+      typeIndex++;
+    }
+  }
+
+  // If a field is not projected, a corresponding field in the struct of Iceberg schema cannot be found
+  // for current type of union in Avro schema, a reader for current type still needs to be created and
+  // used to make the reading of Avro file successfully. In this case, an pseudo Iceberg type is converted from
+  // the Avro schema and is used to create the option for the reader of the current type which still can
+  // read the corresponding content in Avro file successfully.
+  private static <T> void visitNotProjectedTypeInComplexUnion(Schema schema,
+                                                                            AvroSchemaWithTypeVisitor<T> visitor,
+                                                                            List<T> options) {
+    Type iType = AvroSchemaUtil.convert(schema);
+    if (schema.getType().equals(Schema.Type.RECORD)) {
+      // When the type of Avro schema is RECORD, the fields under it must have the property of "field-id".
+      // However, the "field-id" is not set in previous steps as the corresponding Iceberg type is not projected
+      // and no field id can be found for this field in Iceberg schema.
+      // Therefore, a name mapping is created based on the Avro schema and its corresponding Iceberg type.
+      // The field-id from the resulted name mapping is assigned as the property of "field-id" of each
+      // field under the Avro schema.
+      NameMappingWithAvroSchema nameMappingWithAvroSchema = new NameMappingWithAvroSchema();
+      MappedFields nameMapping = AvroWithPartnerByStructureVisitor.visit(
+              iType, schema, nameMappingWithAvroSchema);
+      for (Schema.Field field : schema.getFields()) {
+        if (!AvroSchemaUtil.hasFieldId(field)) {
+          int fieldId = nameMapping.id(field.name());
+          field.addProp(AvroSchemaUtil.FIELD_ID_PROP, fieldId);
         }
       }
     }
-    return visitor.union(type, union, options);
+    options.add(visit(iType, schema, visitor));
   }
 
   private static <T> T visitArray(Type type, Schema array, AvroSchemaWithTypeVisitor<T> visitor) {
