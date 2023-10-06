@@ -81,6 +81,7 @@ public final class ORCSchemaUtil {
   public static final String ICEBERG_LONG_TYPE_ATTRIBUTE = "iceberg.long-type";
   static final String ICEBERG_FIELD_LENGTH = "iceberg.length";
 
+  public static final String ICEBERG_UNION_TAG_FIELD_NAME = "tag";
   private static final ImmutableMultimap<Type.TypeID, TypeDescription.Category> TYPE_MAPPING =
       ImmutableMultimap.<Type.TypeID, TypeDescription.Category>builder()
           .put(Type.TypeID.BOOLEAN, TypeDescription.Category.BOOLEAN)
@@ -381,9 +382,9 @@ public final class ORCSchemaUtil {
 
   private static TypeDescription getOrcSchemaForUnionType(Type type, boolean isRequired, Map<Integer, OrcField> mapping,
       OrcField orcField) {
-    TypeDescription orcType;
+
     if (orcField.type.getChildren().size() == 1) { // single type union
-      orcType = TypeDescription.createUnion();
+      TypeDescription orcType = TypeDescription.createUnion();
 
       TypeDescription childOrcStructType = TypeDescription.createStruct();
       for (Types.NestedField nestedField : type.asStructType().fields()) {
@@ -399,13 +400,33 @@ public final class ORCSchemaUtil {
       }
 
       orcType.addUnionChild(childOrcStructType);
+      return orcType;
     } else { // complex union
-      orcType = TypeDescription.createUnion();
-      List<Types.NestedField> nestedFields = type.asStructType().fields();
-      for (Types.NestedField nestedField : nestedFields.subList(1, nestedFields.size())) {
-        TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
-            isRequired && nestedField.isRequired(), mapping);
-        orcType.addUnionChild(childType);
+      return getOrcSchemaForComplexUnionType(type, isRequired, mapping, orcField);
+    }
+  }
+
+  private static TypeDescription getOrcSchemaForComplexUnionType(Type type, boolean isRequired,
+                                                                 Map<Integer, OrcField> mapping,
+                                                                 OrcField orcField) {
+    TypeDescription orcType = TypeDescription.createUnion();
+    List<Types.NestedField> nestedFields = type.asStructType().fields();
+    for (int i = 0; i < orcField.type.getChildren().size(); ++i) {
+      TypeDescription childOrcType = orcField.type.getChildren().get(i);
+      boolean typeProjectedInIcebergSchema = false;
+      for (Types.NestedField nestedField : nestedFields) {
+        if (!nestedField.name().equals("tag") &&
+                Integer.parseInt(nestedField.name().substring(5)) == i) {
+          // child type is projected in Iceberg schema
+          TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
+                  isRequired && nestedField.isRequired(), mapping);
+          orcType.addUnionChild(childType);
+          typeProjectedInIcebergSchema = true;
+          break;
+        }
+      }
+      if (!typeProjectedInIcebergSchema) {
+        orcType.addUnionChild(childOrcType);
       }
     }
     return orcType;

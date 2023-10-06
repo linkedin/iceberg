@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.stream.IntStream;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.orc.ORCSchemaUtil;
 import org.apache.iceberg.orc.OrcBatchReader;
 import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
 import org.apache.iceberg.orc.OrcValueReader;
@@ -434,10 +435,19 @@ public class VectorizedSparkOrcReaders {
   private static class UnionConverter implements Converter {
     private final Type type;
     private final List<Converter> optionConverters;
+    private boolean isTagFieldProjected;
 
     private UnionConverter(Type type, List<Converter> optionConverters) {
       this.type = type;
       this.optionConverters = optionConverters;
+      if (optionConverters.size() > 1) {
+        for (Types.NestedField field : type.asStructType().fields()) {
+          if (field.name().equals(ORCSchemaUtil.ICEBERG_UNION_TAG_FIELD_NAME)) {
+            this.isTagFieldProjected = true;
+            break;
+          }
+        }
+      }
     }
 
     @Override
@@ -449,13 +459,23 @@ public class VectorizedSparkOrcReaders {
         List<Types.NestedField> fields = type.asStructType().fields();
         List<ColumnVector> fieldVectors = Lists.newArrayListWithExpectedSize(fields.size());
 
-        LongColumnVector longColumnVector = new LongColumnVector();
-        longColumnVector.vector = Arrays.stream(unionColumnVector.tags).asLongStream().toArray();
+        // Adding ColumnVector for tag field into fieldVectors when the tag field is projected in Iceberg schema
+        if (isTagFieldProjected) {
+          LongColumnVector longColumnVector = new LongColumnVector();
+          longColumnVector.vector = Arrays.stream(unionColumnVector.tags).asLongStream().toArray();
 
-        fieldVectors.add(new PrimitiveOrcColumnVector(Types.IntegerType.get(), batchSize, longColumnVector,
-            OrcValueReaders.ints(), batchOffsetInFile));
-        for (int i = 0; i < fields.size() - 1; i += 1) {
-          fieldVectors.add(optionConverters.get(i).convert(unionColumnVector.fields[i], batchSize, batchOffsetInFile));
+          fieldVectors.add(new PrimitiveOrcColumnVector(Types.IntegerType.get(), batchSize, longColumnVector,
+                  OrcValueReaders.ints(), batchOffsetInFile));
+        }
+
+        // Adding ColumnVector for each field projected in Iceberg schema into fieldVectors
+        for (int i = 0; i < fields.size(); ++i) {
+          Types.NestedField field = fields.get(i);
+          if (!field.name().equals(ORCSchemaUtil.ICEBERG_UNION_TAG_FIELD_NAME)) {
+            int typeIdx = Integer.parseInt(field.name().substring(5));
+            fieldVectors.add(optionConverters.get(typeIdx)
+                    .convert(unionColumnVector.fields[typeIdx], batchSize, batchOffsetInFile));
+          }
         }
 
         return new BaseOrcColumnVector(type.asStructType(), batchSize, vector) {
