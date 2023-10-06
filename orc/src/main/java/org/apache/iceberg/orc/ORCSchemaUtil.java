@@ -415,7 +415,7 @@ public final class ORCSchemaUtil {
       TypeDescription childOrcType = orcField.type.getChildren().get(i);
       boolean typeProjectedInIcebergSchema = false;
       for (Types.NestedField nestedField : nestedFields) {
-        if (!nestedField.name().equals("tag") &&
+        if (!nestedField.name().equals(ICEBERG_UNION_TAG_FIELD_NAME) &&
                 Integer.parseInt(nestedField.name().substring(5)) == i) {
           // child type is projected in Iceberg schema
           TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
