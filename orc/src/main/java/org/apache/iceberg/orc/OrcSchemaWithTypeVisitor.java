@@ -27,6 +27,7 @@ import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
 
 public abstract class OrcSchemaWithTypeVisitor<T> {
+  private static final String PSEUDO_ICEBERG_FIELD_ID = "-1";
 
   public static <T> T visit(
       org.apache.iceberg.Schema iSchema, TypeDescription schema, OrcSchemaWithTypeVisitor<T> visitor) {
@@ -97,6 +98,7 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
   in the general case. In case of field projection, the fields in the struct of Iceberg schema only contains
   the fields to be projected which equals to a subset of the types in the union of ORC schema.
   Therefore, this function visits the complex union with the consideration of both cases.
+  Noted that null value and default value for complex union is not a consideration in case of ORC
    */
   private <T> void visitComplexUnion(Type type, TypeDescription union, OrcSchemaWithTypeVisitor<T> visitor,
                                      List<T> options) {
@@ -114,7 +116,8 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
 
       if (fieldIndexInStruct < struct.fields().size()) {
         String structFieldName = type.asStructType().fields().get(fieldIndexInStruct).name();
-        int indexFromStructFieldName = Integer.parseInt(structFieldName.substring(5));
+        int indexFromStructFieldName = Integer.parseInt(structFieldName
+                .substring(ORCSchemaUtil.ICEBERG_UNION_TYPE_FIELD_NAME_PREFIX_LENGTH));
         if (typeIndex == indexFromStructFieldName) {
           relatedFieldInStructFound = true;
           T option = visit(type.asStructType().fields().get(fieldIndexInStruct).type(), schema, visitor);
@@ -140,7 +143,7 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
                                                               int typeIndex) {
     OrcToIcebergVisitor schemaConverter = new OrcToIcebergVisitor();
     schemaConverter.beforeField("field" + typeIndex, schema);
-    schema.setAttribute(org.apache.iceberg.orc.ORCSchemaUtil.ICEBERG_ID_ATTRIBUTE, "-1");
+    schema.setAttribute(org.apache.iceberg.orc.ORCSchemaUtil.ICEBERG_ID_ATTRIBUTE, PSEUDO_ICEBERG_FIELD_ID);
     Optional<Types.NestedField> icebergSchema = OrcToIcebergVisitor.visit(schema, schemaConverter);
     schemaConverter.afterField("field" + typeIndex, schema);
     options.add(visit(icebergSchema.get().type(), schema, visitor));

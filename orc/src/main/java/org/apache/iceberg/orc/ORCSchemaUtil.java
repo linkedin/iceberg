@@ -82,6 +82,7 @@ public final class ORCSchemaUtil {
   static final String ICEBERG_FIELD_LENGTH = "iceberg.length";
 
   public static final String ICEBERG_UNION_TAG_FIELD_NAME = "tag";
+  public static final int ICEBERG_UNION_TYPE_FIELD_NAME_PREFIX_LENGTH = 5;
   private static final ImmutableMultimap<Type.TypeID, TypeDescription.Category> TYPE_MAPPING =
       ImmutableMultimap.<Type.TypeID, TypeDescription.Category>builder()
           .put(Type.TypeID.BOOLEAN, TypeDescription.Category.BOOLEAN)
@@ -410,13 +411,15 @@ public final class ORCSchemaUtil {
                                                                  Map<Integer, OrcField> mapping,
                                                                  OrcField orcField) {
     TypeDescription orcType = TypeDescription.createUnion();
-    List<Types.NestedField> nestedFields = type.asStructType().fields();
+    List<Types.NestedField> nestedFieldsFromIcebergSchema = type.asStructType().fields();
     for (int i = 0; i < orcField.type.getChildren().size(); ++i) {
       TypeDescription childOrcType = orcField.type.getChildren().get(i);
       boolean typeProjectedInIcebergSchema = false;
-      for (Types.NestedField nestedField : nestedFields) {
+      for (Types.NestedField nestedField : nestedFieldsFromIcebergSchema) {
+        // the name of the field in the struct of Iceberg schema is in the pattern of "fieldx"
+        // where x is an integer index starting from 0
         if (!nestedField.name().equals(ICEBERG_UNION_TAG_FIELD_NAME) &&
-                Integer.parseInt(nestedField.name().substring(5)) == i) {
+                Integer.parseInt(nestedField.name().substring(ICEBERG_UNION_TYPE_FIELD_NAME_PREFIX_LENGTH)) == i) {
           // child type is projected in Iceberg schema
           TypeDescription childType = buildOrcProjection(nestedField.fieldId(), nestedField.type(),
                   isRequired && nestedField.isRequired(), mapping);

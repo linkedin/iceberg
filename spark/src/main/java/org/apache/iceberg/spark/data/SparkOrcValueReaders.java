@@ -169,7 +169,7 @@ public class SparkOrcValueReaders {
 
   static class UnionReader implements OrcValueReader<Object> {
     private final OrcValueReader[] readers;
-    private final Type expected;
+    private final Type expectedIcebergSchema;
     private int[] projectedFieldIdsToIdxInReturnedRow;
     private boolean isTagFieldProjected;
     private int numOfFieldsInReturnedRow;
@@ -179,26 +179,27 @@ public class SparkOrcValueReaders {
       for (int i = 0; i < this.readers.length; i += 1) {
         this.readers[i] = readers.get(i);
       }
-      this.expected = expected;
+      this.expectedIcebergSchema = expected;
 
       if (this.readers.length > 1) {
         // Creating an integer array to track the mapping between the index of fields to be projected
         // and the index of the value for the field stored in the returned row,
-        // if the value for a field equals to -1, it means the value of this field should not be stored
+        // if the value for a field equals to Integer.MIN_VALUE, it means the value of this field should not be stored
         // in the returned row
         this.projectedFieldIdsToIdxInReturnedRow = new int[readers.size()];
-        Arrays.fill(this.projectedFieldIdsToIdxInReturnedRow, -1);
+        Arrays.fill(this.projectedFieldIdsToIdxInReturnedRow, Integer.MIN_VALUE);
         this.numOfFieldsInReturnedRow = 0;
         this.isTagFieldProjected = false;
 
-        for (Types.NestedField expectedStructField : expected.asStructType().fields()) {
+        for (Types.NestedField expectedStructField : expectedIcebergSchema.asStructType().fields()) {
           String fieldName = expectedStructField.name();
           if (fieldName.equals(ORCSchemaUtil.ICEBERG_UNION_TAG_FIELD_NAME)) {
             this.isTagFieldProjected = true;
             this.numOfFieldsInReturnedRow++;
             continue;
           }
-          int projectedFieldIndex = Integer.valueOf(fieldName.substring(5));
+          int projectedFieldIndex = Integer.valueOf(fieldName
+                  .substring(ORCSchemaUtil.ICEBERG_UNION_TYPE_FIELD_NAME_PREFIX_LENGTH));
           this.projectedFieldIdsToIdxInReturnedRow[projectedFieldIndex] = this.numOfFieldsInReturnedRow++;
         }
       }
@@ -221,7 +222,7 @@ public class SparkOrcValueReaders {
           struct.update(0, fieldIndex);
         }
 
-        if (this.projectedFieldIdsToIdxInReturnedRow[fieldIndex] != -1) {
+        if (this.projectedFieldIdsToIdxInReturnedRow[fieldIndex] != Integer.MIN_VALUE) {
           struct.update(this.projectedFieldIdsToIdxInReturnedRow[fieldIndex], value);
         }
 
