@@ -20,12 +20,15 @@
 package org.apache.iceberg.spark.data;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import org.apache.iceberg.orc.ORCSchemaUtil;
 import org.apache.iceberg.orc.OrcValueReader;
 import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
 import org.apache.orc.storage.ql.exec.vector.ColumnVector;
@@ -71,8 +74,8 @@ public class SparkOrcValueReaders {
     return new StructReader(readers, struct, idToConstant);
   }
 
-  static OrcValueReader<?> union(List<OrcValueReader<?>> readers) {
-    return new UnionReader(readers);
+  static OrcValueReader<?> union(List<OrcValueReader<?>> readers, Type expected) {
+    return new UnionReader(readers, expected);
   }
 
   static OrcValueReader<?> array(OrcValueReader<?> elementReader) {
@@ -166,11 +169,39 @@ public class SparkOrcValueReaders {
 
   static class UnionReader implements OrcValueReader<Object> {
     private final OrcValueReader[] readers;
+    private final Type expectedIcebergSchema;
+    private int[] projectedFieldIdsToIdxInReturnedRow;
+    private boolean isTagFieldProjected;
+    private int numOfFieldsInReturnedRow;
 
-    private UnionReader(List<OrcValueReader<?>> readers) {
+    private UnionReader(List<OrcValueReader<?>> readers, Type expected) {
       this.readers = new OrcValueReader[readers.size()];
       for (int i = 0; i < this.readers.length; i += 1) {
         this.readers[i] = readers.get(i);
+      }
+      this.expectedIcebergSchema = expected;
+
+      if (this.readers.length > 1) {
+        // Creating an integer array to track the mapping between the index of fields to be projected
+        // and the index of the value for the field stored in the returned row,
+        // if the value for a field equals to Integer.MIN_VALUE, it means the value of this field should not be stored
+        // in the returned row
+        this.projectedFieldIdsToIdxInReturnedRow = new int[readers.size()];
+        Arrays.fill(this.projectedFieldIdsToIdxInReturnedRow, Integer.MIN_VALUE);
+        this.numOfFieldsInReturnedRow = 0;
+        this.isTagFieldProjected = false;
+
+        for (Types.NestedField expectedStructField : expectedIcebergSchema.asStructType().fields()) {
+          String fieldName = expectedStructField.name();
+          if (fieldName.equals(ORCSchemaUtil.ICEBERG_UNION_TAG_FIELD_NAME)) {
+            this.isTagFieldProjected = true;
+            this.numOfFieldsInReturnedRow++;
+            continue;
+          }
+          int projectedFieldIndex = Integer.valueOf(fieldName
+                  .substring(ORCSchemaUtil.ICEBERG_UNION_TYPE_FIELD_NAME_PREFIX_LENGTH));
+          this.projectedFieldIdsToIdxInReturnedRow[projectedFieldIndex] = this.numOfFieldsInReturnedRow++;
+        }
       }
     }
 
@@ -183,12 +214,17 @@ public class SparkOrcValueReaders {
       if (readers.length == 1) {
         return value;
       } else {
-        InternalRow struct = new GenericInternalRow(readers.length + 1);
-        for (int i = 0; i < readers.length; i += 1) {
-          struct.setNullAt(i + 1);
+        InternalRow struct = new GenericInternalRow(numOfFieldsInReturnedRow);
+        for (int i = 0; i < struct.numFields(); i += 1) {
+          struct.setNullAt(i);
         }
-        struct.update(0, fieldIndex);
-        struct.update(fieldIndex + 1, value);
+        if (this.isTagFieldProjected) {
+          struct.update(0, fieldIndex);
+        }
+
+        if (this.projectedFieldIdsToIdxInReturnedRow[fieldIndex] != Integer.MIN_VALUE) {
+          struct.update(this.projectedFieldIdsToIdxInReturnedRow[fieldIndex], value);
+        }
 
         return struct;
       }
