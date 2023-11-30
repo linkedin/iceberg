@@ -203,7 +203,7 @@ public class TestSparkAvroReaderForFieldsWithDefaultValue {
    * Test nested array with default null on complex types
    * if the table contains non-primitive Avro types (InnerElement in the test below)
    * as the first field and arrays of InnerElement as the second field,
-   * it leads to a NullPointerException when operating on the table.
+   * it previously leads to a NullPointerException when operating on the table.
    */
   @Test
   public void testNestedArrayWithDefaultNullOnComplexTypes() throws IOException {
@@ -270,15 +270,18 @@ public class TestSparkAvroReaderForFieldsWithDefaultValue {
         "}";
     org.apache.avro.Schema writeSchema = new org.apache.avro.Schema.Parser().parse(writeSchemaString);
     org.apache.iceberg.Schema icebergWriteSchema = AvroSchemaUtil.toIceberg(writeSchema);
-    Assert.assertThrows(
-        NullPointerException.class, () ->  RandomData.generateList(icebergWriteSchema, 2, 0L));
+
+    List<GenericData.Record> expected = RandomData.generateList(icebergWriteSchema, 2, 0L);
+
+
+    Assert.assertTrue("Delete should succeed", testFile.delete());
   }
 
 
   /*
    * Test nested array with default null on complex types.
    * This test differs from testNestedArrayWithDefaultNullOnComplexTypes on the type
-   * of InnerField1Param, when it is a primitive type, no NPE is thrown when operating on the table.
+   * of InnerField1Param, it is a primitive type in this test.
    */
   @Test
   public void testNestedArrayWithDefaultNullOnPrimitiveTypes() throws IOException {
@@ -344,16 +347,6 @@ public class TestSparkAvroReaderForFieldsWithDefaultValue {
 
 
     Assert.assertTrue("Delete should succeed", testFile.delete());
-
-    // write records with initial writeSchema
-    try (FileAppender<GenericData.Record> writer = Avro.write(Files.localOutput(testFile))
-        .schema(icebergWriteSchema)
-        .named("test")
-        .build()) {
-      for (GenericData.Record rec : expected) {
-        writer.add(rec);
-      }
-    }
   }
 }
 
