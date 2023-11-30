@@ -198,5 +198,162 @@ public class TestSparkAvroReaderForFieldsWithDefaultValue {
 
     }
   }
+
+  /*
+   * Test nested array with default null on complex types
+   * if the table contains non-primitive Avro types (InnerElement in the test below)
+   * as the first field and arrays of InnerElement as the second field,
+   * it leads to a NullPointerException when operating on the table.
+   */
+  @Test
+  public void testNestedArrayWithDefaultNullOnComplexTypes() throws IOException {
+    File testFile = temp.newFile();
+    String writeSchemaString = "{\n" +
+        "    \"type\": \"record\",\n" +
+        "    \"name\": \"Root\",\n" +
+        "    \"fields\": [\n" +
+        "        {\n" +
+        "            \"name\": \"OuterRecord1\",\n" +
+        "            \"type\": [\n" +
+        "                \"null\",\n" +
+        "                {\n" +
+        "                    \"type\": \"record\",\n" +
+        "                    \"name\": \"InnerElement\",\n" +
+        "                    \"fields\": [\n" +
+        "                        {\n" +
+        "                            \"name\": \"InnerField\",\n" +
+        "                            \"type\": {\n" +
+        "                                \"type\": \"record\",\n" +
+        "                                \"name\": \"InnerField1\",\n" +
+        "                                \"fields\": [\n" +
+        "                                    {\n" +
+        "                                        \"name\": \"InnerField1Param\",\n" +
+        "                                        \"type\": [\n" +
+        "                                            \"null\",\n" +
+        "                                            \"string\"\n" +
+        "                                        ],\n" +
+        "                                        \"default\": null\n" +
+        "                                    }\n" +
+        "                                ]\n" +
+        "                            },\n" +
+        "                            \"default\": {\n" +
+        "                                \"InnerField1Param\": null\n" +
+        "                            }\n" +
+        "                        }\n" +
+        "                    ]\n" +
+        "                }\n" +
+        "            ],\n" +
+        "            \"default\": null\n" +
+        "        },\n" +
+        "        {\n" +
+        "            \"name\": \"InnerElementV2\",\n" +
+        "            \"type\": [\n" +
+        "                \"null\",\n" +
+        "                {\n" +
+        "                    \"type\": \"record\",\n" +
+        "                    \"name\": \"InnerElementV2\",\n" +
+        "                    \"fields\": [\n" +
+        "                        {\n" +
+        "                            \"name\": \"InnerField2\",\n" +
+        "                            \"type\": {\n" +
+        "                                \"type\": \"array\",\n" +
+        "                                \"items\": \"InnerElement\"\n" +
+        "                            },\n" +
+        "                            \"default\": []\n" +
+        "                        }\n" +
+        "                    ]\n" +
+        "                }\n" +
+        "            ],\n" +
+        "            \"default\": null\n" +
+        "        }\n" +
+        "    ]\n" +
+        "}";
+    org.apache.avro.Schema writeSchema = new org.apache.avro.Schema.Parser().parse(writeSchemaString);
+    org.apache.iceberg.Schema icebergWriteSchema = AvroSchemaUtil.toIceberg(writeSchema);
+    Assert.assertThrows(
+        NullPointerException.class, () ->  RandomData.generateList(icebergWriteSchema, 2, 0L));
+  }
+
+
+  /*
+   * Test nested array with default null on complex types.
+   * This test differs from testNestedArrayWithDefaultNullOnComplexTypes on the type
+   * of InnerField1Param, when it is a primitive type, no NPE is thrown when operating on the table.
+   */
+  @Test
+  public void testNestedArrayWithDefaultNullOnPrimitiveTypes() throws IOException {
+    File testFile = temp.newFile();
+    String writeSchemaString = "{\n" +
+        "    \"type\": \"record\",\n" +
+        "    \"name\": \"Root\",\n" +
+        "    \"fields\": [\n" +
+        "        {\n" +
+        "            \"name\": \"OuterRecord1\",\n" +
+        "            \"type\": [\n" +
+        "                \"null\",\n" +
+        "                {\n" +
+        "                    \"type\": \"record\",\n" +
+        "                    \"name\": \"InnerElement\",\n" +
+        "                    \"fields\": [\n" +
+        "                        {\n" +
+        "                            \"name\": \"InnerField\",\n" +
+        "                            \"type\": {\n" +
+        "                                \"type\": \"record\",\n" +
+        "                                \"name\": \"InnerField1\",\n" +
+        "                                \"fields\": [\n" +
+        "                                    {\n" +
+        "                                        \"name\": \"InnerField1Param\",\n" +
+        "                                        \"type\": \"int\",\n" +
+        "                                        \"default\": 1\n" +
+        "                                    }\n" +
+        "                                ]\n" +
+        "                            }\n" +
+        "                        }\n" +
+        "                    ]\n" +
+        "                }\n" +
+        "            ],\n" +
+        "            \"default\": null\n" +
+        "        },\n" +
+        "        {\n" +
+        "            \"name\": \"InnerElementV2\",\n" +
+        "            \"type\": [\n" +
+        "                \"null\",\n" +
+        "                {\n" +
+        "                    \"type\": \"record\",\n" +
+        "                    \"name\": \"InnerElementV2\",\n" +
+        "                    \"fields\": [\n" +
+        "                        {\n" +
+        "                            \"name\": \"InnerField2\",\n" +
+        "                            \"type\": {\n" +
+        "                                \"type\": \"array\",\n" +
+        "                                \"items\": \"InnerElement\"\n" +
+        "                            },\n" +
+        "                            \"default\": []\n" +
+        "                        }\n" +
+        "                    ]\n" +
+        "                }\n" +
+        "            ],\n" +
+        "            \"default\": null\n" +
+        "        }\n" +
+        "    ]\n" +
+        "}";
+    org.apache.avro.Schema writeSchema = new org.apache.avro.Schema.Parser().parse(writeSchemaString);
+    org.apache.iceberg.Schema icebergWriteSchema = AvroSchemaUtil.toIceberg(writeSchema);
+
+    List<GenericData.Record> expected = RandomData.generateList(icebergWriteSchema, 2, 0L);
+
+
+    Assert.assertTrue("Delete should succeed", testFile.delete());
+
+    // write records with initial writeSchema
+    try (FileAppender<GenericData.Record> writer = Avro.write(Files.localOutput(testFile))
+        .schema(icebergWriteSchema)
+        .named("test")
+        .build()) {
+      for (GenericData.Record rec : expected) {
+        writer.add(rec);
+      }
+    }
+  }
 }
 
