@@ -303,7 +303,7 @@ public class SchemaParser {
 
   private static String defaultValueToJsonString(Object value) {
     try {
-      return JsonUtil.mapper().writeValueAsString(value);
+      return JsonUtil.mapper().writeValueAsString(AvroSchemaUtil.convertToJavaDefaultValue(value));
     } catch (JsonProcessingException e) {
       throw new RuntimeException(e);
     }
