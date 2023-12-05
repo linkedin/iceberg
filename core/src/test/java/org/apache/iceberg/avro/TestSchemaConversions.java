@@ -516,4 +516,105 @@ public class TestSchemaConversions {
     Assert.assertTrue(IntStream.range(0, roundTripiSchema.columns().size())
         .allMatch(i -> roundTripiSchema.columns().get(i).equals(iSchema.columns().get(i))));
   }
+
+  @Test
+  public void testConversionOfRecordWithNestedSubElement() {
+    String schemaString = "{\n" +
+        "    \"type\": \"record\",\n" +
+        "    \"name\": \"Root\",\n" +
+        "    \"fields\": [\n" +
+        "        {\n" +
+        "            \"name\": \"OuterRecord1\",\n" +
+        "            \"type\": [\n" +
+        "                \"null\",\n" +
+        "                {\n" +
+        "                    \"type\": \"record\",\n" +
+        "                    \"name\": \"InnerElement\",\n" +
+        "                    \"fields\": [\n" +
+        "                        {\n" +
+        "                            \"name\": \"InnerField\",\n" +
+        "                            \"type\": {\n" +
+        "                                \"type\": \"record\",\n" +
+        "                                \"name\": \"InnerField1\",\n" +
+        "                                \"fields\": [\n" +
+        "                                    {\n" +
+        "                                        \"name\": \"InnerField1Param\",\n" +
+        "                                        \"type\": [\n" +
+        "                                            \"null\",\n" +
+        "                                            \"string\"\n" +
+        "                                        ],\n" +
+        "                                        \"default\": null\n" +
+        "                                    }\n" +
+        "                                ]\n" +
+        "                            },\n" +
+        "                            \"default\": {\n" +
+        "                                \"InnerField1Param\": null\n" +
+        "                            }\n" +
+        "                        }\n" +
+        "                    ]\n" +
+        "                }\n" +
+        "            ],\n" +
+        "            \"default\": null\n" +
+        "        },\n" +
+        "        {\n" +
+        "            \"name\": \"InnerElementV2\",\n" +
+        "            \"type\": [\n" +
+        "                \"null\",\n" +
+        "                {\n" +
+        "                    \"type\": \"record\",\n" +
+        "                    \"name\": \"InnerElementV2\",\n" +
+        "                    \"fields\": [\n" +
+        "                        {\n" +
+        "                            \"name\": \"InnerField2\",\n" +
+        "                            \"type\": {\n" +
+        "                                \"type\": \"array\",\n" +
+        "                                \"items\": \"InnerElement\"\n" +
+        "                            },\n" +
+        "                            \"default\": []\n" +
+        "                        }\n" +
+        "                    ]\n" +
+        "                }\n" +
+        "            ],\n" +
+        "            \"default\": null\n" +
+        "        }\n" +
+        "    ]\n" +
+        "}";
+    Schema schema = new Schema.Parser().parse(schemaString);
+    org.apache.iceberg.Schema iSchema = AvroSchemaUtil.toIceberg(schema);
+    String jSchema = SchemaParser.toJson(iSchema);
+    org.apache.iceberg.Schema roundTripiSchema = SchemaParser.fromJson(jSchema);
+  }
+  @Test
+  public void testConversionOfRecordWithNestedSubElementWithNotNullDefaultValue() {
+    String schemaString = "{\n" +
+        "  \"type\": \"record\",\n" +
+        "  \"name\": \"OuterRecord\",\n" +
+        "  \"fields\": [\n" +
+        "    {\n" +
+        "      \"name\": \"nestedRecord\",\n" +
+        "      \"type\": {\n" +
+        "        \"type\": \"record\",\n" +
+        "        \"name\": \"InnerRecord\",\n" +
+        "        \"fields\": [\n" +
+        "          {\n" +
+        "            \"name\": \"myArray\",\n" +
+        "            \"type\": {\n" +
+        "              \"type\": \"array\",\n" +
+        "              \"items\": \"int\"\n" +
+        "            },\n" +
+        "            \"default\": [1, 2, 3]\n" +
+        "          }\n" +
+        "        ],\n" +
+        "        \"default\": {\"myArray\": [1, 2, 3]}\n" +
+        "      },\n" +
+        "      \"default\": {\"myArray\": [1, 2, 3]}\n" +
+        "    }\n" +
+        "  ],\n" +
+        "  \"default\": {\"nestedRecord\": {\"myArray\": [1, 2, 3]}}\n" +
+        "}";
+    Schema schema = new Schema.Parser().parse(schemaString);
+    org.apache.iceberg.Schema iSchema = AvroSchemaUtil.toIceberg(schema);
+    String jSchema = SchemaParser.toJson(iSchema);
+    org.apache.iceberg.Schema roundTripiSchema = SchemaParser.fromJson(jSchema);
+  }
 }

@@ -19,6 +19,8 @@
 
 package org.apache.iceberg.avro;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
@@ -103,7 +105,8 @@ class TypeToSchema extends TypeUtil.SchemaVisitor<Schema> {
       String fieldName =  isValidFieldName ? origFieldName : AvroSchemaUtil.sanitize(origFieldName);
       Object defaultValue = structField.hasDefaultValue() ? structField.getDefaultValue() :
           (structField.isOptional() ? JsonProperties.NULL_VALUE : null);
-      Schema.Field field = new Schema.Field(fieldName, fieldSchemas.get(i), structField.doc(), defaultValue);
+      Schema.Field field = new Schema.Field(fieldName, fieldSchemas.get(i), structField.doc(),
+          convertComplexNullToJsonNull(defaultValue));
       if (!isValidFieldName) {
         field.addProp(AvroSchemaUtil.ICEBERG_FIELD_NAME_PROP, origFieldName);
       }
@@ -231,5 +234,37 @@ class TypeToSchema extends TypeUtil.SchemaVisitor<Schema> {
     results.put(primitive, primitiveSchema);
 
     return primitiveSchema;
+  }
+
+  // This function ensures that all nested null are converted to JsonProperties.NULL_VALUE
+  // to make sure JacksonUtils.toJsonNode() converts them properly.
+  private Object convertComplexNullToJsonNull(Object defaultValue) {
+    if (defaultValue instanceof Map) {
+      for (Map.Entry<Object, Object> entry : ((Map<Object, Object>) defaultValue).entrySet()) {
+        if (entry.getValue() instanceof Map || entry.getValue() instanceof Collection) {
+          entry.setValue(convertComplexNullToJsonNull(entry.getValue()));
+        } else {
+          if (entry.getValue() == null) {
+            entry.setValue(JsonProperties.NULL_VALUE);
+          }
+        }
+      }
+      return defaultValue;
+    } else if (defaultValue instanceof List) {
+      List<Object> originalList = (List<Object>) defaultValue;
+      List<Object> copiedList = new ArrayList<>();
+
+      for (Object element : originalList) {
+        if (element instanceof Map || element instanceof Collection) {
+          copiedList.add(convertComplexNullToJsonNull(element));
+        } else if (element == null) {
+          copiedList.add(JsonProperties.NULL_VALUE);
+        } else {
+          copiedList.add(element);
+        }
+      }
+      return copiedList;
+    }
+    return defaultValue;
   }
 }
