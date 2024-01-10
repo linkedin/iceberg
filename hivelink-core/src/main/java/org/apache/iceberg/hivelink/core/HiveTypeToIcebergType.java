@@ -58,6 +58,11 @@ public class HiveTypeToIcebergType extends HiveTypeUtil.HiveSchemaVisitor<Type> 
   // Mimic the struct call behavior to construct a union converted struct type
   @Override
   public Type union(UnionTypeInfo union, List<Type> unionResults) {
+    // if the union is single-typed, return the type directly
+    if (union.getAllUnionObjectTypeInfos().size() == 1) {
+      return unionResults.get(0);
+    }
+    // else, it's a complex union
     List<Types.NestedField> fields = Lists.newArrayListWithExpectedSize(unionResults.size() + 1);
     fields.add(Types.NestedField.required(allocateId(), "tag", Types.IntegerType.get()));
     for (int i = 0; i < unionResults.size(); i++) {
