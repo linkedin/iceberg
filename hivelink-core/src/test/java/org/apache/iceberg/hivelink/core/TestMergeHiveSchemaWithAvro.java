@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
+import org.apache.avro.SchemaBuilder;
 import org.apache.avro.util.internal.JacksonUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
@@ -353,6 +354,25 @@ public class TestMergeHiveSchemaWithAvro {
             AvroSchemaUtil.fromOption(merged.getField("fa").schema()).getLogicalType().getName());
     // This last line should not throw any exception.
     AvroSchemaUtil.toIceberg(merged);
+  }
+
+  @Test
+  public void shouldNotReorderListElementType() {
+    String hive = "struct<fa:array<int>>";
+    Schema avro =
+        SchemaBuilder.record("r1")
+            .fields()
+            .name("fa")
+            .type()
+            .nullable()
+            .array()
+            .items()
+            .nullable()
+            .intType()
+            .arrayDefault(Arrays.asList(1, 2, 3))
+            .endRecord();
+
+    assertSchema(avro, merge(hive, avro));
   }
 
   // TODO: tests to retain schema props

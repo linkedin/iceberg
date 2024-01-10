@@ -138,6 +138,15 @@ public class AvroSchemaUtil {
     return false;
   }
 
+  public static int getNullIndex(Schema schema) {
+    Preconditions.checkArgument(isOptionSchema(schema));
+    if (schema.getTypes().get(0).getType() == Schema.Type.NULL) {
+      return 0;
+    } else {
+      return 1;
+    }
+  }
+
   /**
    * This method decides whether a schema represents a single type union, i.e., a union that contains only one option
    *
