@@ -82,6 +82,8 @@ public class TestHiveSchemaConversions {
               "length:int,count:int,list:array<struct<lastword:string,lastwordlength:int>>," +
               "wordcounts:map<string,int>>");
     check("struct<1: tag: required int, 2: field0: optional int, 3: field1: optional string>", "uniontype<int,string>");
+    // single type union
+    check("int", "uniontype<int>");
   }
 
   private static void check(String icebergTypeStr, String hiveTypeStr) {
