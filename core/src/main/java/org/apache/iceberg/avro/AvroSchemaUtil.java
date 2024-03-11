@@ -192,6 +192,18 @@ public class AvroSchemaUtil {
     return false;
   }
 
+  public static int getNullIndexInUnion(Schema schema) {
+    Preconditions.checkArgument(schema.getType() == UNION,
+        "Expected union schema but was passed: %s", schema);
+    for (int i = 0; i < schema.getTypes().size(); i++) {
+      if (schema.getTypes().get(i).getType() == Schema.Type.NULL) {
+        return i;
+      }
+    }
+    // which means null is not present in the union
+    return -1;
+  }
+
   public static Schema toOption(Schema schema) {
     return toOption(schema, false);
   }
