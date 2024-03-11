@@ -101,6 +101,8 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
       boolean isNullFirstOption = schema.getTypes().get(0).getType() == Schema.Type.NULL;
       if (isNullFirstOption && defaultValue.equals(JsonProperties.NULL_VALUE)) {
         return schema;
+      } else if (!isNullFirstOption && !defaultValue.equals(JsonProperties.NULL_VALUE)) {
+        return schema;
       } else {
         return Schema.createUnion(schema.getTypes().get(1), schema.getTypes().get(0));
       }
@@ -143,7 +145,7 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
   @Override
   public Schema primitive(PrimitiveTypeInfo primitive, Schema partner) {
     boolean shouldResultBeOptional = partner == null || AvroSchemaUtil.isOptionSchema(partner);
-    boolean nullShouldBeSecondElementInOptionalUnionSchema =
+    boolean nullShouldBeSecondElementInOptionalUnionSchema = partner != null &&
         shouldResultBeOptional && AvroSchemaUtil.getNullIndexInUnion(partner) == 1;
     Schema hivePrimitive = hivePrimitiveToAvro(primitive);
     // if there was no matching Avro primitive, use the Hive primitive
