@@ -147,8 +147,10 @@ public class MergeHiveSchemaWithAvro extends HiveSchemaWithPartnerVisitor<Schema
         shouldResultBeOptional && AvroSchemaUtil.getNullIndexInUnion(partner) == 1;
     Schema hivePrimitive = hivePrimitiveToAvro(primitive);
     // if there was no matching Avro primitive, use the Hive primitive
-    Schema result = partner == null ? hivePrimitive : checkCompatibilityAndPromote(hivePrimitive, partner);
-    return shouldResultBeOptional ? AvroSchemaUtil.toOption(result, nullShouldBeSecondElementInOptionalUnionSchema) : result;
+    Schema result =
+        partner == null ? hivePrimitive : checkCompatibilityAndPromote(hivePrimitive, partner);
+    return shouldResultBeOptional ? AvroSchemaUtil.toOption(result,
+        nullShouldBeSecondElementInOptionalUnionSchema) : result;
   }
 
   private Schema checkCompatibilityAndPromote(Schema schema, Schema partner) {
