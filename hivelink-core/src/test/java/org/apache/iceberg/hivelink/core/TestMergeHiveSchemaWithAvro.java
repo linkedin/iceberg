@@ -26,6 +26,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
+import org.apache.avro.Schema.Type;
+import org.apache.avro.SchemaBuilder;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecordBuilder;
 import org.apache.avro.util.internal.JacksonUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
@@ -275,6 +279,32 @@ public class TestMergeHiveSchemaWithAvro {
     );
 
     assertSchema(avro, merge(hive, avro));
+  }
+
+  // this test record level default value is valid with regard to inner field's optional union schema order
+  @Test
+  public void shouldReorderOptionalSchemaToMatchDefaultValue2() {
+    String hive = "struct<inner:struct<f1:string,f2:string>>";
+
+    Schema inner = SchemaBuilder.record("INNER").fields()
+        .name("f1").type(Schema.createUnion(Schema.create(Type.NULL), Schema.create(Type.STRING)))
+        .noDefault()
+        .name("f2").type(Schema.createUnion(Schema.create(Type.STRING), Schema.create(Type.NULL)))
+        .noDefault()
+        .endRecord();
+
+    GenericData.Record recdef = new GenericRecordBuilder(inner).set("f1", null).set("f2", "foo")
+        .build();
+
+    Schema avro2 = SchemaBuilder.record("OUTER").fields()
+        .name("inner").type().record("INNER").fields()
+        .name("f1").type(Schema.createUnion(Schema.create(Type.NULL), Schema.create(Type.STRING)))
+        .noDefault()
+        .name("f2").type(Schema.createUnion(Schema.create(Type.STRING), Schema.create(Type.NULL)))
+        .noDefault()
+        .endRecord().recordDefault(recdef).endRecord();
+
+    assertSchema(avro2, merge(hive, avro2));
   }
 
   @Rule
