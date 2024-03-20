@@ -19,11 +19,14 @@
 
 package org.apache.iceberg.orc;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.types.Types.StructType;
 import org.apache.orc.TypeDescription;
 
 public abstract class OrcSchemaWithTypeVisitor<T> {
@@ -96,39 +99,36 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
   as the corresponding types in the union of Orc schema.
   Except the tag field, the fields in the struct of Iceberg schema are the same as the types in the union of Orc schema
   in the general case. In case of field projection, the fields in the struct of Iceberg schema only contains
-  the fields to be projected which equals to a subset of the types in the union of ORC schema.
-  Therefore, this function visits the complex union with the consideration of both cases.
+  a subset of the types in the union of ORC schema, but all the readers for the union branch types must be constructed,
+  it's up to the reader code logic to determine to return what value for the given projection schema.
+  Therefore, this function visits the complex union with the consideration of either whole projection or partially projected schema.
   Noted that null value and default value for complex union is not a consideration in case of ORC
    */
   private <T> void visitComplexUnion(Type type, TypeDescription union, OrcSchemaWithTypeVisitor<T> visitor,
                                      List<T> options) {
-    int typeIndex = 0;
-    int fieldIndexInStruct = 0;
-    while (typeIndex < union.getChildren().size()) {
-      TypeDescription schema = union.getChildren().get(typeIndex);
-      boolean relatedFieldInStructFound = false;
-      Types.StructType struct = type.asStructType();
-      if (fieldIndexInStruct < struct.fields().size() &&
-              ORCSchemaUtil.ICEBERG_UNION_TAG_FIELD_NAME
-                      .equals(struct.fields().get(fieldIndexInStruct).name())) {
-        fieldIndexInStruct++;
-      }
 
-      if (fieldIndexInStruct < struct.fields().size()) {
-        String structFieldName = type.asStructType().fields().get(fieldIndexInStruct).name();
-        int indexFromStructFieldName = Integer.parseInt(structFieldName
-                .substring(ORCSchemaUtil.ICEBERG_UNION_TYPE_FIELD_NAME_PREFIX_LENGTH));
-        if (typeIndex == indexFromStructFieldName) {
-          relatedFieldInStructFound = true;
-          T option = visit(type.asStructType().fields().get(fieldIndexInStruct).type(), schema, visitor);
-          options.add(option);
-          fieldIndexInStruct++;
-        }
+    StructType structType = type.asStructType();
+    List<TypeDescription> unionTypes = union.getChildren();
+    Map<Integer, Integer> idxInOrcUnionToIdxInType = new HashMap<>();
+    // Construct idxInOrcUnionToIdxInType
+    for (int i = 0; i < structType.fields().size(); i += 1) {
+      String fieldName = structType.fields().get(i).name();
+      if (!fieldName.equals(ORCSchemaUtil.ICEBERG_UNION_TAG_FIELD_NAME)) {
+        int idxInOrcUnion = Integer.parseInt(fieldName
+            .substring(ORCSchemaUtil.ICEBERG_UNION_TYPE_FIELD_NAME_PREFIX_LENGTH));
+        idxInOrcUnionToIdxInType.put(idxInOrcUnion, i);
       }
-      if (!relatedFieldInStructFound) {
-        visitNotProjectedTypeInComplexUnion(schema, visitor, options, typeIndex);
+    }
+
+    for (int i = 0; i < union.getChildren().size(); i += 1) {
+      if (idxInOrcUnionToIdxInType.containsKey(i)) {
+        options.add(visit(structType.fields().get(idxInOrcUnionToIdxInType.get(i)).type(), unionTypes.get(i), visitor));
+      } else {
+        // even if the type is not projected in the iceberg schema, a reader for the underlying orc type branch still needs to be created,
+        // we use a OrcToIcebergVisitorWithPseudoId to re-construct the iceberg type from the orc union branch type and add it to the options,
+        // with a pseudo iceberg-id "-1" to avoid failures with the remaining iceberg code infra
+        visitNotProjectedTypeInComplexUnion(unionTypes.get(i), visitor, options, i);
       }
-      typeIndex++;
     }
   }
 
@@ -137,16 +137,15 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
   // used to make the reading of Orc file successfully. In this case, a pseudo Iceberg type is converted from
   // the Orc schema and is used to create the option for the reader of the current type which still can
   // read the corresponding content in Orc file successfully.
-  private static <T> void visitNotProjectedTypeInComplexUnion(TypeDescription schema,
+  private static <T> void visitNotProjectedTypeInComplexUnion(TypeDescription orcType,
                                                               OrcSchemaWithTypeVisitor<T> visitor,
                                                               List<T> options,
                                                               int typeIndex) {
-    OrcToIcebergVisitor schemaConverter = new OrcToIcebergVisitor();
-    schemaConverter.beforeField("field" + typeIndex, schema);
-    schema.setAttribute(org.apache.iceberg.orc.ORCSchemaUtil.ICEBERG_ID_ATTRIBUTE, PSEUDO_ICEBERG_FIELD_ID);
-    Optional<Types.NestedField> icebergSchema = OrcToIcebergVisitor.visit(schema, schemaConverter);
-    schemaConverter.afterField("field" + typeIndex, schema);
-    options.add(visit(icebergSchema.get().type(), schema, visitor));
+    OrcToIcebergVisitor schemaConverter = new OrcToIcebergVisitorWithPseudoId();
+    schemaConverter.beforeField("field" + typeIndex, orcType);
+    Optional<Types.NestedField> icebergType = OrcToIcebergVisitor.visit(orcType, schemaConverter);
+    schemaConverter.afterField("field" + typeIndex, orcType);
+    options.add(visit(icebergType.get().type(), orcType, visitor));
   }
 
   public T record(Types.StructType iStruct, TypeDescription record, List<String> names, List<T> fields) {

@@ -20,7 +20,7 @@
 package org.apache.iceberg.spark.data;
 
 import java.math.BigDecimal;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.iceberg.orc.ORCSchemaUtil;
@@ -169,38 +169,26 @@ public class SparkOrcValueReaders {
 
   static class UnionReader implements OrcValueReader<Object> {
     private final OrcValueReader[] readers;
-    private final Type expectedIcebergSchema;
-    private int[] projectedFieldIdsToIdxInReturnedRow;
-    private boolean isTagFieldProjected;
-    private int numOfFieldsInReturnedRow;
+    private final Type expectedType;
+    private Map<Integer, Integer> idxInExpectedSchemaToIdxInReaders;
 
     private UnionReader(List<OrcValueReader<?>> readers, Type expected) {
       this.readers = new OrcValueReader[readers.size()];
       for (int i = 0; i < this.readers.length; i += 1) {
         this.readers[i] = readers.get(i);
       }
-      this.expectedIcebergSchema = expected;
+      this.expectedType = expected;
 
       if (this.readers.length > 1) {
-        // Creating an integer array to track the mapping between the index of fields to be projected
-        // and the index of the value for the field stored in the returned row,
-        // if the value for a field equals to Integer.MIN_VALUE, it means the value of this field should not be stored
-        // in the returned row
-        this.projectedFieldIdsToIdxInReturnedRow = new int[readers.size()];
-        Arrays.fill(this.projectedFieldIdsToIdxInReturnedRow, Integer.MIN_VALUE);
-        this.numOfFieldsInReturnedRow = 0;
-        this.isTagFieldProjected = false;
-
-        for (Types.NestedField expectedStructField : expectedIcebergSchema.asStructType().fields()) {
-          String fieldName = expectedStructField.name();
-          if (fieldName.equals(ORCSchemaUtil.ICEBERG_UNION_TAG_FIELD_NAME)) {
-            this.isTagFieldProjected = true;
-            this.numOfFieldsInReturnedRow++;
-            continue;
+        idxInExpectedSchemaToIdxInReaders = new HashMap<>();
+        // Construct fieldIdxInExpectedSchemaToIdxInReaders
+        for (int i = 0; i < expectedType.asStructType().fields().size(); i += 1) {
+          String fieldName = expectedType.asStructType().fields().get(i).name();
+          if (!fieldName.equals(ORCSchemaUtil.ICEBERG_UNION_TAG_FIELD_NAME)) {
+            int idxInReader = Integer.parseInt(fieldName
+                    .substring(ORCSchemaUtil.ICEBERG_UNION_TYPE_FIELD_NAME_PREFIX_LENGTH));
+            this.idxInExpectedSchemaToIdxInReaders.put(i, idxInReader);
           }
-          int projectedFieldIndex = Integer.valueOf(fieldName
-                  .substring(ORCSchemaUtil.ICEBERG_UNION_TYPE_FIELD_NAME_PREFIX_LENGTH));
-          this.projectedFieldIdsToIdxInReturnedRow[projectedFieldIndex] = this.numOfFieldsInReturnedRow++;
         }
       }
     }
@@ -214,18 +202,21 @@ public class SparkOrcValueReaders {
       if (readers.length == 1) {
         return value;
       } else {
-        InternalRow struct = new GenericInternalRow(numOfFieldsInReturnedRow);
+        InternalRow struct = new GenericInternalRow(this.expectedType.asStructType().fields().size());
         for (int i = 0; i < struct.numFields(); i += 1) {
           struct.setNullAt(i);
         }
-        if (this.isTagFieldProjected) {
-          struct.update(0, fieldIndex);
+        for (int i = 0; i < this.expectedType.asStructType().fields().size(); i += 1) {
+          String fieldName = expectedType.asStructType().fields().get(i).name();
+          if (fieldName.equals(ORCSchemaUtil.ICEBERG_UNION_TAG_FIELD_NAME)) {
+            struct.update(i, fieldIndex);
+          } else {
+            int idxInReader = this.idxInExpectedSchemaToIdxInReaders.get(i);
+            if (idxInReader == fieldIndex) {
+              struct.update(i, value);
+            }
+          }
         }
-
-        if (this.projectedFieldIdsToIdxInReturnedRow[fieldIndex] != Integer.MIN_VALUE) {
-          struct.update(this.projectedFieldIdsToIdxInReturnedRow[fieldIndex], value);
-        }
-
         return struct;
       }
     }
