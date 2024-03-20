@@ -30,7 +30,6 @@ import org.apache.iceberg.types.Types.StructType;
 import org.apache.orc.TypeDescription;
 
 public abstract class OrcSchemaWithTypeVisitor<T> {
-  private static final String PSEUDO_ICEBERG_FIELD_ID = "-1";
 
   public static <T> T visit(
       org.apache.iceberg.Schema iSchema, TypeDescription schema, OrcSchemaWithTypeVisitor<T> visitor) {
@@ -101,7 +100,8 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
   in the general case. In case of field projection, the fields in the struct of Iceberg schema only contains
   a subset of the types in the union of ORC schema, but all the readers for the union branch types must be constructed,
   it's up to the reader code logic to determine to return what value for the given projection schema.
-  Therefore, this function visits the complex union with the consideration of either whole projection or partially projected schema.
+  Therefore, this function visits the complex union with the consideration of either whole projection
+  or partially projected schema.
   Noted that null value and default value for complex union is not a consideration in case of ORC
    */
   private <T> void visitComplexUnion(Type type, TypeDescription union, OrcSchemaWithTypeVisitor<T> visitor,
@@ -124,8 +124,9 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
       if (idxInOrcUnionToIdxInType.containsKey(i)) {
         options.add(visit(structType.fields().get(idxInOrcUnionToIdxInType.get(i)).type(), unionTypes.get(i), visitor));
       } else {
-        // even if the type is not projected in the iceberg schema, a reader for the underlying orc type branch still needs to be created,
-        // we use a OrcToIcebergVisitorWithPseudoId to re-construct the iceberg type from the orc union branch type and add it to the options,
+        // even if the type is not projected in the iceberg schema, a reader for the underlying orc type branch
+        // still needs to be created, we use a OrcToIcebergVisitorWithPseudoId to re-construct the iceberg type
+        // from the orc union branch type and add it to the options,
         // with a pseudo iceberg-id "-1" to avoid failures with the remaining iceberg code infra
         visitNotProjectedTypeInComplexUnion(unionTypes.get(i), visitor, options, i);
       }
