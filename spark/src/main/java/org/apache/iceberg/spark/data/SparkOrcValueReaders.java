@@ -173,10 +173,7 @@ public class SparkOrcValueReaders {
     private Map<Integer, Integer> idxInExpectedSchemaToIdxInReaders;
 
     private UnionReader(List<OrcValueReader<?>> readers, Type expected) {
-      this.readers = new OrcValueReader[readers.size()];
-      for (int i = 0; i < this.readers.length; i += 1) {
-        this.readers[i] = readers.get(i);
-      }
+      this.readers = readers.toArray(new OrcValueReader[readers.size()]);
       this.expectedType = expected;
 
       if (this.readers.length > 1) {
