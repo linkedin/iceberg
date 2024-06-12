@@ -189,7 +189,7 @@ public class TestMetadataTableScansWithPartitionEvolution extends MetadataTableS
     ScanTask task = tasks.get(0);
     assertThat(task).isInstanceOf(PositionDeletesScanTask.class);
 
-    Types.StructType partitionType = Partitioning.partitionType(table);
+    Types.StructType partitionType = positionDeletesTable.spec().partitionType();
     PositionDeletesScanTask posDeleteTask = (PositionDeletesScanTask) task;
 
     int filePartition = posDeleteTask.file().partition().get(0, Integer.class);
@@ -199,12 +199,12 @@ public class TestMetadataTableScansWithPartitionEvolution extends MetadataTableS
     int taskConstantPartition =
         ((StructLike)
                 constantsMap(posDeleteTask, partitionType).get(MetadataColumns.PARTITION_COLUMN_ID))
-            .get(1, Integer.class);
+            .get(0, Integer.class);
     Assert.assertEquals("Expected correct partition on constant column", 1, taskConstantPartition);
 
     Assert.assertEquals(
         "Expected correct partition field id on task's spec",
-        table.ops().current().spec().partitionType().fields().get(0).fieldId(),
+        partitionType.fields().get(0).fieldId(),
         posDeleteTask.spec().fields().get(0).fieldId());
 
     Assert.assertEquals(
