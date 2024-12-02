@@ -600,7 +600,9 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
             .run(
                 id -> {
                   try {
+                    LOG.warn("In thread {}, trying to call hmsclient.checkLock() on table {}", Thread.currentThread(), fullName);
                     LockResponse response = metaClients.run(client -> client.checkLock(id));
+                    LOG.warn("In thread {}, hmsclient.checkLock() finished on table {}", Thread.currentThread(), fullName);
                     LockState newState = response.getState();
                     state.set(newState);
                     if (newState.equals(LockState.WAITING)) {
