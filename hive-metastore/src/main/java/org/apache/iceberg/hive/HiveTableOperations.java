@@ -35,7 +35,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
-import jline.internal.Log;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
@@ -569,12 +568,20 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
             Lists.newArrayList(lockComponent),
             System.getProperty("user.name"),
             InetAddress.getLocalHost().getHostName());
-    LOG.warn("In thread {}, trying to call hmsclient.lock() on table {}", Thread.currentThread(), fullName);
+    LOG.warn(
+        "In thread {}, trying to call hmsclient.lock() on table {}",
+        Thread.currentThread(),
+        fullName);
     LockResponse lockResponse = metaClients.run(client -> client.lock(lockRequest));
-    LOG.warn("In thread {}, hmsclient.lock() finished on table {}", Thread.currentThread(), fullName);
+    LOG.warn(
+        "In thread {}, hmsclient.lock() finished on table {}", Thread.currentThread(), fullName);
     AtomicReference<LockState> state = new AtomicReference<>(lockResponse.getState());
     long lockId = lockResponse.getLockid();
-    LOG.warn("In thread {}, lockId returned from hmsclient.lock() on table {} is {}", Thread.currentThread(), fullName, lockId);
+    LOG.warn(
+        "In thread {}, lockId returned from hmsclient.lock() on table {} is {}",
+        Thread.currentThread(),
+        fullName,
+        lockId);
 
     final long start = System.currentTimeMillis();
     long duration = 0;
@@ -600,9 +607,15 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
             .run(
                 id -> {
                   try {
-                    LOG.warn("In thread {}, trying to call hmsclient.checkLock() on table {}", Thread.currentThread(), fullName);
+                    LOG.warn(
+                        "In thread {}, trying to call hmsclient.checkLock() on table {}",
+                        Thread.currentThread(),
+                        fullName);
                     LockResponse response = metaClients.run(client -> client.checkLock(id));
-                    LOG.warn("In thread {}, hmsclient.checkLock() finished on table {}", Thread.currentThread(), fullName);
+                    LOG.warn(
+                        "In thread {}, hmsclient.checkLock() finished on table {}",
+                        Thread.currentThread(),
+                        fullName);
                     LockState newState = response.getState();
                     state.set(newState);
                     if (newState.equals(LockState.WAITING)) {
@@ -668,8 +681,7 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
       } catch (Exception e) {
         LOG.warn("Failed to unlock {}.{}", database, tableName, e);
       }
-    }
-    else {
+    } else {
       LOG.warn("No lockId to unlock for {}.{}", database, tableName);
     }
   }
