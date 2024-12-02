@@ -195,7 +195,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
     ReentrantLock tableLevelMutex = commitLockCache.get(fullName, t -> new ReentrantLock(true));
     tableLevelMutex.lock();
     try {
-      LOG.warn("In thread {}, starting to create a lock for table {}", Thread.currentThread(), fullName);
+      LOG.warn("In thread {}, starting to acquire a lock for table {}", Thread.currentThread(), fullName);
       lockId = Optional.of(acquireLock());
       LOG.warn("In thread {}, acquired lock id: {} for table {}", Thread.currentThread(), lockId.get(), fullName);
       // TODO add lock heart beating for cases where default lock timeout is too low.
@@ -209,9 +209,9 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
       LOG.warn("In thread {}, checking table exists finishes with result: {}", Thread.currentThread(), tableExists);
       if (tableExists) {
-        LOG.warn("In thread {}, starting to get table {} from HMS", Thread.currentThread(), fullName);
+        LOG.warn("In thread {}, starting to call getTable: {} from HMS", Thread.currentThread(), fullName);
         tbl = metaClients.run(client -> client.getTable(database, tableName));
-        LOG.warn("In thread {}, got table {} from HMS", Thread.currentThread(), fullName);
+        LOG.warn("In thread {}, getTable: {} from HMS finished", Thread.currentThread(), fullName);
         fixMismatchedSchema(tbl);
       } else {
         final long currentTimeMillis = System.currentTimeMillis();
