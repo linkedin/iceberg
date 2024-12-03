@@ -617,6 +617,11 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
                         Thread.currentThread(),
                         fullName);
                     LockState newState = response.getState();
+                    LOG.warn(
+                        "In thread {}, lock state returned from hmsclient.checkLock() on table {} is {}",
+                        Thread.currentThread(),
+                        fullName,
+                        newState);
                     state.set(newState);
                     if (newState.equals(LockState.WAITING)) {
                       throw new WaitingForLockException(
