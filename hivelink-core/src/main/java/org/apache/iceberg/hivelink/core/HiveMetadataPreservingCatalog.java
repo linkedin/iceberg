@@ -37,7 +37,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
  */
 public class HiveMetadataPreservingCatalog extends HiveCatalog {
 
-  private static final String DEFAULT_NAME = "hive_meta_preserving";
+  private static final String DEFAULT_NAME = "hive_meta_preserving_catalog";
 
   public HiveMetadataPreservingCatalog() {}
 

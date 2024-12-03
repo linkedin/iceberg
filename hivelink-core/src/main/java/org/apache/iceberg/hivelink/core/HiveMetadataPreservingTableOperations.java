@@ -195,7 +195,16 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
     ReentrantLock tableLevelMutex = commitLockCache.get(fullName, t -> new ReentrantLock(true));
     tableLevelMutex.lock();
     try {
+      LOG.warn(
+          "In thread {}, starting to acquire a lock for table {}",
+          Thread.currentThread(),
+          fullName);
       lockId = Optional.of(acquireLock());
+      LOG.warn(
+          "In thread {}, acquired lock id: {} for table {}",
+          Thread.currentThread(),
+          lockId.get(),
+          fullName);
       // TODO add lock heart beating for cases where default lock timeout is too low.
       Table tbl;
       // [LINKEDIN] Instead of checking if base != null to check for table existence, we query
@@ -203,9 +212,19 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       // base can be null if not Iceberg metadata exists, but Hive table exists, so we want to get
       // the current table
       // definition and not create a new definition
+      LOG.warn("In thread {}, checking if table exists {}", Thread.currentThread(), fullName);
       boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
+      LOG.warn(
+          "In thread {}, checking table exists finishes with result: {}",
+          Thread.currentThread(),
+          tableExists);
       if (tableExists) {
+        LOG.warn(
+            "In thread {}, starting to call getTable: {} from HMS",
+            Thread.currentThread(),
+            fullName);
         tbl = metaClients.run(client -> client.getTable(database, tableName));
+        LOG.warn("In thread {}, getTable: {} from HMS finished", Thread.currentThread(), fullName);
         fixMismatchedSchema(tbl);
       } else {
         final long currentTimeMillis = System.currentTimeMillis();
@@ -243,7 +262,9 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       updateMetadataLocationInHms(newMetadataLocation, tbl);
 
       try {
+        LOG.warn("In thread {}, starting to persist table {}", Thread.currentThread(), fullName);
         persistTable(tbl, tableExists);
+        LOG.warn("In thread {}, persisted table {}", Thread.currentThread(), fullName);
         commitStatus = CommitStatus.SUCCESS;
       } catch (Throwable persistFailure) {
         LOG.error(
@@ -280,7 +301,16 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       throw new RuntimeException("Interrupted during commit", e);
 
     } finally {
+      LOG.warn(
+          "In thread {}, trying to cleanupMetadataAndUnlock of lock id: {} for table: {}",
+          Thread.currentThread(),
+          lockId,
+          fullName);
       cleanupMetadataAndUnlock(commitStatus, newMetadataLocation, lockId, tableLevelMutex);
+      LOG.warn(
+          "In thread {}, cleanupMetadataAndUnlock finishes for table: {}",
+          Thread.currentThread(),
+          fullName);
     }
   }
 
