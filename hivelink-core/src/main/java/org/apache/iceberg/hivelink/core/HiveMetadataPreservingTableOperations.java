@@ -196,13 +196,15 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
     tableLevelMutex.lock();
     try {
       LOG.warn(
-          "In thread {}, starting to acquire a lock for table {}",
+          "In thread {} with threadId={}, starting to acquire a lock for table {}",
           Thread.currentThread(),
+          Thread.currentThread().getId(),
           fullName);
       lockId = Optional.of(acquireLock());
       LOG.warn(
-          "In thread {}, acquired lock id: {} for table {}",
+          "In thread {} with threadId={}, acquired lock id: {} for table {}",
           Thread.currentThread(),
+          Thread.currentThread().getId(),
           lockId.get(),
           fullName);
       // TODO add lock heart beating for cases where default lock timeout is too low.
@@ -212,19 +214,29 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       // base can be null if not Iceberg metadata exists, but Hive table exists, so we want to get
       // the current table
       // definition and not create a new definition
-      LOG.warn("In thread {}, checking if table exists {}", Thread.currentThread(), fullName);
+      LOG.warn(
+          "In thread {} with threadId={}, checking if table exists {}",
+          Thread.currentThread(),
+          Thread.currentThread().getId(),
+          fullName);
       boolean tableExists = metaClients.run(client -> client.tableExists(database, tableName));
       LOG.warn(
-          "In thread {}, checking table exists finishes with result: {}",
+          "In thread {} with threadId={}, checking table exists finishes with result: {}",
           Thread.currentThread(),
+          Thread.currentThread().getId(),
           tableExists);
       if (tableExists) {
         LOG.warn(
-            "In thread {}, starting to call getTable: {} from HMS",
+            "In thread {} with threadId={}, starting to call getTable: {} from HMS",
             Thread.currentThread(),
+            Thread.currentThread().getId(),
             fullName);
         tbl = metaClients.run(client -> client.getTable(database, tableName));
-        LOG.warn("In thread {}, getTable: {} from HMS finished", Thread.currentThread(), fullName);
+        LOG.warn(
+            "In thread {} with threadId={}, getTable: {} from HMS finished",
+            Thread.currentThread(),
+            Thread.currentThread().getId(),
+            fullName);
         fixMismatchedSchema(tbl);
       } else {
         final long currentTimeMillis = System.currentTimeMillis();
@@ -262,9 +274,17 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
       updateMetadataLocationInHms(newMetadataLocation, tbl);
 
       try {
-        LOG.warn("In thread {}, starting to persist table {}", Thread.currentThread(), fullName);
+        LOG.warn(
+            "In thread {} with threadId={}, starting to persist table {}",
+            Thread.currentThread(),
+            Thread.currentThread().getId(),
+            fullName);
         persistTable(tbl, tableExists);
-        LOG.warn("In thread {}, persisted table {}", Thread.currentThread(), fullName);
+        LOG.warn(
+            "In thread {} with threadId={}, persisted table {}",
+            Thread.currentThread(),
+            Thread.currentThread().getId(),
+            fullName);
         commitStatus = CommitStatus.SUCCESS;
       } catch (Throwable persistFailure) {
         LOG.error(
@@ -302,14 +322,16 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
 
     } finally {
       LOG.warn(
-          "In thread {}, trying to cleanupMetadataAndUnlock of lock id: {} for table: {}",
+          "In thread {} with threadId={}, trying to cleanupMetadataAndUnlock of lock id: {} for table: {}",
           Thread.currentThread(),
+          Thread.currentThread().getId(),
           lockId,
           fullName);
       cleanupMetadataAndUnlock(commitStatus, newMetadataLocation, lockId, tableLevelMutex);
       LOG.warn(
-          "In thread {}, cleanupMetadataAndUnlock finishes for table: {}",
+          "In thread {} with threadId={}, cleanupMetadataAndUnlock finishes for table: {}",
           Thread.currentThread(),
+          Thread.currentThread().getId(),
           fullName);
     }
   }

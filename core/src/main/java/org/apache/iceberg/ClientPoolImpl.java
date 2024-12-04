@@ -53,7 +53,15 @@ public abstract class ClientPoolImpl<C, E extends Exception>
 
   @Override
   public <R> R run(Action<R, C, E> action, boolean retry) throws E, InterruptedException {
+    LOG.warn(
+        "In thread {} with threadId={}, trying to get a client from the pool",
+        Thread.currentThread(),
+        Thread.currentThread().getId());
     C client = get();
+    LOG.warn(
+        "In thread {} with threadId={}, got a client from the pool",
+        Thread.currentThread(),
+        Thread.currentThread().getId());
     try {
       return action.run(client);
 

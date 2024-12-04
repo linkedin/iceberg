@@ -569,19 +569,25 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
             System.getProperty("user.name"),
             InetAddress.getLocalHost().getHostName());
     LOG.warn(
-        "In thread {}, trying to call hmsclient.lock() on table {}",
+        "In thread {} with threadId={}, trying to call hmsclient.lock() on table {}",
         Thread.currentThread(),
+        Thread.currentThread().getId(),
         fullName);
     LockResponse lockResponse = metaClients.run(client -> client.lock(lockRequest));
     LOG.warn(
-        "In thread {}, hmsclient.lock() finished on table {}", Thread.currentThread(), fullName);
+        "In thread {} with threadId={}, hmsclient.lock() finished on table {}",
+        Thread.currentThread(),
+        Thread.currentThread().getId(),
+        fullName);
     AtomicReference<LockState> state = new AtomicReference<>(lockResponse.getState());
     long lockId = lockResponse.getLockid();
     LOG.warn(
-        "In thread {}, lockId returned from hmsclient.lock() on table {} is {}",
+        "In thread {} with threadId={}, lockId returned from hmsclient.lock() on table {} is {} with state {}",
         Thread.currentThread(),
+        Thread.currentThread().getId(),
         fullName,
-        lockId);
+        lockId,
+        state.get());
 
     final long start = System.currentTimeMillis();
     long duration = 0;
@@ -608,18 +614,21 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
                 id -> {
                   try {
                     LOG.warn(
-                        "In thread {}, trying to call hmsclient.checkLock() on table {}",
+                        "In thread {} with threadId={}, trying to call hmsclient.checkLock() on table {}",
                         Thread.currentThread(),
+                        Thread.currentThread().getId(),
                         fullName);
                     LockResponse response = metaClients.run(client -> client.checkLock(id));
                     LOG.warn(
-                        "In thread {}, hmsclient.checkLock() finished on table {}",
+                        "In thread {} with threadId={}, hmsclient.checkLock() finished on table {}",
                         Thread.currentThread(),
+                        Thread.currentThread().getId(),
                         fullName);
                     LockState newState = response.getState();
                     LOG.warn(
-                        "In thread {}, lock state returned from hmsclient.checkLock() on table {} is {}",
+                        "In thread {} with threadId={}, lock state returned from hmsclient.checkLock() on table {} is {}",
                         Thread.currentThread(),
+                        Thread.currentThread().getId(),
                         fullName,
                         newState);
                     state.set(newState);
