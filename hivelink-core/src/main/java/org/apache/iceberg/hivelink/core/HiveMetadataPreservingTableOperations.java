@@ -183,6 +183,7 @@ public class HiveMetadataPreservingTableOperations extends HiveTableOperations {
     refreshFromMetadataLocation(metadataLocation);
   }
 
+  @SuppressWarnings("checkstyle:MethodLength")
   @Override
   protected void doCommit(TableMetadata base, TableMetadata metadata) {
     String newMetadataLocation = writeNewMetadata(metadata, currentVersion() + 1);
