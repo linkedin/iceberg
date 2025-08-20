@@ -306,7 +306,7 @@ scan = table.scan(
 The low level API `plan_files` methods returns a set of tasks that provide the files that might contain matching rows:
 
 ```json
-['s3a://warehouse/wh/nyc/taxis/data/00003-4-42464649-92dd-41ad-b83b-dea1a2fe4b58-00001.parquet']
+["s3a://warehouse/wh/nyc/taxis/data/00003-4-42464649-92dd-41ad-b83b-dea1a2fe4b58-00001.parquet"]
 ```
 
 In this case it is up to the engine itself to filter the file itself. Below, `to_arrow()` and `to_duckdb()` that already do this for you.
@@ -314,7 +314,7 @@ In this case it is up to the engine itself to filter the file itself. Below, `to
 ### Apache Arrow
 
 !!! note "Requirements"
-    This requires [PyArrow to be installed](index.md)
+This requires [PyArrow to be installed](index.md)
 
 Using PyIceberg it is filter out data from a huge table and pull it into a PyArrow table:
 
@@ -343,7 +343,7 @@ This will only pull in the files that that might contain matching rows.
 ### DuckDB
 
 !!! note "Requirements"
-    This requires [DuckDB to be installed](index.md).
+This requires [DuckDB to be installed](index.md).
 
 A table scan can also be converted into a in-memory DuckDB table:
 

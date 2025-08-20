@@ -43,7 +43,7 @@ repos:
       - id: mypy
         args: [ --install-types, --non-interactive, --config=python/pyproject.toml]
   - repo: https://github.com/hadialqattan/pycln
-    rev: v2.1.3
+    rev: v2.5.0
     hooks:
       - id: pycln
         args: [--config=python/pyproject.toml]
@@ -64,11 +64,9 @@ repos:
         args: [ "--ignore=E501,W503,E203,B024" ]
         additional_dependencies: [ flake8-bugbear==22.12.6, flake8-comprehensions==3.10.1 ]
   - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.16
+    rev: 0.7.22
     hooks:
       - id: mdformat
         additional_dependencies:
-          - mdformat-black
           - mdformat-config
           - mdformat-beautysh
-          - mdformat-admon
