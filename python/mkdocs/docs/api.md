@@ -314,7 +314,7 @@ In this case it is up to the engine itself to filter the file itself. Below, `to
 ### Apache Arrow
 
 !!! note "Requirements"
-    This requires [PyArrow to be installed](index.md)
+This requires [PyArrow to be installed](index.md)
 
 Using PyIceberg it is filter out data from a huge table and pull it into a PyArrow table:
 
@@ -343,7 +343,7 @@ This will only pull in the files that that might contain matching rows.
 ### DuckDB
 
 !!! note "Requirements"
-    This requires [DuckDB to be installed](index.md).
+This requires [DuckDB to be installed](index.md).
 
 A table scan can also be converted into a in-memory DuckDB table:
 
