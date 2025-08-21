@@ -306,7 +306,7 @@ scan = table.scan(
 The low level API `plan_files` methods returns a set of tasks that provide the files that might contain matching rows:
 
 ```json
-['s3a://warehouse/wh/nyc/taxis/data/00003-4-42464649-92dd-41ad-b83b-dea1a2fe4b58-00001.parquet']
+["s3a://warehouse/wh/nyc/taxis/data/00003-4-42464649-92dd-41ad-b83b-dea1a2fe4b58-00001.parquet"]
 ```
 
 In this case it is up to the engine itself to filter the file itself. Below, `to_arrow()` and `to_duckdb()` that already do this for you.
