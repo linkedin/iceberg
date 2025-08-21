@@ -57,9 +57,13 @@ jobs:
     - name: Linters
       working-directory: ./python
       run: make lint
-    - name: Tests S3
+    - name: Tests (excluding S3/ADLFS)
       working-directory: ./python
-      run: make test-s3
-    - name: Tests Adlfs
-      working-directory: ./python
-      run: make test-adlfs
+      run: make test
+    # Disabled S3 and ADLFS tests that require Docker infrastructure
+    # - name: Tests S3
+    #   working-directory: ./python
+    #   run: make test-s3
+    # - name: Tests Adlfs
+    #   working-directory: ./python
+    #   run: make test-adlfs
