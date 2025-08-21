@@ -20,50 +20,30 @@
 name: "Python CI"
 on:
   push:
-    branches:
-    - 'master'
-    - '0.**'
-    tags:
-    - 'apache-iceberg-**'
+    paths:
+    - '.github/workflows/python-ci.yml'
+    - 'python/**'
   pull_request:
     paths:
     - '.github/workflows/python-ci.yml'
     - 'python/**'
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-  lint-and-test:
-    runs-on: ubuntu-22.04
+  tox:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: ['3.8', '3.9', '3.10', '3.11']
+        python: [3.6, 3.7, 3.8]
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Install poetry
-      run: pip install poetry
-    - uses: actions/setup-python@v4
+    - uses: actions/checkout@v2
+    - uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python }}
-        cache: poetry
-        cache-dependency-path: |
-          ./python/poetry.lock
-    - name: Install
-      working-directory: ./python
-      run: make install
-    - name: Linters
-      working-directory: ./python
-      run: make lint
-    - name: Tests (excluding S3/ADLFS)
-      working-directory: ./python
-      run: make test
-    # Disabled S3 and ADLFS tests that require Docker infrastructure
-    # - name: Tests S3
-    #   working-directory: ./python
-    #   run: make test-s3
-    # - name: Tests Adlfs
-    #   working-directory: ./python
-    #   run: make test-adlfs
+    - working-directory: ./python
+      run: |
+        pip install -e .[dev]
+        pip install -U tox-gh-actions
+    - working-directory: ./python
+      run: tox
+
