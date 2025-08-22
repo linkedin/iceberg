@@ -134,7 +134,7 @@ subprojects {
   if (project.name in REVAPI_PROJECTS) {
     apply plugin: 'com.palantir.revapi'
     revapi {
-      oldGroup = project.group
+      oldGroup =  "org.apache.iceberg"
       oldName = project.name
       oldVersion = "1.1.0"
     }
