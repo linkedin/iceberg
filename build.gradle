@@ -119,6 +119,7 @@ final REVAPI_PROJECTS = ["iceberg-api", "iceberg-core", "iceberg-parquet", "iceb
 
 allprojects {
   group = "com.linkedin.iceberg"
+
   version = projectVersion
   repositories {
     mavenCentral()
@@ -910,11 +911,3 @@ String getJavadocVersion() {
 apply from: 'jmh.gradle'
 apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
-
-// Custom version printing task
-tasks.register('showVersion') {
-    doLast {
-        println "Project version: ${project.version}"
-    }
-}
-
