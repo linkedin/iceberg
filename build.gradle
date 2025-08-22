@@ -23,6 +23,7 @@ import java.util.regex.Pattern
 
 buildscript {
   repositories {
+    maven { url "https://plugins.gradle.org/m2/" }
     gradlePluginPortal()
   }
   dependencies {
@@ -45,6 +46,9 @@ buildscript {
     classpath 'com.palantir.gradle.revapi:gradle-revapi:1.7.0'
     classpath 'com.gorylenko.gradle-git-properties:gradle-git-properties:2.4.1'
     classpath 'com.palantir.gradle.gitversion:gradle-git-version:1.0.0'
+    classpath 'io.github.gradle-nexus:publish-plugin:1.1.0'
+    classpath 'org.shipkit:shipkit-auto-version:1.2.0'
+    classpath 'org.shipkit:shipkit-changelog:1.1.10'
     classpath ('org.eclipse.jgit:org.eclipse.jgit') {
       // gradle-git-version automatically uses a jgit version that requires JDK11
       // so we need to enforce the latest jgit version that works with JDK8
@@ -110,7 +114,7 @@ def projectVersion = getProjectVersion()
 final REVAPI_PROJECTS = ["iceberg-api", "iceberg-core", "iceberg-parquet", "iceberg-orc", "iceberg-common", "iceberg-data"]
 
 allprojects {
-  group = "org.apache.iceberg"
+  group = "org.linkedin.iceberg"
   version = projectVersion
   repositories {
     mavenCentral()
@@ -893,5 +897,4 @@ String getJavadocVersion() {
 apply from: 'jmh.gradle'
 apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
-apply from: 'tasks.gradle'
 

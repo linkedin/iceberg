@@ -24,8 +24,8 @@ if (project.hasProperty('release') && jdkVersion != '8') {
 subprojects {
   apply plugin: 'maven-publish'
   apply plugin: 'signing'
+  
   afterEvaluate {
-
     task sourceJar(type: Jar, dependsOn: classes) {
       archiveClassifier.set('sources')
       from sourceSets.main.allSource
@@ -64,7 +64,7 @@ subprojects {
 
     publishing {
       publications {
-        apache(MavenPublication) {
+        javaLibrary(MavenPublication) {
           if (tasks.matching({task -> task.name == 'shadowJar'}).isEmpty()) {
             from components.java
           } else {
@@ -81,23 +81,16 @@ subprojects {
             }
           }
 
-          groupId = 'org.apache.iceberg'
+          groupId = 'com.linkedin.iceberg'
+          artifactId = project.archivesBaseName
           pom {
-            name = 'Apache Iceberg'
+            name = artifactId
             description = 'A table format for huge analytic datasets'
-            url = 'https://iceberg.apache.org'
+            url = 'https://github.com/linkedin/iceberg'
             licenses {
               license {
                 name = 'The Apache Software License, Version 2.0'
                 url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-              }
-            }
-            mailingLists {
-              mailingList {
-                name = 'Dev Mailing List'
-                post = 'dev@iceberg.apache.org'
-                subscribe = 'dev-subscribe@iceberg.apache.org'
-                unsubscribe = 'dev-unsubscribe@iceberg.apache.org'
               }
             }
             issueManagement {
@@ -109,26 +102,19 @@ subprojects {
       }
 
       repositories {
-        maven {
-          credentials {
-            username project.hasProperty('mavenUser') ? "$mavenUser" : ""
-            password project.hasProperty('mavenPassword') ? "$mavenPassword" : ""
-          }
-          // upload to the releases repository using ./gradlew -Prelease publish
-          def apacheSnapshotsRepoUrl = 'https://repository.apache.org/content/repositories/snapshots'
-          def apacheReleasesRepoUrl = 'https://repository.apache.org/service/local/staging/deploy/maven2'
-          def snapshotsRepoUrl = project.hasProperty('mavenSnapshotsRepo') ? "$mavenSnapshotsRepo" : "$apacheSnapshotsRepoUrl"
-          def releasesRepoUrl = project.hasProperty('mavenReleasesRepo') ? "$mavenReleasesRepo" : "$apacheReleasesRepoUrl"
-          url = project.hasProperty('release') ? releasesRepoUrl : snapshotsRepoUrl
+        maven { 
+          url = "$rootProject.buildDir/repo" 
         }
       }
     }
 
-    if (project.hasProperty('release')) {
-      signing {
-        useGpgCmd()
-        sign publishing.publications.apache
+    tasks.build.dependsOn("publishJavaLibraryPublicationToMavenLocal")
+
+    signing {
+      if (System.getenv("PGP_KEY")) {
+        useInMemoryPgpKeys(System.getenv("PGP_KEY"), System.getenv("PGP_PWD"))
+        sign publishing.publications.javaLibrary
       }
     }
-  }
-}
+  } // end afterEvaluate
+} // end subprojects
