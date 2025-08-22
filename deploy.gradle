@@ -81,7 +81,7 @@ subprojects {
             }
           }
 
-          groupId = 'com.linkedin.iceberg'
+          groupId = 'org.apache.iceberg'
           artifactId = project.archivesBaseName
           pom {
             name = artifactId
