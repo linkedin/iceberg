@@ -63,6 +63,10 @@ plugins {
   id 'nebula.dependency-recommender' version '11.0.0'
 }
 
+apply plugin: "org.shipkit.shipkit-auto-version"
+apply plugin: "org.shipkit.shipkit-changelog"
+apply plugin: "org.shipkit.shipkit-github-release"
+
 String scalaVersion = System.getProperty("scalaVersion") != null ? System.getProperty("scalaVersion") : System.getProperty("defaultScalaVersion")
 String sparkVersionsString = System.getProperty("sparkVersions") != null ? System.getProperty("sparkVersions") : System.getProperty("defaultSparkVersions")
 List<String> sparkVersions = sparkVersionsString != null && !sparkVersionsString.isEmpty() ? sparkVersionsString.split(",") : []
@@ -114,7 +118,7 @@ def projectVersion = getProjectVersion()
 final REVAPI_PROJECTS = ["iceberg-api", "iceberg-core", "iceberg-parquet", "iceberg-orc", "iceberg-common", "iceberg-data"]
 
 allprojects {
-  group = "org.linkedin.iceberg"
+  group = "com.linkedin.iceberg"
   version = projectVersion
   repositories {
     mavenCentral()
@@ -862,17 +866,26 @@ String getVersionFromFile() {
 
 String getProjectVersion() {
   if (versionFileExists()) {
-    return getVersionFromFile()
+    String version = getVersionFromFile()
+    // If version is in 900+ series, treat it as a pre-release
+    Pattern pattern = Pattern.compile("^([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?\$")
+    Matcher matcher = pattern.matcher(version)
+    if (matcher.matches()) {
+      int lastNum = Integer.valueOf(matcher.group(4))
+      if (lastNum >= 900) {
+        // Convert 1.2.0.900+ to 1.2.0.0-rcX format
+        int rcNum = lastNum - 899
+        return matcher.group(1) + "." + matcher.group(2) + "." + matcher.group(3) + ".0-rc" + rcNum
+      }
+    }
+    return version
   }
 
   try {
-    // we're fetching the version from the latest tag (prefixed with 'apache-iceberg-'),
-    // which can look like this: '0.13.0-2-g805400f0.dirty' but we're only interested in the MAJOR.MINOR.PATCH part
-    String version = gitVersion(prefix: 'apache-iceberg-')
+    String version = gitVersion()
     Pattern pattern = Pattern.compile("^([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?\$")
     Matcher matcher = pattern.matcher(version)
     if (matcher.matches()) {
-      // bump the MINOR version and always set the PATCH version to 0
       return matcher.group(1) + "." + (Integer.valueOf(matcher.group(2)) + 1) + ".0-SNAPSHOT"
     }
     return version
@@ -897,4 +910,11 @@ String getJavadocVersion() {
 apply from: 'jmh.gradle'
 apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
+
+// Custom version printing task
+tasks.register('showVersion') {
+    doLast {
+        println "Project version: ${project.version}"
+    }
+}
 
