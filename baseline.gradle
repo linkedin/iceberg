@@ -84,8 +84,6 @@ subprojects {
           // Enforce hashCode over hash
           '-Xep:ObjectsHashCodeUnnecessaryVarargs:ERROR',
           '-Xep:PreferSafeLogger:OFF',
-          // Exclude TritiumReplaceGauge refaster rule since it requires Java 11
-          '-Xep:TritiumReplaceGauge:OFF',
           // Enforce safe string splitting
           '-Xep:StringSplitter:ERROR',
           // Enforce missing override
