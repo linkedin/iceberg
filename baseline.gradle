@@ -32,10 +32,10 @@ subprojects {
   // Thus we concede to applying all of the Baseline plugins individually on all the projects we are
   // ready to enforce linting on.
   apply plugin: 'org.inferred.processors'
-  if (!project.hasProperty('quick')) {
-    apply plugin: 'com.palantir.baseline-checkstyle'
-    apply plugin: 'com.palantir.baseline-error-prone'
-  }
+  if (!project.hasProperty('quick') && !project.hasProperty('release')) {
+  apply plugin: 'com.palantir.baseline-checkstyle'
+  apply plugin: 'com.palantir.baseline-error-prone'
+}
   apply plugin: 'com.palantir.baseline-class-uniqueness'
   apply plugin: 'com.palantir.baseline-reproducibility'
   apply plugin: 'com.palantir.baseline-exact-dependencies'
