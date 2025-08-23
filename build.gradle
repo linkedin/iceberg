@@ -133,6 +133,15 @@ subprojects {
   apply plugin: 'nebula.dependency-recommender'
   apply plugin: 'java-library'
 
+  configurations.all {
+    resolutionStrategy {
+      // Force specific versions of tritium to resolve version conflicts
+      force 'com.palantir.tritium:tritium-registry:0.17.0'
+      force 'com.palantir.tritium:tritium-core:0.17.0'
+      force 'com.palantir.tritium:tritium-metrics:0.17.0'
+    }
+  }
+
   if (project.name in REVAPI_PROJECTS) {
     apply plugin: 'com.palantir.revapi'
     revapi {
