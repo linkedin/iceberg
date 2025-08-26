@@ -52,19 +52,14 @@ tasks.named("githubRelease") {
   newTagRevision = System.getenv("GITHUB_SHA")
 }
 
-apply plugin: "io.github.gradle-nexus.publish-plugin" //https://github.com/gradle-nexus/publish-plugin/
-nexusPublishing {
-  repositories {
-    if (System.getenv("SONATYPE_PWD")) {
-      sonatype {
-        username = System.getenv("SONATYPE_USER")
-        password = System.getenv("SONATYPE_PWD")
-        nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
-        snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
-      }
+apply plugin: "org.sonatype.central.publishing"
+centralPublishing {
+  if (System.getenv("SONATYPE_PWD")) {
+    publishingConfig {
+      publishingServerId = "central"
+      username = System.getenv("SONATYPE_USER")
+      password = System.getenv("SONATYPE_PWD")
+      // autoPublish = true
     }
-  }
-  transitionCheckOptions {
-    maxRetries.set(100)
   }
 }
