@@ -22,7 +22,7 @@ on:
     branches: ['openhouse-1.2.0']
     tags-ignore: [v*]
   pull_request:
-    branches: ['openhouse-1.2.0']
+    branches: ['**']
     paths-ignore:
     - '.github/workflows/python-ci.yml'
     - '.github/workflows/spark-ci.yml'
@@ -47,7 +47,7 @@ concurrency:
 
 jobs:
   build-checks:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-java@v4
@@ -58,7 +58,7 @@ jobs:
 
   release:
     if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:

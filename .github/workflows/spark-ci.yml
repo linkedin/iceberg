@@ -51,7 +51,7 @@ concurrency:
 
 jobs:
   spark-3x-scala-2-12-tests:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     if: "github.repository == 'linkedin/iceberg'"
     strategy:
       matrix:
