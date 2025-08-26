@@ -24,6 +24,7 @@ import java.util.regex.Pattern
 buildscript {
   repositories {
     maven { url "https://plugins.gradle.org/m2/" }
+    maven { url "https://central.sonatype.com/" }
     gradlePluginPortal()
   }
   dependencies {
@@ -126,6 +127,7 @@ allprojects {
   repositories {
     mavenCentral()
     mavenLocal()
+    maven { url "https://central.sonatype.com/" }
   }
 }
 
