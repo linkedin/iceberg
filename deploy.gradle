@@ -95,7 +95,7 @@ subprojects {
             }
             issueManagement {
               system = 'GitHub'
-              url = 'https://github.com/apache/iceberg/issues'
+              url = 'https://github.com/linkedin/iceberg/issues'
             }
           }
         }
