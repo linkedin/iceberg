@@ -103,7 +103,16 @@ subprojects {
 
       repositories {
         maven { 
+          name = "LocalBuild"
           url = "$rootProject.buildDir/repo" 
+        }
+        maven {
+          name = "SonatypeCentral"
+          url = "https://central.sonatype.com/api/v1/publisher/upload"
+          credentials {
+            username = System.getenv("SONATYPE_USER")
+            password = System.getenv("SONATYPE_PASSWORD")
+          }
         }
       }
     }
@@ -118,3 +127,14 @@ subprojects {
     }
   } // end afterEvaluate
 } // end subprojects
+
+nexusPublishing {
+    repositories {
+        sonatype {
+            nexusUrl.set(uri("https://central.sonatype.com/api/v1/publisher"))
+            snapshotRepositoryUrl.set(uri("https://central.sonatype.com/api/v1/publisher"))
+            username = System.getenv("SONATYPE_USER")
+            password = System.getenv("SONATYPE_PASSWORD")
+        }
+    }
+}
