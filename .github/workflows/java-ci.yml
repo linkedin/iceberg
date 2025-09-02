@@ -77,7 +77,7 @@ jobs:
         run: ./gradlew -DsparkVersions=3.1 githubRelease publishToSonatype closeAndReleaseStagingRepository -x test -x integrationTest
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-          SONATYPE_USER: ${{secrets.SONATYPE_USER}}
-          SONATYPE_PWD: ${{secrets.SONATYPE_PWD}}
+          SONATYPE_USER: ${{secrets.SONATYPE_USERNAME}}
+          SONATYPE_PWD: ${{secrets.SONATYPE_PASSWORD}}
           PGP_KEY: ${{secrets.PGP_KEY}}
           PGP_PWD: ${{secrets.PGP_PWD}}
