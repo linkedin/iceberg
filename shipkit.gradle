@@ -25,21 +25,6 @@ tasks.named("generateChangelog") {
   previousRevision = project.ext.'shipkit-auto-version.previous-tag'
   githubToken = System.getenv("GITHUB_TOKEN")
   repository = "linkedin/iceberg"
-  
-  // Make generateChangelog depend on all necessary subproject tasks
-  subprojects.each { subproject ->
-    // Compilation tasks
-    dependsOn subproject.tasks.withType(JavaCompile)
-    
-    // Documentation tasks
-    dependsOn subproject.tasks.withType(Javadoc)
-    
-    // Publication tasks
-    dependsOn subproject.tasks.matching { it.name == 'generatePomFileForJavaLibraryPublication' }
-    
-    // Resource processing tasks
-    dependsOn subproject.tasks.withType(ProcessResources)
-  }
 }
 
 apply plugin: "org.shipkit.shipkit-github-release" //https://github.com/shipkit/shipkit-changelog
