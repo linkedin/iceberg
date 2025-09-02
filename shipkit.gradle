@@ -55,24 +55,17 @@ gradle.projectsEvaluated {
 
       // Run after module metadata tasks, if present
       t.mustRunAfter(prj.tasks.matching { it.name.startsWith('generateMetadataFileFor') })
+
+      // Run after signing tasks (from 'signing' plugin)
+      t.mustRunAfter(prj.tasks.matching { it.name.startsWith('sign') })
+
+      // Run after publish tasks to avoid implicit dependency warnings in release pipelines
+      t.mustRunAfter(prj.tasks.matching { it.name.startsWith('publish') })
     }
   }
 }
 
-// Ensure Gradle knows ordering relative to tasks that write inside the repository
-// to avoid implicit dependency validation errors in Gradle 8+
-gradle.projectsEvaluated {
-  def genTaskProvider = tasks.named("generateChangelog")
-  genTaskProvider.configure { t ->
-    rootProject.subprojects.each { prj ->
-      // Run after resource processing tasks
-      t.mustRunAfter(prj.tasks.matching { it.name == 'processResources' })
-
-      // Run after any POM generation tasks created by maven-publish
-      t.mustRunAfter(prj.tasks.withType(org.gradle.api.publish.maven.tasks.GenerateMavenPom))
-    }
-  }
-}
+ 
 
 apply plugin: "org.shipkit.shipkit-github-release" //https://github.com/shipkit/shipkit-changelog
 tasks.named("githubRelease") {
