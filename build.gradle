@@ -876,7 +876,7 @@ String getProjectVersion() {
       if (lastNum >= 900) {
         // Convert 1.2.0.900+ to 1.2.0.0-rcX format
         int rcNum = lastNum - 899
-        return matcher.group(1) + "." + matcher.group(2) + "." + matcher.group(3) + ".0-rc" + rcNum
+        return matcher.group(1) + "." + matcher.group(2) + "." + matcher.group(3) + "." + rcNum
       }
     }
     return version
