@@ -25,22 +25,47 @@ tasks.named("generateChangelog") {
   previousRevision = project.ext.'shipkit-auto-version.previous-tag'
   githubToken = System.getenv("GITHUB_TOKEN")
   repository = "linkedin/iceberg"
-  
-  // Make generateChangelog depend on all necessary subproject tasks
-  subprojects.each { subproject ->
-    // Compilation tasks
-    dependsOn subproject.tasks.withType(JavaCompile)
-    
-    // Documentation tasks
-    dependsOn subproject.tasks.withType(Javadoc)
-    
-    // Publication tasks
-    dependsOn subproject.tasks.matching { it.name == 'generatePomFileForJavaLibraryPublication' }
-    
-    // Resource processing tasks
-    dependsOn subproject.tasks.withType(ProcessResources)
+  // Write changelog into the root build directory to avoid broad root-dir overlaps
+  outputFile = file("${buildDir}/CHANGELOG.md")
+}
+
+// Ensure Gradle knows ordering relative to tasks that write inside the repository
+// to avoid implicit dependency validation errors in Gradle 8+
+gradle.projectsEvaluated {
+  def genTaskProvider = tasks.named("generateChangelog")
+  genTaskProvider.configure { t ->
+    // Ensure we run after root task that writes to root build output
+    t.mustRunAfter(rootProject.tasks.matching { it.name == 'generateGitProperties' })
+
+    rootProject.subprojects.each { prj ->
+      // Run after resource processing tasks
+      t.mustRunAfter(prj.tasks.matching { it.name == 'processResources' })
+      t.mustRunAfter(prj.tasks.matching { it.name == 'processTestResources' })
+
+      // Run after Java compilation tasks
+      t.mustRunAfter(prj.tasks.matching { it.name == 'compileJava' })
+      t.mustRunAfter(prj.tasks.matching { it.name == 'compileTestJava' })
+
+      // Run after documentation and archive tasks that may touch repo files
+      t.mustRunAfter(prj.tasks.withType(org.gradle.api.tasks.javadoc.Javadoc))
+      t.mustRunAfter(prj.tasks.withType(org.gradle.api.tasks.bundling.Jar))
+
+      // Run after any POM generation tasks created by maven-publish
+      t.mustRunAfter(prj.tasks.withType(org.gradle.api.publish.maven.tasks.GenerateMavenPom))
+
+      // Run after module metadata tasks, if present
+      t.mustRunAfter(prj.tasks.matching { it.name.startsWith('generateMetadataFileFor') })
+
+      // Run after signing tasks (from 'signing' plugin)
+      t.mustRunAfter(prj.tasks.matching { it.name.startsWith('sign') })
+
+      // Run after publish tasks to avoid implicit dependency warnings in release pipelines
+      t.mustRunAfter(prj.tasks.matching { it.name.startsWith('publish') })
+    }
   }
 }
+
+ 
 
 apply plugin: "org.shipkit.shipkit-github-release" //https://github.com/shipkit/shipkit-changelog
 tasks.named("githubRelease") {
@@ -59,12 +84,11 @@ nexusPublishing {
       sonatype {
         username = System.getenv("SONATYPE_USER")
         password = System.getenv("SONATYPE_PWD")
-        nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
-        snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
+        nexusUrl.set(uri("https://ossrh-staging-api.central.sonatype.com/service/local/"))
+        // nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
+        snapshotRepositoryUrl.set(uri("https://central.sonatype.com/repository/maven-snapshots/"))
+        // snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
       }
     }
-  }
-  transitionCheckOptions {
-    maxRetries.set(100)
   }
 }

@@ -95,7 +95,30 @@ subprojects {
             }
             issueManagement {
               system = 'GitHub'
-              url = 'https://github.com/apache/iceberg/issues'
+              url = 'https://github.com/linkedin/iceberg/issues'
+            }
+            developers {
+              [
+                'wmoustafa:Walaa Eldin Moustafa',
+                'sumedhsakdeo:Sumedh Sakdeo',
+                'maluchari:Malini Mahalakshmi Venkatachari',
+                'rdsr:Ratandeep Ratti'
+              ].each { devData ->
+                developer {
+                  def devInfo = devData.split(':')
+                  id = devInfo[0]
+                  name = devInfo[1]
+                  url = 'https://github.com/' + devInfo[0]
+                  roles = ["Core developer"]
+                }
+              }
+            }
+            scm {
+              url = 'https://github.com/linkedin/iceberg.git'
+            }
+            ciManagement {
+              url = 'https://github.com/linkedin/iceberg/actions'
+              system = 'GitHub Actions'
             }
           }
         }
