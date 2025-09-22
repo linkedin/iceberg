@@ -19,13 +19,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.iceberg.relocated.com.google.common.base.Preconditions
-import org.apache.iceberg.relocated.com.google.common.collect.Sets
 import org.apache.iceberg.spark.source.SparkTable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableCatalog
+import scala.collection.JavaConverters._
 
 case class DropIdentifierFieldsExec(
     catalog: TableCatalog,
@@ -39,18 +38,18 @@ case class DropIdentifierFieldsExec(
     catalog.loadTable(ident) match {
       case iceberg: SparkTable =>
         val schema = iceberg.table.schema
-        val identifierFieldNames = Sets.newHashSet(schema.identifierFieldNames)
+        val identifierFieldNames = schema.identifierFieldNames.asScala.toBuffer
 
         for (name <- fields) {
-          Preconditions.checkArgument(schema.findField(name) != null,
-            "Cannot complete drop identifier fields operation: field %s not found", name)
-          Preconditions.checkArgument(identifierFieldNames.contains(name),
-            "Cannot complete drop identifier fields operation: %s is not an identifier field", name)
-          identifierFieldNames.remove(name)
+          require(schema.findField(name) != null,
+            s"Cannot complete drop identifier fields operation: field $name not found")
+          require(identifierFieldNames.contains(name),
+            s"Cannot complete drop identifier fields operation: $name is not an identifier field")
+          identifierFieldNames -= name
         }
 
         iceberg.table.updateSchema()
-          .setIdentifierFields(identifierFieldNames)
+          .setIdentifierFields(identifierFieldNames.asJava)
           .commit();
       case table =>
         throw new UnsupportedOperationException(s"Cannot drop identifier fields in non-Iceberg table: $table")
