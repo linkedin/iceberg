@@ -161,8 +161,8 @@ if (sparkVersions.contains("3.3")) {
   project(":iceberg-spark:spark-runtime-3.3_${scalaVersion}").name = "iceberg-spark-runtime-3.3_${scalaVersion}"
 }
 
-// hive 3 depends on hive 2, so always add hive 2 if hive3 is enabled
-if (hiveVersions.contains("2") || hiveVersions.contains("3")) {
+// only include hive modules if hive3 is enabled
+if (hiveVersions.contains("3")) {
   include 'mr'
   include 'hive-runtime'
 
