@@ -884,7 +884,7 @@ String getProjectVersion() {
 
   try {
     String version = gitVersion()
-    Pattern pattern = Pattern.compile("^v([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\..*)?")
+    Pattern pattern = Pattern.compile("([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\..*)?")
     Matcher matcher = pattern.matcher(version)
     if (matcher.matches()) {
       return matcher.group(1) + "." + matcher.group(2) + "." + matcher.group(3) + "."  + matcher.group(4)
