@@ -45,4 +45,7 @@ public class SparkSQLProperties {
 
   // Controls write distribution mode
   public static final String DISTRIBUTION_MODE = "spark.sql.iceberg.distribution-mode";
+
+  // Controls the spark input split size.
+  public static final String SPLIT_SIZE = "spark.sql.iceberg.split-size";
 }
