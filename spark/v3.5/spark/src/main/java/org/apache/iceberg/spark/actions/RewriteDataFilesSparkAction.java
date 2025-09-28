@@ -30,6 +30,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.iceberg.DataFile;
@@ -77,6 +78,7 @@ public class RewriteDataFilesSparkAction
       ImmutableSet.of(
           MAX_CONCURRENT_FILE_GROUP_REWRITES,
           MAX_FILE_GROUP_SIZE_BYTES,
+          MAX_TOTAL_FILE_GROUP_SIZE_BYTES,
           PARTIAL_PROGRESS_ENABLED,
           PARTIAL_PROGRESS_MAX_COMMITS,
           TARGET_FILE_SIZE_BYTES,
@@ -93,6 +95,7 @@ public class RewriteDataFilesSparkAction
   private int maxCommits;
   private boolean partialProgressEnabled;
   private boolean useStartingSequenceNumber;
+  private long maxTotalFileGroupSizeBytes;
   private RewriteJobOrder rewriteJobOrder;
   private FileRewriter<FileScanTask, DataFile> rewriter = null;
 
@@ -171,6 +174,21 @@ public class RewriteDataFilesSparkAction
     }
 
     Stream<RewriteFileGroup> groupStream = toGroupStream(ctx, fileGroupsByPartition);
+
+    // if maxTotalFileGroupSizeBytes is set, limit the total size of the file groups
+    if (maxTotalFileGroupSizeBytes > 0) {
+      final AtomicLong remainingSizeBytes = new AtomicLong(maxTotalFileGroupSizeBytes);
+      groupStream =
+          groupStream.takeWhile(
+              fg -> {
+                if (fg.sizeInBytes() <= remainingSizeBytes.get()) {
+                  remainingSizeBytes.addAndGet(-fg.sizeInBytes());
+                  return true;
+                } else {
+                  return false;
+                }
+              });
+    }
 
     if (partialProgressEnabled) {
       return doExecuteWithPartialProgress(ctx, groupStream, commitManager(startingSnapshotId));
@@ -359,7 +377,7 @@ public class RewriteDataFilesSparkAction
     // stop commit service
     commitService.close();
     List<RewriteFileGroup> commitResults = commitService.results();
-    if (commitResults.size() == 0) {
+    if (commitResults.isEmpty()) {
       LOG.error(
           "{} is true but no rewrite commits succeeded. Check the logs to determine why the individual "
               + "commits failed. If this is persistent it may help to increase {} which will break the rewrite operation "
@@ -379,7 +397,7 @@ public class RewriteDataFilesSparkAction
   Stream<RewriteFileGroup> toGroupStream(
       RewriteExecutionContext ctx, Map<StructLike, List<List<FileScanTask>>> groupsByPartition) {
     return groupsByPartition.entrySet().stream()
-        .filter(e -> e.getValue().size() != 0)
+        .filter(e -> !e.getValue().isEmpty())
         .flatMap(
             e -> {
               StructLike partition = e.getKey();
@@ -422,6 +440,10 @@ public class RewriteDataFilesSparkAction
             options(),
             MAX_CONCURRENT_FILE_GROUP_REWRITES,
             MAX_CONCURRENT_FILE_GROUP_REWRITES_DEFAULT);
+
+    maxTotalFileGroupSizeBytes =
+        PropertyUtil.propertyAsLong(
+            options(), MAX_TOTAL_FILE_GROUP_SIZE_BYTES, MAX_TOTAL_FILE_GROUP_SIZE_BYTES_DEFAULT);
 
     maxCommits =
         PropertyUtil.propertyAsInt(
