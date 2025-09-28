@@ -179,15 +179,17 @@ public class RewriteDataFilesSparkAction
     if (maxTotalFileGroupSizeBytes > 0) {
       final AtomicLong remainingSizeBytes = new AtomicLong(maxTotalFileGroupSizeBytes);
       groupStream =
-          groupStream.takeWhile(
-              fg -> {
-                if (fg.sizeInBytes() <= remainingSizeBytes.get()) {
-                  remainingSizeBytes.addAndGet(-fg.sizeInBytes());
-                  return true;
-                } else {
-                  return false;
-                }
-              });
+          groupStream
+              .sequential()
+              .filter(
+                  fg -> {
+                    if (fg.sizeInBytes() <= remainingSizeBytes.get()) {
+                      remainingSizeBytes.addAndGet(-fg.sizeInBytes());
+                      return true;
+                    } else {
+                      return false;
+                    }
+                  });
     }
 
     if (partialProgressEnabled) {
