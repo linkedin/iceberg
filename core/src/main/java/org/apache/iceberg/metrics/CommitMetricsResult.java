@@ -167,7 +167,9 @@ public interface CommitMetricsResult {
         .removedEqualityDeletes(
             counterFrom(snapshotSummary, SnapshotSummary.REMOVED_EQ_DELETES_PROP))
         .totalEqualityDeletes(counterFrom(snapshotSummary, SnapshotSummary.TOTAL_EQ_DELETES_PROP))
-        .totalUncompressedBytesWritten(counterFrom(snapshotSummary, SnapshotSummary.TOTAL_UNCOMPRESSED_BYTES_WRITTEN, Unit.BYTES))
+        .totalUncompressedBytesWritten(
+            counterFrom(
+                snapshotSummary, SnapshotSummary.TOTAL_UNCOMPRESSED_BYTES_WRITTEN, Unit.BYTES))
         .build();
   }
 
