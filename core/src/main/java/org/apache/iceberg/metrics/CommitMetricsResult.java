@@ -50,6 +50,7 @@ public interface CommitMetricsResult {
   String ADDED_EQ_DELETES = "added-equality-deletes";
   String REMOVED_EQ_DELETES = "removed-equality-deletes";
   String TOTAL_EQ_DELETES = "total-equality-deletes";
+  String TOTAL_UNCOMPRESSED_BYTES_WRITTEN = "total-uncompressed-bytes-written";
 
   @Nullable
   TimerResult totalDuration();
@@ -123,6 +124,9 @@ public interface CommitMetricsResult {
   @Nullable
   CounterResult totalEqualityDeletes();
 
+  @Nullable
+  CounterResult totalUncompressedBytesWritten();
+
   static CommitMetricsResult from(
       CommitMetrics commitMetrics, Map<String, String> snapshotSummary) {
     Preconditions.checkArgument(null != commitMetrics, "Invalid commit metrics: null");
@@ -163,6 +167,7 @@ public interface CommitMetricsResult {
         .removedEqualityDeletes(
             counterFrom(snapshotSummary, SnapshotSummary.REMOVED_EQ_DELETES_PROP))
         .totalEqualityDeletes(counterFrom(snapshotSummary, SnapshotSummary.TOTAL_EQ_DELETES_PROP))
+        .totalUncompressedBytesWritten(counterFrom(snapshotSummary, SnapshotSummary.TOTAL_UNCOMPRESSED_BYTES_WRITTEN, Unit.BYTES))
         .build();
   }
 

@@ -36,6 +36,8 @@ import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ManifestFiles;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
@@ -646,6 +648,36 @@ public class TestSparkDataWrite {
         result.orderBy("id").as(Encoders.bean(SimpleRecord.class)).collectAsList();
     Assert.assertEquals("Number of rows should match", records.size(), actual.size());
     Assert.assertEquals("Result rows should match", records, actual);
+  }
+
+  @Test
+  public void testEmitTotalUncompressedBytesWritten() throws IOException {
+    File parent = temp.newFolder(format.toString());
+    File location = new File(parent, "test");
+
+    HadoopTables tables = new HadoopTables(CONF);
+    PartitionSpec spec = PartitionSpec.builderFor(SCHEMA).identity("data").build();
+    Table table = tables.create(SCHEMA, spec, location.toString());
+
+    List<SimpleRecord> expected =
+        Lists.newArrayList(
+            new SimpleRecord(1, "Alice"),
+            new SimpleRecord(2, "Bob"),
+            new SimpleRecord(3, "Charlie"));
+
+    Dataset<Row> df = spark.createDataFrame(expected, SimpleRecord.class);
+    df.select("id", "data")
+        .write()
+        .format("iceberg")
+        .option(SparkWriteOptions.WRITE_FORMAT, format.toString())
+        .mode(SaveMode.Append)
+        .save(location.toString());
+
+    table.refresh();
+    Snapshot snapshot = table.currentSnapshot();
+    Assert.assertTrue(
+        "Snapshot should not be null",
+        snapshot.summary().containsKey(SnapshotSummary.TOTAL_UNCOMPRESSED_BYTES_WRITTEN));
   }
 
   public enum IcebergOptionsType {
