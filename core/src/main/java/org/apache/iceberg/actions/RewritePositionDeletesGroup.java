@@ -114,6 +114,10 @@ public class RewritePositionDeletesGroup {
     return tasks.size();
   }
 
+  public long minDataSequenceNumber() {
+    return tasks.stream().mapToLong(t -> t.file().dataSequenceNumber()).min().orElse(0L);
+  }
+
   public static Comparator<RewritePositionDeletesGroup> comparator(RewriteJobOrder order) {
     switch (order) {
       case BYTES_ASC:
@@ -126,6 +130,26 @@ public class RewritePositionDeletesGroup {
       case FILES_DESC:
         return Comparator.comparing(
             RewritePositionDeletesGroup::numRewrittenDeleteFiles, Comparator.reverseOrder());
+      case FILES_MIN_SEQUENCE_NUMBER_ASC:
+        return Comparator.comparing(RewritePositionDeletesGroup::minDataSequenceNumber);
+      case FILES_MIN_SEQUENCE_NUMBER_DESC:
+        return Comparator.comparing(
+            RewritePositionDeletesGroup::minDataSequenceNumber, Comparator.reverseOrder());
+      default:
+        return (fileGroupOne, fileGroupTwo) -> 0;
+    }
+  }
+
+  public static Comparator<PositionDeletesScanTask> taskComparator(RewriteJobOrder order) {
+    switch (order) {
+      case FILES_ASC:
+        return Comparator.comparing(t -> t.file().fileSizeInBytes());
+      case FILES_DESC:
+        return Comparator.comparing(t -> t.file().fileSizeInBytes(), Comparator.reverseOrder());
+      case FILES_MIN_SEQUENCE_NUMBER_ASC:
+        return Comparator.comparing(t -> t.file().dataSequenceNumber());
+      case FILES_MIN_SEQUENCE_NUMBER_DESC:
+        return Comparator.comparing(t -> t.file().dataSequenceNumber(), Comparator.reverseOrder());
       default:
         return (fileGroupOne, fileGroupTwo) -> 0;
     }
