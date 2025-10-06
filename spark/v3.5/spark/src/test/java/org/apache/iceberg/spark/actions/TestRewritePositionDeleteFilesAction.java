@@ -46,6 +46,7 @@ import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.PositionDeletesScanTask;
+import org.apache.iceberg.RewriteJobOrder;
 import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.ScanTask;
 import org.apache.iceberg.Schema;
@@ -53,6 +54,7 @@ import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.actions.RewritePositionDeleteFiles;
 import org.apache.iceberg.actions.RewritePositionDeleteFiles.FileGroupRewriteResult;
 import org.apache.iceberg.actions.RewritePositionDeleteFiles.Result;
 import org.apache.iceberg.actions.SizeBasedFileRewriter;
@@ -612,6 +614,98 @@ public class TestRewritePositionDeleteFilesAction extends CatalogTestBase {
 
     List<Object[]> actualRecords = records(table);
     assertEquals("Rows must match", expectedRecords, actualRecords);
+  }
+
+  @TestTemplate
+  public void testRewriteJobOrderFilesMinSequenceNumberAsc() throws Exception {
+    Table table = createTablePartitioned(4, 2, SCALE);
+
+    List<DataFile> dataFiles = TestHelpers.dataFiles(table);
+    writePosDeletesForFiles(table, 2, DELETES_SCALE, dataFiles);
+    assertThat(dataFiles).hasSize(4);
+
+    // Write more deletes with different sequence numbers
+    writeRecords(table, 1, SCALE, 1);
+    List<DataFile> newDataFiles = except(TestHelpers.dataFiles(table), dataFiles);
+    writePosDeletesForFiles(table, 2, DELETES_SCALE, newDataFiles);
+
+    writeRecords(table, 1, SCALE, 2);
+    List<DataFile> newerDataFiles =
+        except(
+            TestHelpers.dataFiles(table),
+            Stream.concat(dataFiles.stream(), newDataFiles.stream()).collect(Collectors.toList()));
+    writePosDeletesForFiles(table, 2, DELETES_SCALE, newerDataFiles);
+
+    List<DeleteFile> deleteFiles = deleteFiles(table);
+    assertThat(deleteFiles).as("Should have delete files").hasSizeGreaterThan(8);
+
+    List<Object[]> expectedRecords = records(table);
+    List<Object[]> expectedDeletes = deleteRecords(table);
+
+    Result result =
+        SparkActions.get(spark)
+            .rewritePositionDeletes(table)
+            .option(SizeBasedFileRewriter.REWRITE_ALL, "true")
+            .option(
+                RewritePositionDeleteFiles.REWRITE_JOB_ORDER,
+                RewriteJobOrder.FILES_MIN_SEQUENCE_NUMBER_ASC.orderName())
+            .execute();
+
+    List<DeleteFile> newDeleteFiles = deleteFiles(table);
+    assertNotContains(deleteFiles, newDeleteFiles);
+    assertLocallySorted(newDeleteFiles);
+    checkSequenceNumbers(table, deleteFiles, newDeleteFiles);
+
+    List<Object[]> actualRecords = records(table);
+    List<Object[]> actualDeletes = deleteRecords(table);
+    assertEquals("Rows must match", expectedRecords, actualRecords);
+    assertEquals("Position deletes must match", expectedDeletes, actualDeletes);
+  }
+
+  @TestTemplate
+  public void testRewriteJobOrderFilesMinSequenceNumberDesc() throws Exception {
+    Table table = createTablePartitioned(4, 2, SCALE);
+
+    List<DataFile> dataFiles = TestHelpers.dataFiles(table);
+    writePosDeletesForFiles(table, 2, DELETES_SCALE, dataFiles);
+    assertThat(dataFiles).hasSize(4);
+
+    // Write more deletes with different sequence numbers
+    writeRecords(table, 1, SCALE, 1);
+    List<DataFile> newDataFiles = except(TestHelpers.dataFiles(table), dataFiles);
+    writePosDeletesForFiles(table, 2, DELETES_SCALE, newDataFiles);
+
+    writeRecords(table, 1, SCALE, 2);
+    List<DataFile> newerDataFiles =
+        except(
+            TestHelpers.dataFiles(table),
+            Stream.concat(dataFiles.stream(), newDataFiles.stream()).collect(Collectors.toList()));
+    writePosDeletesForFiles(table, 2, DELETES_SCALE, newerDataFiles);
+
+    List<DeleteFile> deleteFiles = deleteFiles(table);
+    assertThat(deleteFiles).as("Should have delete files").hasSizeGreaterThan(8);
+
+    List<Object[]> expectedRecords = records(table);
+    List<Object[]> expectedDeletes = deleteRecords(table);
+
+    Result result =
+        SparkActions.get(spark)
+            .rewritePositionDeletes(table)
+            .option(SizeBasedFileRewriter.REWRITE_ALL, "true")
+            .option(
+                RewritePositionDeleteFiles.REWRITE_JOB_ORDER,
+                RewriteJobOrder.FILES_MIN_SEQUENCE_NUMBER_DESC.orderName())
+            .execute();
+
+    List<DeleteFile> newDeleteFiles = deleteFiles(table);
+    assertNotContains(deleteFiles, newDeleteFiles);
+    assertLocallySorted(newDeleteFiles);
+    checkSequenceNumbers(table, deleteFiles, newDeleteFiles);
+
+    List<Object[]> actualRecords = records(table);
+    List<Object[]> actualDeletes = deleteRecords(table);
+    assertEquals("Rows must match", expectedRecords, actualRecords);
+    assertEquals("Position deletes must match", expectedDeletes, actualDeletes);
   }
 
   @TestTemplate
