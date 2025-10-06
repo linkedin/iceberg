@@ -677,7 +677,7 @@ public class TestSparkDataWrite {
     Snapshot snapshot = table.currentSnapshot();
     Assert.assertTrue(
         "Snapshot should not be null",
-        snapshot.summary().containsKey(SnapshotSummary.TOTAL_UNCOMPRESSED_BYTES_WRITTEN));
+        snapshot.summary().containsKey(SnapshotSummary.ADDED_UNCOMPRESSED_BYTES_PROP));
   }
 
   public enum IcebergOptionsType {

@@ -58,7 +58,7 @@ public class SnapshotSummary {
   public static final String SOURCE_SNAPSHOT_ID_PROP = "source-snapshot-id";
   public static final String REPLACE_PARTITIONS_PROP = "replace-partitions";
   public static final String EXTRA_METADATA_PREFIX = "snapshot-property.";
-  public static final String TOTAL_UNCOMPRESSED_BYTES_WRITTEN = "total-uncompressed-bytes-written";
+  public static final String ADDED_UNCOMPRESSED_BYTES_PROP = "added-uncompressed-bytes";
 
   public static final MapJoiner MAP_JOINER = Joiner.on(",").withKeyValueSeparator("=");
 
