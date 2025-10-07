@@ -111,7 +111,7 @@ public class TestRewriteFileGroup {
 
     assertThat(
             groups.stream()
-                .mapToLong(RewriteFileGroup::minDataSequenceNumber)
+                .mapToLong(RewriteFileGroup::minFileSequenceNumber)
                 .boxed()
                 .collect(Collectors.toList()))
         .containsExactly(2L, 5L, 8L);
@@ -128,7 +128,7 @@ public class TestRewriteFileGroup {
 
     assertThat(
             groups.stream()
-                .mapToLong(RewriteFileGroup::minDataSequenceNumber)
+                .mapToLong(RewriteFileGroup::minFileSequenceNumber)
                 .boxed()
                 .collect(Collectors.toList()))
         .containsExactly(8L, 5L, 2L);
@@ -225,6 +225,7 @@ public class TestRewriteFileGroup {
     when(task.length()).thenReturn(length);
     when(task.file()).thenReturn(file);
     when(file.dataSequenceNumber()).thenReturn(sequenceNumber);
+    when(file.fileSequenceNumber()).thenReturn(sequenceNumber);
     return task;
   }
 }

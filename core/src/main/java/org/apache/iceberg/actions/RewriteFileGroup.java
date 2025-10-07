@@ -95,8 +95,8 @@ public class RewriteFileGroup {
     return fileScanTasks.size();
   }
 
-  public long minDataSequenceNumber() {
-    return fileScanTasks.stream().mapToLong(t -> t.file().dataSequenceNumber()).min().orElse(0L);
+  public long minFileSequenceNumber() {
+    return fileScanTasks.stream().mapToLong(t -> t.file().fileSequenceNumber()).min().orElse(0L);
   }
 
   public static Comparator<RewriteFileGroup> comparator(RewriteJobOrder rewriteJobOrder) {
@@ -110,10 +110,10 @@ public class RewriteFileGroup {
       case FILES_DESC:
         return Comparator.comparing(RewriteFileGroup::numFiles, Comparator.reverseOrder());
       case FILES_MIN_SEQUENCE_NUMBER_ASC:
-        return Comparator.comparing(RewriteFileGroup::minDataSequenceNumber);
+        return Comparator.comparing(RewriteFileGroup::minFileSequenceNumber);
       case FILES_MIN_SEQUENCE_NUMBER_DESC:
         return Comparator.comparing(
-            RewriteFileGroup::minDataSequenceNumber, Comparator.reverseOrder());
+            RewriteFileGroup::minFileSequenceNumber, Comparator.reverseOrder());
       default:
         return (fileGroupOne, fileGroupTwo) -> 0;
     }
@@ -126,9 +126,9 @@ public class RewriteFileGroup {
       case FILES_DESC:
         return Comparator.comparing(FileScanTask::length, Comparator.reverseOrder());
       case FILES_MIN_SEQUENCE_NUMBER_ASC:
-        return Comparator.comparing(t -> t.file().dataSequenceNumber());
+        return Comparator.comparing(t -> t.file().fileSequenceNumber());
       case FILES_MIN_SEQUENCE_NUMBER_DESC:
-        return Comparator.comparing(t -> t.file().dataSequenceNumber(), Comparator.reverseOrder());
+        return Comparator.comparing(t -> t.file().fileSequenceNumber(), Comparator.reverseOrder());
       default:
         return (fileGroupOne, fileGroupTwo) -> 0;
     }

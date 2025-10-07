@@ -247,13 +247,11 @@ public class RewriteDataFilesSparkAction
 
   private StructLikeMap<List<List<FileScanTask>>> fileGroupsByPartition(
       StructLikeMap<List<FileScanTask>> filesByPartition) {
-    // Keep ordering of files in line with file group ordering
-    // 1. If file groups are ordered by number of files, then the goal is to rewrite smaller
-    // (larger) files first,
-    //   in this case order files by size
-    // 2. If file groups are ordered by min sequence number, the goal is to rewrite older (newer)
-    // files first,
-    //   in this case order files by data sequence number
+    // Align file ordering with file group ordering
+    // 1. If groups are ordered by file count, rewrite smaller (or larger) files first -> sort by
+    // file size.
+    // 2. If groups are ordered by min sequence number, rewrite older (newer) files first -> sort by
+    // sequence number.
     return filesByPartition.transformValues(
         tasks ->
             this.planFileGroups(

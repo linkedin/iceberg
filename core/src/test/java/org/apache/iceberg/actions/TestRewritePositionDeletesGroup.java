@@ -112,7 +112,7 @@ public class TestRewritePositionDeletesGroup {
 
     assertThat(
             groups.stream()
-                .mapToLong(RewritePositionDeletesGroup::minDataSequenceNumber)
+                .mapToLong(RewritePositionDeletesGroup::minFileSequenceNumber)
                 .boxed()
                 .collect(Collectors.toList()))
         .containsExactly(2L, 5L, 8L);
@@ -130,7 +130,7 @@ public class TestRewritePositionDeletesGroup {
 
     assertThat(
             groups.stream()
-                .mapToLong(RewritePositionDeletesGroup::minDataSequenceNumber)
+                .mapToLong(RewritePositionDeletesGroup::minFileSequenceNumber)
                 .boxed()
                 .collect(Collectors.toList()))
         .containsExactly(8L, 5L, 2L);
@@ -182,7 +182,7 @@ public class TestRewritePositionDeletesGroup {
 
     assertThat(
             tasks.stream()
-                .mapToLong(t -> t.file().dataSequenceNumber())
+                .mapToLong(t -> t.file().fileSequenceNumber())
                 .boxed()
                 .collect(Collectors.toList()))
         .containsExactly(2L, 5L, 8L);
@@ -200,7 +200,7 @@ public class TestRewritePositionDeletesGroup {
 
     assertThat(
             tasks.stream()
-                .mapToLong(t -> t.file().dataSequenceNumber())
+                .mapToLong(t -> t.file().fileSequenceNumber())
                 .boxed()
                 .collect(Collectors.toList()))
         .containsExactly(8L, 5L, 2L);
@@ -240,7 +240,7 @@ public class TestRewritePositionDeletesGroup {
     when(task.length()).thenReturn(fileSize);
     when(task.sizeBytes()).thenReturn(fileSize);
     when(file.fileSizeInBytes()).thenReturn(fileSize);
-    when(file.dataSequenceNumber()).thenReturn(sequenceNumber);
+    when(file.fileSequenceNumber()).thenReturn(sequenceNumber);
     return task;
   }
 }

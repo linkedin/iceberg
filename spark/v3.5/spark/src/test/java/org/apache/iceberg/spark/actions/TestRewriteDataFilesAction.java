@@ -1461,7 +1461,7 @@ public class TestRewriteDataFilesAction extends TestBase {
     RewriteDataFilesSparkAction basicRewrite = basicRewrite(table).binPack();
     List<Long> expected =
         toGroupStream(table, basicRewrite)
-            .mapToLong(RewriteFileGroup::minDataSequenceNumber)
+            .mapToLong(RewriteFileGroup::minFileSequenceNumber)
             .boxed()
             .collect(Collectors.toList());
 
@@ -1473,7 +1473,7 @@ public class TestRewriteDataFilesAction extends TestBase {
             .binPack();
     List<Long> actual =
         toGroupStream(table, jobOrderRewrite)
-            .mapToLong(RewriteFileGroup::minDataSequenceNumber)
+            .mapToLong(RewriteFileGroup::minFileSequenceNumber)
             .boxed()
             .collect(Collectors.toList());
 
@@ -1500,7 +1500,7 @@ public class TestRewriteDataFilesAction extends TestBase {
     RewriteDataFilesSparkAction basicRewrite = basicRewrite(table).binPack();
     List<Long> expected =
         toGroupStream(table, basicRewrite)
-            .mapToLong(RewriteFileGroup::minDataSequenceNumber)
+            .mapToLong(RewriteFileGroup::minFileSequenceNumber)
             .boxed()
             .collect(Collectors.toList());
 
@@ -1512,7 +1512,7 @@ public class TestRewriteDataFilesAction extends TestBase {
             .binPack();
     List<Long> actual =
         toGroupStream(table, jobOrderRewrite)
-            .mapToLong(RewriteFileGroup::minDataSequenceNumber)
+            .mapToLong(RewriteFileGroup::minFileSequenceNumber)
             .boxed()
             .collect(Collectors.toList());
 
