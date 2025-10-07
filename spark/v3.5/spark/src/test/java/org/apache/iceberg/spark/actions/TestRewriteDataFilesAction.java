@@ -1604,7 +1604,7 @@ public class TestRewriteDataFilesAction extends TestBase {
         basicRewrite(table)
             .option(
                 RewriteDataFiles.MAX_FILE_GROUP_SIZE_BYTES, Integer.toString(fileSize * 2 + 1000))
-            .option(RewriteDataFiles.MAX_TOTAL_FILE_GROUP_SIZE_BYTES, "0")
+            .option(RewriteDataFiles.MAX_TOTAL_FILE_GROUP_SIZE_BYTES, null)
             .execute();
 
     // Should process all 10 groups when limit is 0
