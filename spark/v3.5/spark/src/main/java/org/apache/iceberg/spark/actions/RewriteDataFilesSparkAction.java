@@ -175,22 +175,12 @@ public class RewriteDataFilesSparkAction
 
     Stream<RewriteFileGroup> groupStream = toGroupStream(ctx, fileGroupsByPartition);
 
-    // if maxTotalFileGroupSizeBytes is set, limit the total size of the file groups
-    if (maxTotalFileGroupSizeBytes > 0) {
-      final AtomicLong remainingSizeBytes = new AtomicLong(maxTotalFileGroupSizeBytes);
-      groupStream =
-          groupStream
-              .sequential()
-              .filter(
-                  fg -> {
-                    if (fg.sizeInBytes() <= remainingSizeBytes.get()) {
-                      remainingSizeBytes.addAndGet(-fg.sizeInBytes());
-                      return true;
-                    } else {
-                      return false;
-                    }
-                  });
-    }
+    final AtomicLong remainingSizeBytes = new AtomicLong(maxTotalFileGroupSizeBytes);
+    groupStream =
+        groupStream.filter(
+            fg ->
+                remainingSizeBytes.get() > 0
+                    && remainingSizeBytes.addAndGet(-fg.sizeInBytes()) >= 0);
 
     if (partialProgressEnabled) {
       return doExecuteWithPartialProgress(ctx, groupStream, commitManager(startingSnapshotId));
