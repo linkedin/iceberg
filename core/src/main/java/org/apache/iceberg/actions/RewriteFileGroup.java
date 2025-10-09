@@ -121,10 +121,6 @@ public class RewriteFileGroup {
 
   public static Comparator<FileScanTask> taskComparator(RewriteJobOrder rewriteJobOrder) {
     switch (rewriteJobOrder) {
-      case FILES_ASC:
-        return Comparator.comparing(FileScanTask::length);
-      case FILES_DESC:
-        return Comparator.comparing(FileScanTask::length, Comparator.reverseOrder());
       case FILES_MIN_SEQUENCE_NUMBER_ASC:
         return Comparator.comparing(t -> t.file().fileSequenceNumber());
       case FILES_MIN_SEQUENCE_NUMBER_DESC:

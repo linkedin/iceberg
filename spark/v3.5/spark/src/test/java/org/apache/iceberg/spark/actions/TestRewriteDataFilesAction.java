@@ -1593,7 +1593,7 @@ public class TestRewriteDataFilesAction extends TestBase {
   }
 
   @Test
-  public void testMaxTotalFileGroupSizeBytesZeroMeansNoLimit() {
+  public void testMaxTotalFileGroupSizeBytesNullMeansNoLimit() {
     Table table = createTable(20);
     int fileSize = averageFileSize(table);
 

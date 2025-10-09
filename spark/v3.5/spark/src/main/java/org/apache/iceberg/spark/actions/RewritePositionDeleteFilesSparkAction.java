@@ -184,19 +184,7 @@ public class RewritePositionDeleteFilesSparkAction
 
   private StructLikeMap<List<List<PositionDeletesScanTask>>> fileGroupsByPartition(
       StructLikeMap<List<PositionDeletesScanTask>> filesByPartition) {
-    // Keep ordering of files in line with file group ordering
-    // 1. If file groups are ordered by number of files, then the goal is to rewrite smaller
-    // (larger) files first,
-    //   in this case order files by size
-    // 2. If file groups are ordered by min sequence number, the goal is to rewrite older (newer)
-    // files first,
-    //   in this case order files by data sequence number
-    return filesByPartition.transformValues(
-        tasks ->
-            this.planFileGroups(
-                tasks.stream()
-                    .sorted(RewritePositionDeletesGroup.taskComparator(rewriteJobOrder))
-                    .collect(Collectors.toList())));
+    return filesByPartition.transformValues(this::planFileGroups);
   }
 
   private List<List<PositionDeletesScanTask>> planFileGroups(List<PositionDeletesScanTask> tasks) {
