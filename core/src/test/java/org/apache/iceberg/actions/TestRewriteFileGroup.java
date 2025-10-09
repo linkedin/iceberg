@@ -135,32 +135,6 @@ public class TestRewriteFileGroup {
   }
 
   @Test
-  public void testTaskComparatorFilesAsc() {
-    FileScanTask task1 = createMockTask(100L, 1L);
-    FileScanTask task2 = createMockTask(200L, 2L);
-    FileScanTask task3 = createMockTask(150L, 3L);
-
-    List<FileScanTask> tasks = Arrays.asList(task2, task3, task1);
-    tasks.sort(RewriteFileGroup.taskComparator(RewriteJobOrder.FILES_ASC));
-
-    assertThat(tasks.stream().mapToLong(FileScanTask::length).boxed().collect(Collectors.toList()))
-        .containsExactly(100L, 150L, 200L);
-  }
-
-  @Test
-  public void testTaskComparatorFilesDesc() {
-    FileScanTask task1 = createMockTask(100L, 1L);
-    FileScanTask task2 = createMockTask(200L, 2L);
-    FileScanTask task3 = createMockTask(150L, 3L);
-
-    List<FileScanTask> tasks = Arrays.asList(task2, task3, task1);
-    tasks.sort(RewriteFileGroup.taskComparator(RewriteJobOrder.FILES_DESC));
-
-    assertThat(tasks.stream().mapToLong(FileScanTask::length).boxed().collect(Collectors.toList()))
-        .containsExactly(200L, 150L, 100L);
-  }
-
-  @Test
   public void testTaskComparatorFilesMinSequenceNumberAsc() {
     FileScanTask task1 = createMockTask(100L, 5L);
     FileScanTask task2 = createMockTask(200L, 2L);

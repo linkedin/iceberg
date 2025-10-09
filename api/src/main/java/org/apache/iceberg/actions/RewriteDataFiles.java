@@ -71,9 +71,9 @@ public interface RewriteDataFiles
   long MAX_FILE_GROUP_SIZE_BYTES_DEFAULT = 1024L * 1024L * 1024L * 100L; // 100 Gigabytes
 
   /** The maximum total size of all file groups that this rewrite is allowed to process. */
-  String MAX_TOTAL_FILE_GROUP_SIZE_BYTES = "max-total-file-group-size-bytes";
+  String MAX_TOTAL_FILES_SIZE_BYTES = "max-total-files-size-bytes";
 
-  long MAX_TOTAL_FILE_GROUP_SIZE_BYTES_DEFAULT = Long.MAX_VALUE;
+  long MAX_TOTAL_FILES_SIZE_BYTES_DEFAULT = Long.MAX_VALUE;
 
   /**
    * The max number of file groups to be simultaneously rewritten by the rewrite strategy. The

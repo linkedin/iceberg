@@ -1539,7 +1539,7 @@ public class TestRewriteDataFilesAction extends TestBase {
         basicRewrite(table)
             .option(
                 RewriteDataFiles.MAX_FILE_GROUP_SIZE_BYTES, Integer.toString(fileSize * 2 + 1000))
-            .option(RewriteDataFiles.MAX_TOTAL_FILE_GROUP_SIZE_BYTES, Long.toString(maxTotalSize))
+            .option(RewriteDataFiles.MAX_TOTAL_FILES_SIZE_BYTES, Long.toString(maxTotalSize))
             .execute();
 
     // Should have processed approximately 5 groups instead of all 10
@@ -1572,7 +1572,7 @@ public class TestRewriteDataFilesAction extends TestBase {
         basicRewrite(table)
             .option(
                 RewriteDataFiles.MAX_FILE_GROUP_SIZE_BYTES, Integer.toString(fileSize * 2 + 1000))
-            .option(RewriteDataFiles.MAX_TOTAL_FILE_GROUP_SIZE_BYTES, Long.toString(maxTotalSize))
+            .option(RewriteDataFiles.MAX_TOTAL_FILES_SIZE_BYTES, Long.toString(maxTotalSize))
             .option(RewriteDataFiles.PARTIAL_PROGRESS_ENABLED, "true")
             .option(RewriteDataFiles.PARTIAL_PROGRESS_MAX_COMMITS, "3")
             .execute();
@@ -1604,7 +1604,7 @@ public class TestRewriteDataFilesAction extends TestBase {
         basicRewrite(table)
             .option(
                 RewriteDataFiles.MAX_FILE_GROUP_SIZE_BYTES, Integer.toString(fileSize * 2 + 1000))
-            .option(RewriteDataFiles.MAX_TOTAL_FILE_GROUP_SIZE_BYTES, null)
+            .option(RewriteDataFiles.MAX_TOTAL_FILES_SIZE_BYTES, null)
             .execute();
 
     // Should process all 10 groups when limit is 0

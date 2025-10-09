@@ -30,7 +30,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.iceberg.DataFile;
@@ -78,7 +77,7 @@ public class RewriteDataFilesSparkAction
       ImmutableSet.of(
           MAX_CONCURRENT_FILE_GROUP_REWRITES,
           MAX_FILE_GROUP_SIZE_BYTES,
-          MAX_TOTAL_FILE_GROUP_SIZE_BYTES,
+          MAX_TOTAL_FILES_SIZE_BYTES,
           PARTIAL_PROGRESS_ENABLED,
           PARTIAL_PROGRESS_MAX_COMMITS,
           TARGET_FILE_SIZE_BYTES,
@@ -95,7 +94,7 @@ public class RewriteDataFilesSparkAction
   private int maxCommits;
   private boolean partialProgressEnabled;
   private boolean useStartingSequenceNumber;
-  private long maxTotalFileGroupSizeBytes;
+  private long maxTotalFilesSizeBytes;
   private RewriteJobOrder rewriteJobOrder;
   private FileRewriter<FileScanTask, DataFile> rewriter = null;
 
@@ -175,13 +174,6 @@ public class RewriteDataFilesSparkAction
 
     Stream<RewriteFileGroup> groupStream = toGroupStream(ctx, fileGroupsByPartition);
 
-    final AtomicLong remainingSizeBytes = new AtomicLong(maxTotalFileGroupSizeBytes);
-    groupStream =
-        groupStream.filter(
-            fg ->
-                remainingSizeBytes.get() > 0
-                    && remainingSizeBytes.addAndGet(-fg.sizeInBytes()) >= 0);
-
     if (partialProgressEnabled) {
       return doExecuteWithPartialProgress(ctx, groupStream, commitManager(startingSnapshotId));
     } else {
@@ -198,10 +190,29 @@ public class RewriteDataFilesSparkAction
             .ignoreResiduals()
             .planFiles();
 
+    List<FileScanTask> tasks = Lists.newArrayList(fileScanTasks);
+    // Sort tasks by file sequence number in order to rewrite older (newer) files first
+    if (RewriteJobOrder.FILES_MIN_SEQUENCE_NUMBER_ASC.equals(rewriteJobOrder)
+        || RewriteJobOrder.FILES_MIN_SEQUENCE_NUMBER_DESC.equals(rewriteJobOrder)) {
+      tasks.sort(RewriteFileGroup.taskComparator(rewriteJobOrder));
+    }
+
+    long pickedTasksSizeBytes = 0;
+    int pickedTasksCount = 0;
+    for (FileScanTask task : tasks) {
+      if (pickedTasksSizeBytes + task.sizeBytes() <= maxTotalFilesSizeBytes) {
+        pickedTasksCount++;
+        pickedTasksSizeBytes += task.sizeBytes();
+      } else {
+        break;
+      }
+    }
+
+    tasks = tasks.subList(0, pickedTasksCount);
+
     try {
       StructType partitionType = table.spec().partitionType();
-      StructLikeMap<List<FileScanTask>> filesByPartition =
-          groupByPartition(partitionType, fileScanTasks);
+      StructLikeMap<List<FileScanTask>> filesByPartition = groupByPartition(partitionType, tasks);
       return fileGroupsByPartition(filesByPartition);
     } finally {
       try {
@@ -237,17 +248,7 @@ public class RewriteDataFilesSparkAction
 
   private StructLikeMap<List<List<FileScanTask>>> fileGroupsByPartition(
       StructLikeMap<List<FileScanTask>> filesByPartition) {
-    // Align file ordering with file group ordering
-    // 1. If groups are ordered by file count, rewrite smaller (or larger) files first -> sort by
-    // file size.
-    // 2. If groups are ordered by min sequence number, rewrite older (newer) files first -> sort by
-    // sequence number.
-    return filesByPartition.transformValues(
-        tasks ->
-            this.planFileGroups(
-                tasks.stream()
-                    .sorted(RewriteFileGroup.taskComparator(rewriteJobOrder))
-                    .collect(Collectors.toList())));
+    return filesByPartition.transformValues(this::planFileGroups);
   }
 
   private List<List<FileScanTask>> planFileGroups(List<FileScanTask> tasks) {
@@ -443,9 +444,9 @@ public class RewriteDataFilesSparkAction
             MAX_CONCURRENT_FILE_GROUP_REWRITES,
             MAX_CONCURRENT_FILE_GROUP_REWRITES_DEFAULT);
 
-    maxTotalFileGroupSizeBytes =
+    maxTotalFilesSizeBytes =
         PropertyUtil.propertyAsLong(
-            options(), MAX_TOTAL_FILE_GROUP_SIZE_BYTES, MAX_TOTAL_FILE_GROUP_SIZE_BYTES_DEFAULT);
+            options(), MAX_TOTAL_FILES_SIZE_BYTES, MAX_TOTAL_FILES_SIZE_BYTES_DEFAULT);
 
     maxCommits =
         PropertyUtil.propertyAsInt(
