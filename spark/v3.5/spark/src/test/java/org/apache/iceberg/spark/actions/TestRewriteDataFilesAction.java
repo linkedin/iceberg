@@ -1447,6 +1447,180 @@ public class TestRewriteDataFilesAction extends TestBase {
   }
 
   @Test
+  public void testRewriteJobOrderFilesMinSequenceNumberAsc() {
+    Table table = createTablePartitioned(4, 2);
+    table.updateProperties().set(TableProperties.FORMAT_VERSION, "2").commit();
+
+    // Write additional files with different sequence numbers
+    writeRecords(1, SCALE, 1);
+    writeRecords(2, SCALE, 2);
+    writeRecords(3, SCALE, 3);
+    writeRecords(4, SCALE, 4);
+    writeRecords(5, SCALE, 5);
+
+    RewriteDataFilesSparkAction basicRewrite = basicRewrite(table).binPack();
+    List<Long> expected =
+        toGroupStream(table, basicRewrite)
+            .mapToLong(RewriteFileGroup::minFileSequenceNumber)
+            .boxed()
+            .collect(Collectors.toList());
+
+    RewriteDataFilesSparkAction jobOrderRewrite =
+        basicRewrite(table)
+            .option(
+                RewriteDataFiles.REWRITE_JOB_ORDER,
+                RewriteJobOrder.FILES_MIN_SEQUENCE_NUMBER_ASC.orderName())
+            .binPack();
+    List<Long> actual =
+        toGroupStream(table, jobOrderRewrite)
+            .mapToLong(RewriteFileGroup::minFileSequenceNumber)
+            .boxed()
+            .collect(Collectors.toList());
+
+    expected.sort(Comparator.naturalOrder());
+    assertThat(actual).as("Min sequence number order should be ascending").isEqualTo(expected);
+    Collections.reverse(expected);
+    assertThat(actual)
+        .as("Min sequence number order should not be descending")
+        .isNotEqualTo(expected);
+  }
+
+  @Test
+  public void testRewriteJobOrderFilesMinSequenceNumberDesc() {
+    Table table = createTablePartitioned(4, 2);
+    table.updateProperties().set(TableProperties.FORMAT_VERSION, "2").commit();
+
+    // Write additional files with different sequence numbers
+    writeRecords(1, SCALE, 1);
+    writeRecords(2, SCALE, 2);
+    writeRecords(3, SCALE, 3);
+    writeRecords(4, SCALE, 4);
+    writeRecords(5, SCALE, 5);
+
+    RewriteDataFilesSparkAction basicRewrite = basicRewrite(table).binPack();
+    List<Long> expected =
+        toGroupStream(table, basicRewrite)
+            .mapToLong(RewriteFileGroup::minFileSequenceNumber)
+            .boxed()
+            .collect(Collectors.toList());
+
+    RewriteDataFilesSparkAction jobOrderRewrite =
+        basicRewrite(table)
+            .option(
+                RewriteDataFiles.REWRITE_JOB_ORDER,
+                RewriteJobOrder.FILES_MIN_SEQUENCE_NUMBER_DESC.orderName())
+            .binPack();
+    List<Long> actual =
+        toGroupStream(table, jobOrderRewrite)
+            .mapToLong(RewriteFileGroup::minFileSequenceNumber)
+            .boxed()
+            .collect(Collectors.toList());
+
+    expected.sort(Comparator.reverseOrder());
+    assertThat(actual).as("Min sequence number order should be descending").isEqualTo(expected);
+    Collections.reverse(expected);
+    assertThat(actual)
+        .as("Min sequence number order should not be ascending")
+        .isNotEqualTo(expected);
+  }
+
+  @Test
+  public void testMaxTotalFileGroupSizeBytes() {
+    Table table = createTable(20);
+    int fileSize = averageFileSize(table);
+
+    List<Object[]> originalData = currentData();
+    long dataSizeBefore = testDataSize(table);
+
+    // Set max total size to allow only ~5 file groups (2 files each)
+    long maxTotalSize = (long) (fileSize * 2.5 * 5);
+
+    RewriteDataFiles.Result result =
+        basicRewrite(table)
+            .option(
+                RewriteDataFiles.MAX_FILE_GROUP_SIZE_BYTES, Integer.toString(fileSize * 2 + 1000))
+            .option(RewriteDataFiles.MAX_TOTAL_FILES_SIZE_BYTES, Long.toString(maxTotalSize))
+            .execute();
+
+    // Should have processed approximately 5 groups instead of all 10
+    assertThat(result.rewriteResults())
+        .as("Should have limited number of file groups processed")
+        .hasSizeLessThanOrEqualTo(6);
+    assertThat(result.rewrittenBytesCount()).isGreaterThan(0L).isLessThan(dataSizeBefore);
+
+    table.refresh();
+
+    List<Object[]> postRewriteData = currentData();
+    assertEquals("We shouldn't have changed the data", originalData, postRewriteData);
+
+    shouldHaveSnapshots(table, 2);
+    shouldHaveACleanCache(table);
+  }
+
+  @Test
+  public void testMaxTotalFileGroupSizeBytesWithPartialProgress() {
+    Table table = createTable(20);
+    int fileSize = averageFileSize(table);
+
+    List<Object[]> originalData = currentData();
+    long dataSizeBefore = testDataSize(table);
+
+    // Set max total size to allow only ~5 file groups (2 files each)
+    long maxTotalSize = (long) (fileSize * 2.5 * 5);
+
+    RewriteDataFiles.Result result =
+        basicRewrite(table)
+            .option(
+                RewriteDataFiles.MAX_FILE_GROUP_SIZE_BYTES, Integer.toString(fileSize * 2 + 1000))
+            .option(RewriteDataFiles.MAX_TOTAL_FILES_SIZE_BYTES, Long.toString(maxTotalSize))
+            .option(RewriteDataFiles.PARTIAL_PROGRESS_ENABLED, "true")
+            .option(RewriteDataFiles.PARTIAL_PROGRESS_MAX_COMMITS, "3")
+            .execute();
+
+    // Should have processed approximately 5 groups instead of all 10
+    assertThat(result.rewriteResults())
+        .as("Should have limited number of file groups processed")
+        .hasSizeLessThanOrEqualTo(6);
+    assertThat(result.rewrittenBytesCount()).isGreaterThan(0L).isLessThan(dataSizeBefore);
+
+    table.refresh();
+
+    List<Object[]> postRewriteData = currentData();
+    assertEquals("We shouldn't have changed the data", originalData, postRewriteData);
+
+    // Should have fewer snapshots than without the limit
+    shouldHaveACleanCache(table);
+  }
+
+  @Test
+  public void testMaxTotalFileGroupSizeBytesNullMeansNoLimit() {
+    Table table = createTable(20);
+    int fileSize = averageFileSize(table);
+
+    List<Object[]> originalData = currentData();
+    long dataSizeBefore = testDataSize(table);
+
+    RewriteDataFiles.Result result =
+        basicRewrite(table)
+            .option(
+                RewriteDataFiles.MAX_FILE_GROUP_SIZE_BYTES, Integer.toString(fileSize * 2 + 1000))
+            .option(RewriteDataFiles.MAX_TOTAL_FILES_SIZE_BYTES, null)
+            .execute();
+
+    // Should process all 10 groups when limit is 0
+    assertThat(result.rewriteResults()).as("Should have 10 fileGroups").hasSize(10);
+    assertThat(result.rewrittenBytesCount()).isEqualTo(dataSizeBefore);
+
+    table.refresh();
+
+    List<Object[]> postRewriteData = currentData();
+    assertEquals("We shouldn't have changed the data", originalData, postRewriteData);
+
+    shouldHaveSnapshots(table, 2);
+    shouldHaveACleanCache(table);
+  }
+
+  @Test
   public void testSnapshotProperty() {
     Table table = createTable(4);
     Result ignored = basicRewrite(table).snapshotProperty("key", "value").execute();
