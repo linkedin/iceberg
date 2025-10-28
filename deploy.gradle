@@ -22,18 +22,14 @@ if (project.hasProperty('release') && jdkVersion != '8') {
 }
 
 subprojects {
-  if (it.name == 'iceberg-open-api') {
-    // don't publish iceberg-open-api
-    return
-  }
-
-  def isBom = it.name == 'iceberg-bom'
-
   apply plugin: 'maven-publish'
   apply plugin: 'signing'
-  afterEvaluate {
 
+  afterEvaluate {
+    def isBom = it.name == 'iceberg-bom'
+    
     if (!isBom) {
+      // Only create JAR tasks for non-BOM projects
       task sourceJar(type: Jar, dependsOn: classes) {
         archiveClassifier.set('sources')
         from sourceSets.main.allSource
@@ -73,10 +69,55 @@ subprojects {
 
     publishing {
       publications {
-        apache(MavenPublication) {
-          if (isBom) {
+        if (isBom) {
+          // For BOM projects, publish the java-platform component
+          mavenJava(MavenPublication) {
             from components.javaPlatform
-          } else {
+
+            groupId = 'com.linkedin.iceberg'
+            artifactId = project.archivesBaseName
+            pom {
+              name = artifactId
+              description = 'A table format for huge analytic datasets'
+              url = 'https://github.com/linkedin/iceberg'
+              licenses {
+                license {
+                  name = 'The Apache Software License, Version 2.0'
+                  url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                }
+              }
+              issueManagement {
+                system = 'GitHub'
+                url = 'https://github.com/linkedin/iceberg/issues'
+              }
+              developers {
+                [
+                  'wmoustafa:Walaa Eldin Moustafa',
+                  'sumedhsakdeo:Sumedh Sakdeo',
+                  'maluchari:Malini Mahalakshmi Venkatachari',
+                  'rdsr:Ratandeep Ratti'
+                ].each { devData ->
+                  developer {
+                    def devInfo = devData.split(':')
+                    id = devInfo[0]
+                    name = devInfo[1]
+                    url = 'https://github.com/' + devInfo[0]
+                    roles = ["Core developer"]
+                  }
+                }
+              }
+              scm {
+                url = 'https://github.com/linkedin/iceberg.git'
+              }
+              ciManagement {
+                url = 'https://github.com/linkedin/iceberg/actions'
+                system = 'GitHub Actions'
+              }
+            }
+          }
+        } else {
+          // For regular projects, publish java libraries with artifacts
+          javaLibrary(MavenPublication) {
             if (tasks.matching({task -> task.name == 'shadowJar'}).isEmpty()) {
               from components.java
             } else {
@@ -92,30 +133,46 @@ subprojects {
                 fromResolutionResult()
               }
             }
-          }
 
-          groupId = 'org.apache.iceberg'
-          pom {
-            name = 'Apache Iceberg'
-            description = 'A table format for huge analytic datasets'
-            url = 'https://iceberg.apache.org'
-            licenses {
-              license {
-                name = 'The Apache Software License, Version 2.0'
-                url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+            groupId = 'com.linkedin.iceberg'
+            artifactId = project.archivesBaseName
+            pom {
+              name = artifactId
+              description = 'A table format for huge analytic datasets'
+              url = 'https://github.com/linkedin/iceberg'
+              licenses {
+                license {
+                  name = 'The Apache Software License, Version 2.0'
+                  url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                }
               }
-            }
-            mailingLists {
-              mailingList {
-                name = 'Dev Mailing List'
-                post = 'dev@iceberg.apache.org'
-                subscribe = 'dev-subscribe@iceberg.apache.org'
-                unsubscribe = 'dev-unsubscribe@iceberg.apache.org'
+              issueManagement {
+                system = 'GitHub'
+                url = 'https://github.com/linkedin/iceberg/issues'
               }
-            }
-            issueManagement {
-              system = 'GitHub'
-              url = 'https://github.com/apache/iceberg/issues'
+              developers {
+                [
+                  'wmoustafa:Walaa Eldin Moustafa',
+                  'sumedhsakdeo:Sumedh Sakdeo',
+                  'maluchari:Malini Mahalakshmi Venkatachari',
+                  'rdsr:Ratandeep Ratti'
+                ].each { devData ->
+                  developer {
+                    def devInfo = devData.split(':')
+                    id = devInfo[0]
+                    name = devInfo[1]
+                    url = 'https://github.com/' + devInfo[0]
+                    roles = ["Core developer"]
+                  }
+                }
+              }
+              scm {
+                url = 'https://github.com/linkedin/iceberg.git'
+              }
+              ciManagement {
+                url = 'https://github.com/linkedin/iceberg/actions'
+                system = 'GitHub Actions'
+              }
             }
           }
         }
@@ -123,25 +180,27 @@ subprojects {
 
       repositories {
         maven {
-          credentials {
-            username project.hasProperty('mavenUser') ? "$mavenUser" : ""
-            password project.hasProperty('mavenPassword') ? "$mavenPassword" : ""
-          }
-          // upload to the releases repository using ./gradlew -Prelease publish
-          def apacheSnapshotsRepoUrl = 'https://repository.apache.org/content/repositories/snapshots'
-          def apacheReleasesRepoUrl = 'https://repository.apache.org/service/local/staging/deploy/maven2'
-          def snapshotsRepoUrl = project.hasProperty('mavenSnapshotsRepo') ? "$mavenSnapshotsRepo" : "$apacheSnapshotsRepoUrl"
-          def releasesRepoUrl = project.hasProperty('mavenReleasesRepo') ? "$mavenReleasesRepo" : "$apacheReleasesRepoUrl"
-          url = project.hasProperty('release') ? releasesRepoUrl : snapshotsRepoUrl
+          url = "$rootProject.buildDir/repo"
         }
       }
     }
 
-    if (project.hasProperty('release')) {
-      signing {
-        useGpgCmd()
-        sign publishing.publications.apache
+    if (isBom) {
+      tasks.build.dependsOn("publishMavenJavaPublicationToMavenLocal")
+    } else {
+      tasks.build.dependsOn("publishJavaLibraryPublicationToMavenLocal")
+    }
+
+    signing {
+      if (System.getenv("PGP_KEY")) {
+        useInMemoryPgpKeys(System.getenv("PGP_KEY"), System.getenv("PGP_PWD"))
+        if (isBom) {
+          sign publishing.publications.mavenJava
+        } else {
+          sign publishing.publications.javaLibrary
+        }
       }
     }
   }
 }
+

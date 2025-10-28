@@ -23,11 +23,14 @@ import java.util.regex.Pattern
 
 buildscript {
   repositories {
+    maven { url "https://plugins.gradle.org/m2/" }
     gradlePluginPortal()
   }
   dependencies {
     classpath 'com.github.johnrengelman:shadow:8.1.1'
-    classpath 'com.palantir.baseline:gradle-baseline-java:4.42.0'
+    classpath('com.palantir.baseline:gradle-baseline-java:4.42.0') {
+      exclude group: 'com.palantir.tritium'
+    }
     // com.palantir.baseline:gradle-baseline-java:4.42.0 (the last version supporting Java 8) pulls
     // in an old version of the errorprone, which doesn't work w/ Gradle 8, so bump errorpone as
     // well.
@@ -41,9 +44,16 @@ buildscript {
     classpath 'com.palantir.gradle.revapi:gradle-revapi:1.7.0'
     classpath 'com.gorylenko.gradle-git-properties:gradle-git-properties:2.4.1'
     classpath 'com.palantir.gradle.gitversion:gradle-git-version:3.0.0'
+    classpath 'io.github.gradle-nexus:publish-plugin:1.1.0'
+    classpath 'org.shipkit:shipkit-auto-version:1.2.0'
+    classpath 'org.shipkit:shipkit-changelog:1.1.10'
     classpath 'org.openapitools:openapi-generator-gradle-plugin:6.6.0'
   }
 }
+
+apply plugin: "org.shipkit.shipkit-auto-version"
+apply plugin: "org.shipkit.shipkit-changelog"
+apply plugin: "org.shipkit.shipkit-github-release"
 
 String scalaVersion = System.getProperty("scalaVersion") != null ? System.getProperty("scalaVersion") : System.getProperty("defaultScalaVersion")
 String sparkVersionsString = System.getProperty("sparkVersions") != null ? System.getProperty("sparkVersions") : System.getProperty("defaultSparkVersions")
@@ -123,7 +133,7 @@ def projectVersion = getProjectVersion()
 final REVAPI_PROJECTS = ["iceberg-api", "iceberg-core", "iceberg-parquet", "iceberg-orc", "iceberg-common", "iceberg-data"]
 
 allprojects {
-  group = "org.apache.iceberg"
+  group = "com.linkedin.iceberg"
   version = projectVersion
   repositories {
     mavenCentral()
@@ -139,32 +149,12 @@ subprojects {
 
   apply plugin: 'java-library'
 
-  if (project.name in REVAPI_PROJECTS) {
-    apply plugin: 'com.palantir.revapi'
-    revapi {
-      oldGroup = project.group
-      oldName = project.name
-      oldVersion = "1.4.0"
-    }
-
-    tasks.register('showDeprecationRulesOnRevApiFailure') {
-      doLast {
-        throw new RuntimeException("==================================================================================" +
-                "\nAPI/ABI breaks detected.\n" +
-                "Adding RevAPI breaks should only be done after going through a deprecation cycle." +
-                "\nPlease make sure to follow the deprecation rules defined in\n" +
-                "https://github.com/apache/iceberg/blob/main/CONTRIBUTING.md#semantic-versioning.\n" +
-                "==================================================================================")
-      }
-      onlyIf {
-        tasks.revapi.state.failure != null
-      }
-    }
-
-    tasks.configureEach { rootTask ->
-      if (rootTask.name == 'revapi') {
-        rootTask.finalizedBy showDeprecationRulesOnRevApiFailure
-      }
+  configurations.all {
+    resolutionStrategy {
+      // Force specific versions of tritium to resolve version conflicts
+      force 'com.palantir.tritium:tritium-registry:0.17.0'
+      force 'com.palantir.tritium:tritium-core:0.17.0'
+      force 'com.palantir.tritium:tritium-metrics:0.17.0'
     }
   }
 
@@ -993,13 +983,25 @@ String getVersionFromFile() {
 
 String getProjectVersion() {
   if (versionFileExists()) {
-    return getVersionFromFile()
+    String version = getVersionFromFile()
+    // If version is in 900+ series, treat it as a pre-release
+    Pattern pattern = Pattern.compile("^([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?\$")
+    Matcher matcher = pattern.matcher(version)
+    if (matcher.matches()) {
+      int lastNum = Integer.valueOf(matcher.group(4))
+      if (lastNum >= 900) {
+        // Convert 1.2.0.900+ to 1.2.0.0-rcX format
+        int rcNum = lastNum - 899
+        return matcher.group(1) + "." + matcher.group(2) + "." + matcher.group(3) + ".0-rc" + rcNum
+      }
+    }
+    return version
   }
 
   try {
     // we're fetching the version from the latest tag (prefixed with 'apache-iceberg-'),
     // which can look like this: '0.13.0-2-g805400f0.dirty' but we're only interested in the MAJOR.MINOR.PATCH part
-    String version = gitVersion(prefix: 'apache-iceberg-')
+    String version = gitVersion()
     Pattern pattern = Pattern.compile("^([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?\$")
     Matcher matcher = pattern.matcher(version)
     if (matcher.matches()) {
@@ -1029,6 +1031,7 @@ apply from: 'jmh.gradle'
 apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
 apply from: 'tasks.gradle'
+apply from: 'shipkit.gradle'
 
 project(':iceberg-bom') {
   apply plugin: 'java-platform'
