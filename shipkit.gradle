@@ -1,0 +1,95 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+//Plugin jars are added to the buildscript classpath in the root build.gradle file
+apply plugin: "org.shipkit.shipkit-auto-version" //https://github.com/shipkit/shipkit-auto-version
+
+apply plugin: "org.shipkit.shipkit-changelog" //https://github.com/shipkit/shipkit-changelog
+tasks.named("generateChangelog") {
+  previousRevision = project.ext.'shipkit-auto-version.previous-tag'
+  githubToken = System.getenv("GITHUB_TOKEN")
+  repository = "linkedin/iceberg"
+  // Write changelog into the root build directory to avoid broad root-dir overlaps
+  outputFile = file("${buildDir}/CHANGELOG.md")
+}
+
+// Ensure Gradle knows ordering relative to tasks that write inside the repository
+// to avoid implicit dependency validation errors in Gradle 8+
+gradle.projectsEvaluated {
+  def genTaskProvider = tasks.named("generateChangelog")
+  genTaskProvider.configure { t ->
+    // Ensure we run after root task that writes to root build output
+    t.mustRunAfter(rootProject.tasks.matching { it.name == 'generateGitProperties' })
+
+    rootProject.subprojects.each { prj ->
+      // Run after resource processing tasks
+      t.mustRunAfter(prj.tasks.matching { it.name == 'processResources' })
+      t.mustRunAfter(prj.tasks.matching { it.name == 'processTestResources' })
+
+      // Run after Java compilation tasks
+      t.mustRunAfter(prj.tasks.matching { it.name == 'compileJava' })
+      t.mustRunAfter(prj.tasks.matching { it.name == 'compileTestJava' })
+
+      // Run after documentation and archive tasks that may touch repo files
+      t.mustRunAfter(prj.tasks.withType(org.gradle.api.tasks.javadoc.Javadoc))
+      t.mustRunAfter(prj.tasks.withType(org.gradle.api.tasks.bundling.Jar))
+
+      // Run after any POM generation tasks created by maven-publish
+      t.mustRunAfter(prj.tasks.withType(org.gradle.api.publish.maven.tasks.GenerateMavenPom))
+
+      // Run after module metadata tasks, if present
+      t.mustRunAfter(prj.tasks.matching { it.name.startsWith('generateMetadataFileFor') })
+
+      // Run after signing tasks (from 'signing' plugin)
+      t.mustRunAfter(prj.tasks.matching { it.name.startsWith('sign') })
+
+      // Run after publish tasks to avoid implicit dependency warnings in release pipelines
+      t.mustRunAfter(prj.tasks.matching { it.name.startsWith('publish') })
+    }
+  }
+}
+
+ 
+
+apply plugin: "org.shipkit.shipkit-github-release" //https://github.com/shipkit/shipkit-changelog
+tasks.named("githubRelease") {
+  def genTask = tasks.named("generateChangelog").get()
+  dependsOn genTask
+  repository = genTask.repository
+  changelog = genTask.outputFile
+  githubToken = System.getenv("GITHUB_TOKEN")
+  newTagRevision = System.getenv("GITHUB_SHA")
+}
+
+apply plugin: "io.github.gradle-nexus.publish-plugin" //https://github.com/gradle-nexus/publish-plugin/
+nexusPublishing {
+  repositories {
+    if (System.getenv("SONATYPE_PWD")) {
+      sonatype {
+        username = System.getenv("SONATYPE_USER")
+        password = System.getenv("SONATYPE_PWD")
+        nexusUrl.set(uri("https://ossrh-staging-api.central.sonatype.com/service/local/"))
+        // nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
+        snapshotRepositoryUrl.set(uri("https://central.sonatype.com/repository/maven-snapshots/"))
+        // snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
+      }
+    }
+  }
+}
+
