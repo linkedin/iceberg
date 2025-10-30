@@ -72,7 +72,7 @@ jobs:
         && github.ref == 'refs/heads/openhouse-1.5.2'
         && github.repository == 'linkedin/iceberg'
         && !contains(toJSON(github.event.commits.*.message), '[skip release]') }}
-      run: ./gradlew -DsparkVersions=3.5.2 githubRelease publishToSonatype closeAndReleaseStagingRepository -x test -x integrationTest
+      run: ./gradlew -DsparkVersions=3.5 githubRelease publishToSonatype closeAndReleaseStagingRepository -x test -x integrationTest
       env:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         SONATYPE_USER: ${{secrets.SONATYPE_USERNAME}}
