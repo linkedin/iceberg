@@ -139,8 +139,9 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
     Schema writeSchema = validateOrMergeWriteSchema(table, dsSchema, writeConf);
     SparkUtil.validatePartitionTransforms(table.spec());
 
-    // Get application id
+    // Get application id and name
     String appId = spark.sparkContext().applicationId();
+    String appName = spark.sparkContext().appName();
 
     Distribution distribution;
     SortOrder[] ordering;
@@ -162,7 +163,16 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
     }
 
     return new SparkWrite(
-        spark, table, writeConf, writeInfo, appId, writeSchema, dsSchema, distribution, ordering) {
+        spark,
+        table,
+        writeConf,
+        writeInfo,
+        appId,
+        appName,
+        writeSchema,
+        dsSchema,
+        distribution,
+        ordering) {
 
       @Override
       public BatchWrite toBatch() {

@@ -329,6 +329,7 @@ public class SparkTable
     icebergTable
         .newDelete()
         .set("spark.app.id", sparkSession().sparkContext().applicationId())
+        .set("spark.app.name", sparkSession().sparkContext().appName())
         .deleteFromRowFilter(deleteExpr)
         .commit();
   }

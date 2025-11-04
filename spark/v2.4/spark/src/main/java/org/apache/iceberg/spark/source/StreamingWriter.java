@@ -52,9 +52,10 @@ public class StreamingWriter extends Writer implements StreamWriter {
       String queryId,
       OutputMode mode,
       String applicationId,
+      String applicationName,
       Schema writeSchema,
       StructType dsSchema) {
-    super(spark, table, writeConf, false, applicationId, writeSchema, dsSchema);
+    super(spark, table, writeConf, false, applicationId, applicationName, null, writeSchema, dsSchema);
     this.queryId = queryId;
     this.mode = mode;
   }

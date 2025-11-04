@@ -114,11 +114,12 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
         table.schema(), writeSchema, writeConf.checkNullability(), writeConf.checkOrdering());
     SparkUtil.validatePartitionTransforms(table.spec());
 
-    // Get application id
+    // Get application id and name
     String appId = spark.sparkContext().applicationId();
+    String appName = spark.sparkContext().appName();
 
     SparkWrite write =
-        new SparkWrite(spark, table, writeConf, writeInfo, appId, writeSchema, dsSchema);
+        new SparkWrite(spark, table, writeConf, writeInfo, appId, appName, writeSchema, dsSchema);
     if (overwriteByFilter) {
       return write.asOverwriteByFilter(overwriteExpr);
     } else if (overwriteDynamic) {
@@ -150,11 +151,12 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
         "Unsupported streaming operation: overwrite by filter: %s",
         overwriteExpr);
 
-    // Get application id
+    // Get application id and name
     String appId = spark.sparkContext().applicationId();
+    String appName = spark.sparkContext().appName();
 
     SparkWrite write =
-        new SparkWrite(spark, table, writeConf, writeInfo, appId, writeSchema, dsSchema);
+        new SparkWrite(spark, table, writeConf, writeInfo, appId, appName, writeSchema, dsSchema);
     if (overwriteByFilter) {
       return write.asStreamingOverwrite();
     } else {
