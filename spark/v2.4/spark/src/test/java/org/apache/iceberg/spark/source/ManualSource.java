@@ -78,6 +78,7 @@ public class ManualSource implements WriteSupport, DataSourceRegister, DataSourc
         table.schema(), writeSchema, writeConf.checkNullability(), writeConf.checkOrdering());
     SparkUtil.validatePartitionTransforms(table.spec());
     String appId = lazySparkSession().sparkContext().applicationId();
+    String appName = lazySparkSession().sparkContext().appName();
     String wapId = writeConf.wapId();
     boolean replacePartitions = mode == SaveMode.Overwrite;
 
@@ -88,6 +89,7 @@ public class ManualSource implements WriteSupport, DataSourceRegister, DataSourc
             writeConf,
             replacePartitions,
             appId,
+            appName,
             wapId,
             writeSchema,
             dsStruct));

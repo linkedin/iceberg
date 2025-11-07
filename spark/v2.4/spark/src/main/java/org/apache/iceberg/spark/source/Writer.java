@@ -81,16 +81,6 @@ class Writer implements DataSourceWriter {
 
   private boolean cleanupOnAbort = true;
 
-  Writer(
-      SparkSession spark,
-      Table table,
-      SparkWriteConf writeConf,
-      boolean replacePartitions,
-      String applicationId,
-      Schema writeSchema,
-      StructType dsSchema) {
-    this(spark, table, writeConf, replacePartitions, applicationId, null, null, writeSchema, dsSchema);
-  }
 
   Writer(
       SparkSession spark,
