@@ -98,6 +98,7 @@ public class IcebergSource
         table.schema(), writeSchema, writeConf.checkNullability(), writeConf.checkOrdering());
     SparkUtil.validatePartitionTransforms(table.spec());
     String appId = lazySparkSession().sparkContext().applicationId();
+    String appName = lazySparkSession().sparkContext().appName();
     String wapId = writeConf.wapId();
     boolean replacePartitions = mode == SaveMode.Overwrite;
 
@@ -108,6 +109,7 @@ public class IcebergSource
             writeConf,
             replacePartitions,
             appId,
+            appName,
             wapId,
             writeSchema,
             dsStruct));
@@ -138,9 +140,10 @@ public class IcebergSource
     String queryId =
         lazySparkSession().sparkContext().getLocalProperty(StreamExecution.QUERY_ID_KEY());
     String appId = lazySparkSession().sparkContext().applicationId();
+    String appName = lazySparkSession().sparkContext().appName();
 
     return new StreamingWriter(
-        lazySparkSession(), table, writeConf, queryId, mode, appId, writeSchema, dsStruct);
+        lazySparkSession(), table, writeConf, queryId, mode, appId, appName, writeSchema, dsStruct);
   }
 
   protected Table findTable(DataSourceOptions options, Configuration conf) {

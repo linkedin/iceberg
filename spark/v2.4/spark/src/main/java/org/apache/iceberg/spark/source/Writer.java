@@ -71,6 +71,7 @@ class Writer implements DataSourceWriter {
   private final FileFormat format;
   private final boolean replacePartitions;
   private final String applicationId;
+  private final String applicationName;
   private final String wapId;
   private final long targetFileSize;
   private final Schema writeSchema;
@@ -86,9 +87,10 @@ class Writer implements DataSourceWriter {
       SparkWriteConf writeConf,
       boolean replacePartitions,
       String applicationId,
+      String applicationName,
       Schema writeSchema,
       StructType dsSchema) {
-    this(spark, table, writeConf, replacePartitions, applicationId, null, writeSchema, dsSchema);
+    this(spark, table, writeConf, replacePartitions, applicationId, applicationName, null, writeSchema, dsSchema);
   }
 
   Writer(
@@ -97,6 +99,7 @@ class Writer implements DataSourceWriter {
       SparkWriteConf writeConf,
       boolean replacePartitions,
       String applicationId,
+      String applicationName,
       String wapId,
       Schema writeSchema,
       StructType dsSchema) {
@@ -105,6 +108,7 @@ class Writer implements DataSourceWriter {
     this.format = writeConf.dataFileFormat();
     this.replacePartitions = replacePartitions;
     this.applicationId = applicationId;
+    this.applicationName = applicationName;
     this.wapId = wapId;
     this.targetFileSize = writeConf.targetDataFileSize();
     this.writeSchema = writeSchema;
@@ -143,6 +147,10 @@ class Writer implements DataSourceWriter {
     LOG.info("Committing {} with {} files to table {}", description, numFiles, table);
     if (applicationId != null) {
       operation.set("spark.app.id", applicationId);
+    }
+
+    if (applicationName != null) {
+      operation.set("spark.app.name", applicationName);
     }
 
     if (!extraSnapshotMetadata.isEmpty()) {

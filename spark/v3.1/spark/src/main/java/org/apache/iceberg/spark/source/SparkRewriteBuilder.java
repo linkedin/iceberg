@@ -63,9 +63,10 @@ public class SparkRewriteBuilder implements WriteBuilder {
     SparkUtil.validatePartitionTransforms(table.spec());
 
     String appId = spark.sparkContext().applicationId();
+    String appName = spark.sparkContext().appName();
 
     SparkWrite write =
-        new SparkWrite(spark, table, writeConf, writeInfo, appId, writeSchema, dsSchema);
+        new SparkWrite(spark, table, writeConf, writeInfo, appId, appName, writeSchema, dsSchema);
     return write.asRewrite(fileSetID);
   }
 }
