@@ -90,7 +90,7 @@ class Writer implements DataSourceWriter {
       String applicationName,
       Schema writeSchema,
       StructType dsSchema) {
-    this(spark, table, writeConf, replacePartitions, applicationId, applicationName, writeSchema, dsSchema);
+    this(spark, table, writeConf, replacePartitions, applicationId, applicationName, null, writeSchema, dsSchema);
   }
 
   Writer(
