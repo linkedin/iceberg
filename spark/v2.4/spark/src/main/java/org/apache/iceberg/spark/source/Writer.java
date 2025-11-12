@@ -87,9 +87,10 @@ class Writer implements DataSourceWriter {
       SparkWriteConf writeConf,
       boolean replacePartitions,
       String applicationId,
+      String applicationName,
       Schema writeSchema,
       StructType dsSchema) {
-    this(spark, table, writeConf, replacePartitions, applicationId, null, writeSchema, dsSchema);
+    this(spark, table, writeConf, replacePartitions, applicationId, applicationName, writeSchema, dsSchema);
   }
 
   Writer(
