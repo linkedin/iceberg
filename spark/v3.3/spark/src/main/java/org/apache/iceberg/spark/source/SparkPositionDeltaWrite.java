@@ -95,6 +95,7 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
   private final IsolationLevel isolationLevel;
   private final Context context;
   private final String applicationId;
+  private final String applicationName;
   private final boolean wapEnabled;
   private final String wapId;
   private final String branch;
@@ -122,6 +123,7 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
     this.isolationLevel = isolationLevel;
     this.context = new Context(dataSchema, writeConf, info);
     this.applicationId = spark.sparkContext().applicationId();
+    this.applicationName = spark.sparkContext().appName();
     this.wapEnabled = writeConf.wapEnabled();
     this.wapId = writeConf.wapId();
     this.branch = writeConf.branch();
@@ -260,6 +262,10 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
       LOG.info("Committing {} to table {}", description, table);
       if (applicationId != null) {
         operation.set("spark.app.id", applicationId);
+      }
+
+      if (applicationName != null) {
+        operation.set("spark.app.name", applicationName);
       }
 
       extraSnapshotMetadata.forEach(operation::set);
