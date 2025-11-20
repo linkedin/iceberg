@@ -16,11 +16,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
-import groovy.transform.Memoized
-import java.util.regex.Matcher
-import java.util.regex.Pattern
-
 buildscript {
   repositories {
     maven { url "https://plugins.gradle.org/m2/" }
@@ -866,45 +861,54 @@ project(':iceberg-snowflake') {
   }
 }
 
-@Memoized
-boolean versionFileExists() {
-  return file('version.txt').exists()
-}
-
-@Memoized
-String getVersionFromFile() {
-  return file('version.txt').text.trim()
-}
-
+/**
+ * @return the project version (e.g., 1.2.0.4)
+ */
 String getProjectVersion() {
-  if (versionFileExists()) {
-    String version = getVersionFromFile()
+  if (project.hasProperty('ciVersion')) {
+    String version = project.property('ciVersion')
+    println "Version: ${version.padRight(27)}"
     return version
   }
 
   try {
-    String version = gitVersion()
-    Pattern pattern = Pattern.compile("([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\..*)?")
-    Matcher matcher = pattern.matcher(version)
-    if (matcher.matches()) {
-      return matcher.group(1) + "." + matcher.group(2) + "." + matcher.group(3) + "."  + matcher.group(4)
+    def stdout = new ByteArrayOutputStream()
+    exec {
+      commandLine 'git', 'describe', '--tags', '--abbrev=0'
+      standardOutput = stdout
     }
+    String version = stdout.toString().trim()
+    
+    // Remove 'v' prefix if present
+    if (version.startsWith('v')) {
+      version = version.substring(1)
+    }
+    
+    println "Version from git tag: ${version.padRight(30)}"
+
     return version
   } catch (Exception e) {
-    throw new Exception("Neither version.txt nor git version exists: " + e.getMessage(), e)
+    logger.warn("Could not determine version from git: ${e.message}")
+    return "0.0.0-SNAPSHOT"
   }
 }
 
+/**
+ * Get version string for Javadoc using the current branch name.
+ * 
+ * @return branch name for Javadoc version
+ */
 String getJavadocVersion() {
-  if (versionFileExists()) {
-    return getVersionFromFile()
-  }
-
   try {
-    // use the branch name in place of version in Javadoc
-    return versionDetails().branchName
-  } catch (NullPointerException e) {
-    throw new Exception("Neither version.txt nor git version exists")
+    def stdout = new ByteArrayOutputStream()
+    exec {
+      commandLine 'git', 'rev-parse', '--abbrev-ref', 'HEAD'
+      standardOutput = stdout
+    }
+    return stdout.toString().trim()
+  } catch (Exception e) {
+    logger.warn("Failed to get branch name from git: ${e.message}")
+    return "main"
   }
 }
 

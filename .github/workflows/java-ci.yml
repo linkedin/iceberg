@@ -50,6 +50,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - uses: actions/setup-java@v4
       with:
         distribution: zulu
@@ -57,27 +59,47 @@ jobs:
     - run: ./gradlew -DsparkVersions=3.1 build -x test -x javadoc -x integrationTest
 
   release:
+    needs: build-checks
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: '0'
+          fetch-depth: 0  # REQUIRED for git describe to find tags
       - uses: actions/setup-java@v4
         with:
           distribution: zulu
           java-version: 8
       - run: echo -e "$(ip addr show eth0 | grep "inet\b" | awk '{print $2}' | cut -d/ -f1)\t$(hostname -f) $(hostname -s)" | sudo tee -a /etc/hosts
 
+      - name: Build for release
+        run: ./gradlew -DsparkVersions=3.1 build -x test -x integrationTest
+
+      - name: Create and push version tag
+        id: create_tag
+        if: ${{ github.event_name == 'push'
+          && github.ref == 'refs/heads/openhouse-1.2.0'
+          && github.repository == 'linkedin/iceberg'
+          && !contains(toJSON(github.event.commits.*.message), '[skip release]') }}
+        run: ./ci-create-tag.sh
+        env:
+          GIT_USER_NAME: "GitHub Actions"
+          GIT_USER_EMAIL: "actions@github.com"
+
       - name: Perform release
         if: ${{ github.event_name == 'push'
           && github.ref == 'refs/heads/openhouse-1.2.0'
           && github.repository == 'linkedin/iceberg'
           && !contains(toJSON(github.event.commits.*.message), '[skip release]') }}
-        run: ./gradlew -DsparkVersions=3.1 githubRelease publishToSonatype closeAndReleaseStagingRepository -x test -x integrationTest
+        run: |
+          echo "Using version: ${{ steps.create_tag.outputs.NEW_VERSION }}"
+          ./gradlew githubRelease publishToSonatype closeAndReleaseStagingRepository \
+            -PciVersion="${{ steps.create_tag.outputs.NEW_VERSION }}" \
+            -DsparkVersions=3.1 \
+            -x test -x integrationTest
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-          SONATYPE_USER: ${{secrets.SONATYPE_USERNAME}}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONATYPE_USER: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PWD: ${{secrets.SONATYPE_PASSWORD}}
           PGP_KEY: ${{secrets.PGP_KEY}}
           PGP_PWD: ${{secrets.PGP_PWD}}
