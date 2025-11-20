@@ -410,7 +410,7 @@ public class TestHadoopCommits extends HadoopTableTestBase {
     Assertions.assertThat(tasks).as("Should scan 1 files").hasSize(1);
   }
 
-  //@Test
+  // @Test
   public void testConcurrentFastAppends(@TempDir File dir) throws Exception {
     Assertions.assertThat(version(1)).as("Should create v1 metadata").exists().isFile();
     int threadsCount = 5;
