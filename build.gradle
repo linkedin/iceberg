@@ -17,9 +17,8 @@
  * under the License.
  */
 
+
 import groovy.transform.Memoized
-import java.util.regex.Matcher
-import java.util.regex.Pattern
 
 buildscript {
   repositories {
@@ -982,23 +981,31 @@ String getVersionFromFile() {
 }
 
 String getProjectVersion() {
-  if (versionFileExists()) {
-    return getVersionFromFile()
+  // Check if CI has provided an explicit version via -PciVersion
+  if (project.hasProperty('ciVersion')) {
+    String version = project.property('ciVersion')
+    println "Version from CI:          ${version.padRight(27)}"
+    return version
   }
 
   try {
-    // we're fetching the version from the latest tag (prefixed with 'apache-iceberg-'),
-    // which can look like this: '0.13.0-2-g805400f0.dirty' but we're only interested in the MAJOR.MINOR.PATCH part
-    String version = gitVersion()
-    Pattern pattern = Pattern.compile("^([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?\$")
-    Matcher matcher = pattern.matcher(version)
-    if (matcher.matches()) {
-      // bump the MINOR version and always set the PATCH version to 0
-      return matcher.group(1) + "." + (Integer.valueOf(matcher.group(2)) + 1) + ".0-SNAPSHOT"
+    def stdout = new ByteArrayOutputStream()
+    exec {
+      commandLine 'git', 'describe', '--tags', '--abbrev=0'
+      standardOutput = stdout
     }
+    String version = stdout.toString().trim()
+    
+    // Remove 'v' prefix if present
+    if (version.startsWith('v')) {
+      version = version.substring(1)
+    }
+    
+    println "Version from git tag:     ${version.padRight(30)}"
     return version
   } catch (Exception e) {
-    throw new Exception("Neither version.txt nor git version exists: " + e.getMessage(), e)
+    logger.warn("Could not determine version from git: ${e.message}")
+    return "0.0.0-SNAPSHOT"
   }
 }
 
