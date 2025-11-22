@@ -36,7 +36,9 @@ class IcebergSparkSessionExtensions extends (SparkSessionExtensions => Unit) {
 
     // analyzer extensions
     extensions.injectResolutionRule { spark => ResolveProcedures(spark) }
-    extensions.injectResolutionRule { spark => ResolveViews(spark) }
+    // Disable Iceberg's custom view resolution to use Spark's native implementation.
+    // This is a temporary fix until `createView` is supported in `CoralSparkViewCatalog`.
+    // extensions.injectResolutionRule { spark => ResolveViews(spark) }
     extensions.injectResolutionRule { _ => ProcedureArgumentCoercion }
     extensions.injectCheckRule(_ => CheckViews)
 
