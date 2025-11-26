@@ -28,7 +28,6 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.UUID;
 import org.apache.iceberg.deletes.PositionDelete;
@@ -173,8 +172,9 @@ public class TableTestBase {
   protected File metadataDir = null;
   public TestTables.TestTable table = null;
 
-  private static final TestTableProvider EXTERNAL_TABLE_PROVIDER =
-      initializeExternalTableProvider();
+  // External table provider loaded via reflection to avoid compile-time dependency
+  private static final Object EXTERNAL_TABLE_PROVIDER = initializeExternalTableProvider();
+  private static final java.lang.reflect.Method CREATE_TABLE_METHOD = getCreateTableMethod();
 
   protected final int formatVersion;
 
@@ -208,10 +208,12 @@ public class TableTestBase {
   public static void shutdownExternalTableProvider() {
     if (EXTERNAL_TABLE_PROVIDER != null) {
       try {
-        EXTERNAL_TABLE_PROVIDER.afterAll();
+        java.lang.reflect.Method afterAll =
+            EXTERNAL_TABLE_PROVIDER.getClass().getMethod("afterAll");
+        afterAll.invoke(EXTERNAL_TABLE_PROVIDER);
       } catch (Exception e) {
         throw new RuntimeException(
-            "Failed to shutdown external TestTableProvider: "
+            "Failed to shutdown external table provider: "
                 + EXTERNAL_TABLE_PROVIDER.getClass().getName(),
             e);
       }
@@ -247,58 +249,48 @@ public class TableTestBase {
   }
 
   protected TestTables.TestTable create(Schema schema, PartitionSpec spec) {
-    if (EXTERNAL_TABLE_PROVIDER != null) {
-      return EXTERNAL_TABLE_PROVIDER.createTable(tableDir, "test", schema, spec, formatVersion);
+    if (EXTERNAL_TABLE_PROVIDER != null && CREATE_TABLE_METHOD != null) {
+      try {
+        Object result =
+            CREATE_TABLE_METHOD.invoke(
+                EXTERNAL_TABLE_PROVIDER, tableDir, "test", schema, spec, formatVersion);
+        return (TestTables.TestTable) result;
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to create table via external provider", e);
+      }
     }
     return TestTables.create(tableDir, "test", schema, spec, formatVersion);
   }
 
-  /**
-   * Loads table provider from external sources.
-   * Providers can be registered via:
-   * 1. System property: -Diceberg.test.table.provider=com.example.Provider
-   * 2. ServiceLoader: META-INF/services/org.apache.iceberg.TestTableProvider
-   */
-  private static TestTableProvider initializeExternalTableProvider() {
-    TestTableProvider provider = discoverExternalTableProvider();
-    if (provider != null) {
-      try {
-        provider.beforeAll();
-      } catch (Exception e) {
-        throw new RuntimeException(
-            "Failed to initialize external TestTableProvider: "
-                + provider.getClass().getName(),
-            e);
-      }
+  private static Object initializeExternalTableProvider() {
+    String providerClass = System.getProperty("iceberg.test.table.provider");
+    if (providerClass == null || providerClass.isEmpty()) {
+      return null;
     }
-    return provider;
+
+    try {
+      Object provider = Class.forName(providerClass).getDeclaredConstructor().newInstance();
+      // Call beforeAll() via reflection
+      java.lang.reflect.Method beforeAll = provider.getClass().getMethod("beforeAll");
+      beforeAll.invoke(provider);
+      return provider;
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to initialize " + providerClass, e);
+    }
   }
 
-  private static TestTableProvider discoverExternalTableProvider() {
-    // Option 1: System property
-    String providerClass = System.getProperty("iceberg.test.table.provider");
-    if (providerClass != null) {
-      try {
-        return (TestTableProvider)
-            Class.forName(providerClass).getDeclaredConstructor().newInstance();
-      } catch (Exception e) {
-        System.err.println("Failed to load table provider from system property: " + e.getMessage());
-        return null;
-      }
+  private static java.lang.reflect.Method getCreateTableMethod() {
+    if (EXTERNAL_TABLE_PROVIDER == null) {
+      return null;
     }
-    
-    // Option 2: ServiceLoader
     try {
-      ServiceLoader<TestTableProvider> loader = ServiceLoader.load(TestTableProvider.class);
-      Iterator<TestTableProvider> iterator = loader.iterator();
-      if (iterator.hasNext()) {
-        return iterator.next();
-      }
-    } catch (Exception e) {
-      System.err.println("Failed to load table provider via ServiceLoader: " + e.getMessage());
+      return EXTERNAL_TABLE_PROVIDER
+          .getClass()
+          .getMethod("createTable", File.class, String.class, Schema.class, PartitionSpec.class, int.class);
+    } catch (NoSuchMethodException e) {
+      throw new RuntimeException(
+          "External table provider must have createTable(File, String, Schema, PartitionSpec, int) method", e);
     }
-    
-    return null;
   }
 
   TestTables.TestTable load() {

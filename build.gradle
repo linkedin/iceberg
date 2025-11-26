@@ -349,13 +349,13 @@ project(':iceberg-core') {
     openhouseCompatibilityRuntime {
       canBeConsumed = false
       canBeResolved = true
-      description = 'Dependencies required for OpenHouse compatibility verification'
     }
   }
 
   test {
     useJUnitPlatform()
   }
+
   dependencies {
     api project(':iceberg-api')
     implementation project(':iceberg-common')
@@ -400,26 +400,28 @@ project(':iceberg-core') {
   tasks.register('openhouseCompatibilityTest', Test) {
     useJUnitPlatform()
     group = 'verification'
-    description = 'Runs the OpenHouse compatibility subset for iceberg-core'
+    description = 'Runs OpenHouse compatibility tests for iceberg-core'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath + configurations.openhouseCompatibilityRuntime
-    systemProperty "iceberg.test.table.provider",
+
+    systemProperty 'iceberg.test.table.provider',
         'org.apache.iceberg.openhouse.OpenHouseTestTableProvider'
+
     filter {
-      includeTestsMatching "org.apache.iceberg.TestWapWorkflow"
-      includeTestsMatching "org.apache.iceberg.TestFastAppend"
-      includeTestsMatching "org.apache.iceberg.TestMergeAppend"
-      includeTestsMatching "org.apache.iceberg.TestOverwrite"
-      includeTestsMatching "org.apache.iceberg.TestReplacePartitions"
-      includeTestsMatching "org.apache.iceberg.TestRowDelta"
-      includeTestsMatching "org.apache.iceberg.TestDeleteFiles"
-      includeTestsMatching "org.apache.iceberg.TestTransaction"
-      includeTestsMatching "org.apache.iceberg.TestCreateTransaction"
-      includeTestsMatching "org.apache.iceberg.TestRemoveSnapshots"
-      includeTestsMatching "org.apache.iceberg.TestSnapshot"
-      includeTestsMatching "org.apache.iceberg.TestSnapshotSelection"
-      includeTestsMatching "org.apache.iceberg.TestRewriteFiles"
-      includeTestsMatching "org.apache.iceberg.TestRewriteManifests"
+      includeTestsMatching 'org.apache.iceberg.TestWapWorkflow'
+      includeTestsMatching 'org.apache.iceberg.TestFastAppend'
+      includeTestsMatching 'org.apache.iceberg.TestMergeAppend'
+      includeTestsMatching 'org.apache.iceberg.TestOverwrite'
+      includeTestsMatching 'org.apache.iceberg.TestReplacePartitions'
+      includeTestsMatching 'org.apache.iceberg.TestRowDelta'
+      includeTestsMatching 'org.apache.iceberg.TestDeleteFiles'
+      includeTestsMatching 'org.apache.iceberg.TestTransaction'
+      includeTestsMatching 'org.apache.iceberg.TestCreateTransaction'
+      includeTestsMatching 'org.apache.iceberg.TestRemoveSnapshots'
+      includeTestsMatching 'org.apache.iceberg.TestSnapshot'
+      includeTestsMatching 'org.apache.iceberg.TestSnapshotSelection'
+      includeTestsMatching 'org.apache.iceberg.TestRewriteFiles'
+      includeTestsMatching 'org.apache.iceberg.TestRewriteManifests'
     }
   }
 }

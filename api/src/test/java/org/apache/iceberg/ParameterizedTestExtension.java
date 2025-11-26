@@ -125,33 +125,26 @@ public class ParameterizedTestExtension implements TestTemplateInvocationContext
             parameterProvider));
   }
 
+  /**
+   * Resolves the parameter provider method, preferring the most specific (child) class
+   * when multiple @Parameters methods exist in the hierarchy.
+   */
   private static Method resolveParameterProvider(
       Class<?> testClass, List<Method> parameterProviders) {
     if (parameterProviders.isEmpty()) {
       return null;
     }
-
-    Class<?> current = testClass;
-    while (current != null) {
-      Method selected = null;
-      for (Method candidate : parameterProviders) {
-        if (candidate.getDeclaringClass().equals(current)) {
-          if (selected != null) {
-            throw new IllegalStateException("Multiple parameter providers are found");
-          }
-          selected = candidate;
-        }
-      }
-
-      if (selected != null) {
-        return selected;
-      }
-
-      current = current.getSuperclass();
+    if (parameterProviders.size() == 1) {
+      return parameterProviders.get(0);
     }
 
-    if (parameterProviders.size() > 1) {
-      throw new IllegalStateException("Multiple parameter providers are found");
+    // Walk up the hierarchy, return the first match (most specific class)
+    for (Class<?> current = testClass; current != null; current = current.getSuperclass()) {
+      for (Method candidate : parameterProviders) {
+        if (candidate.getDeclaringClass().equals(current)) {
+          return candidate;
+        }
+      }
     }
 
     return parameterProviders.get(0);

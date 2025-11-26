@@ -27,6 +27,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
@@ -153,7 +154,9 @@ public abstract class TestBase extends SparkTestHelperBase {
     }
 
     // Fall back to SPI discovery
-    return ServiceLoader.load(TestSparkSessionProvider.class).findFirst().orElse(null);
+    Iterator<TestSparkSessionProvider> iterator =
+        ServiceLoader.load(TestSparkSessionProvider.class).iterator();
+    return iterator.hasNext() ? iterator.next() : null;
   }
 
   protected long waitUntilAfter(long timestampMillis) {
