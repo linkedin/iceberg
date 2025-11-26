@@ -27,11 +27,13 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.ServiceLoader;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.ContentFile;
@@ -59,11 +61,15 @@ import org.junit.jupiter.api.BeforeAll;
 
 public abstract class TestBase extends SparkTestHelperBase {
 
+  private static final String SPARK_SESSION_PROVIDER_PROPERTY =
+      "iceberg.test.spark.session.provider";
+
   protected static TestHiveMetastore metastore = null;
   protected static HiveConf hiveConf = null;
   protected static SparkSession spark = null;
   protected static JavaSparkContext sparkContext = null;
   protected static HiveCatalog catalog = null;
+  private static TestSparkSessionProvider sparkSessionProvider = null;
 
   @BeforeAll
   public static void startMetastoreAndSpark() {
@@ -71,14 +77,8 @@ public abstract class TestBase extends SparkTestHelperBase {
     metastore.start();
     TestBase.hiveConf = metastore.hiveConf();
 
-    TestBase.spark =
-        SparkSession.builder()
-            .master("local[2]")
-            .config(SQLConf.PARTITION_OVERWRITE_MODE().key(), "dynamic")
-            .config("spark.hadoop." + METASTOREURIS.varname, hiveConf.get(METASTOREURIS.varname))
-            .config("spark.sql.legacy.respectNullabilityInTextDatasetConversion", "true")
-            .enableHiveSupport()
-            .getOrCreate();
+    SparkSession.Builder defaultBuilder = createDefaultSparkBuilder(hiveConf);
+    TestBase.spark = buildSparkSession(defaultBuilder, hiveConf);
 
     TestBase.sparkContext = JavaSparkContext.fromSparkContext(spark.sparkContext());
 
@@ -105,6 +105,71 @@ public abstract class TestBase extends SparkTestHelperBase {
       spark.stop();
       TestBase.spark = null;
       TestBase.sparkContext = null;
+    }
+    if (sparkSessionProvider != null) {
+      try {
+        sparkSessionProvider.afterAll();
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to shutdown custom Spark session provider", e);
+      } finally {
+        sparkSessionProvider = null;
+      }
+    }
+  }
+
+  protected static SparkSession.Builder createDefaultSparkBuilder(HiveConf hiveConf) {
+    return SparkSession.builder()
+        .master("local[2]")
+        .config(SQLConf.PARTITION_OVERWRITE_MODE().key(), "dynamic")
+        .config("spark.hadoop." + METASTOREURIS.varname, hiveConf.get(METASTOREURIS.varname))
+        .config("spark.sql.legacy.respectNullabilityInTextDatasetConversion", "true")
+        .enableHiveSupport();
+  }
+
+  protected static SparkSession buildSparkSession(
+      SparkSession.Builder builder, HiveConf hiveConf) {
+    sparkSessionProvider = loadSparkSessionProvider();
+    if (sparkSessionProvider != null) {
+      try {
+        sparkSessionProvider.beforeAll();
+        SparkSession provided = sparkSessionProvider.createSparkSession(builder, hiveConf);
+        return provided != null ? provided : builder.getOrCreate();
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to initialize custom Spark session provider", e);
+      }
+    } else {
+      return builder.getOrCreate();
+    }
+  }
+
+  private static TestSparkSessionProvider loadSparkSessionProvider() {
+    String providerClass = System.getProperty(SPARK_SESSION_PROVIDER_PROPERTY);
+    if (providerClass != null && !providerClass.isEmpty()) {
+      return instantiateSparkSessionProvider(providerClass);
+    }
+
+    try {
+      ServiceLoader<TestSparkSessionProvider> loader =
+          ServiceLoader.load(TestSparkSessionProvider.class);
+      Iterator<TestSparkSessionProvider> iterator = loader.iterator();
+      if (iterator.hasNext()) {
+        return iterator.next();
+      }
+    } catch (Exception e) {
+      System.err.println(
+          "Failed to initialize ServiceLoader for TestSparkSessionProvider: " + e.getMessage());
+    }
+
+    return null;
+  }
+
+  private static TestSparkSessionProvider instantiateSparkSessionProvider(String className) {
+    try {
+      return (TestSparkSessionProvider)
+          Class.forName(className).getDeclaredConstructor().newInstance();
+    } catch (Exception e) {
+      throw new RuntimeException(
+          "Failed to instantiate TestSparkSessionProvider: " + className, e);
     }
   }
 

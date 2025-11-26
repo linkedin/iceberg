@@ -28,6 +28,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.UUID;
 import org.apache.iceberg.deletes.PositionDelete;
@@ -43,6 +44,7 @@ import org.apache.iceberg.relocated.com.google.common.io.Files;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -171,6 +173,9 @@ public class TableTestBase {
   protected File metadataDir = null;
   public TestTables.TestTable table = null;
 
+  private static final TestTableProvider EXTERNAL_TABLE_PROVIDER =
+      initializeExternalTableProvider();
+
   protected final int formatVersion;
 
   @SuppressWarnings("checkstyle:MemberName")
@@ -197,6 +202,20 @@ public class TableTestBase {
   @After
   public void cleanupTables() {
     TestTables.clearTables();
+  }
+
+  @AfterClass
+  public static void shutdownExternalTableProvider() {
+    if (EXTERNAL_TABLE_PROVIDER != null) {
+      try {
+        EXTERNAL_TABLE_PROVIDER.afterAll();
+      } catch (Exception e) {
+        throw new RuntimeException(
+            "Failed to shutdown external TestTableProvider: "
+                + EXTERNAL_TABLE_PROVIDER.getClass().getName(),
+            e);
+      }
+    }
   }
 
   List<File> listManifestFiles() {
@@ -228,7 +247,58 @@ public class TableTestBase {
   }
 
   protected TestTables.TestTable create(Schema schema, PartitionSpec spec) {
+    if (EXTERNAL_TABLE_PROVIDER != null) {
+      return EXTERNAL_TABLE_PROVIDER.createTable(tableDir, "test", schema, spec, formatVersion);
+    }
     return TestTables.create(tableDir, "test", schema, spec, formatVersion);
+  }
+
+  /**
+   * Loads table provider from external sources.
+   * Providers can be registered via:
+   * 1. System property: -Diceberg.test.table.provider=com.example.Provider
+   * 2. ServiceLoader: META-INF/services/org.apache.iceberg.TestTableProvider
+   */
+  private static TestTableProvider initializeExternalTableProvider() {
+    TestTableProvider provider = discoverExternalTableProvider();
+    if (provider != null) {
+      try {
+        provider.beforeAll();
+      } catch (Exception e) {
+        throw new RuntimeException(
+            "Failed to initialize external TestTableProvider: "
+                + provider.getClass().getName(),
+            e);
+      }
+    }
+    return provider;
+  }
+
+  private static TestTableProvider discoverExternalTableProvider() {
+    // Option 1: System property
+    String providerClass = System.getProperty("iceberg.test.table.provider");
+    if (providerClass != null) {
+      try {
+        return (TestTableProvider)
+            Class.forName(providerClass).getDeclaredConstructor().newInstance();
+      } catch (Exception e) {
+        System.err.println("Failed to load table provider from system property: " + e.getMessage());
+        return null;
+      }
+    }
+    
+    // Option 2: ServiceLoader
+    try {
+      ServiceLoader<TestTableProvider> loader = ServiceLoader.load(TestTableProvider.class);
+      Iterator<TestTableProvider> iterator = loader.iterator();
+      if (iterator.hasNext()) {
+        return iterator.next();
+      }
+    } catch (Exception e) {
+      System.err.println("Failed to load table provider via ServiceLoader: " + e.getMessage());
+    }
+    
+    return null;
   }
 
   TestTables.TestTable load() {

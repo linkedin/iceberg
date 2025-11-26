@@ -273,6 +273,12 @@ public class TestHiveMetastore {
   }
 
   private static void setupMetastoreDB(String dbURL) throws SQLException, IOException {
+    try {
+      Class.forName("org.apache.derby.jdbc.EmbeddedDriver");
+    } catch (ClassNotFoundException e) {
+      throw new SQLException("Unable to load Derby embedded driver", e);
+    }
+
     Connection connection = DriverManager.getConnection(dbURL);
     ScriptRunner scriptRunner = new ScriptRunner(connection, true, true);
 

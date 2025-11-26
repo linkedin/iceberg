@@ -1,0 +1,75 @@
+// OpenHouse compatibility test configuration for Spark modules
+
+configurations {
+  openhouseCompatibilityRuntime {
+    canBeConsumed = false
+    canBeResolved = true
+  }
+}
+
+dependencies {
+  openhouseCompatibilityRuntime(rootProject.openHouseCompatibilityCoordinate) {
+    transitive = false
+  }
+  openhouseCompatibilityRuntime project(':iceberg-aws')
+  openhouseCompatibilityRuntime 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.13.4'
+  openhouseCompatibilityRuntime 'com.google.code.gson:gson:2.10.1'
+  openhouseCompatibilityRuntime 'com.zaxxer:HikariCP:4.0.3'
+}
+
+tasks.register('openhouseCompatibilityTest', Test) {
+  useJUnitPlatform()
+  group = 'verification'
+  description = "Runs the OpenHouse compatibility suite for Spark ${sparkMajorVersion}"
+  maxHeapSize '2560m'
+  testClassesDirs = sourceSets.test.output.classesDirs
+  classpath = sourceSets.test.runtimeClasspath + configurations.openhouseCompatibilityRuntime
+
+  systemProperty "iceberg.test.spark.session.provider",
+      'org.apache.iceberg.spark.openhouse.OpenHouseSparkITestProvider'
+  systemProperty "iceberg.test.catalog.provider",
+      'org.apache.iceberg.spark.openhouse.OpenHouseSparkITestProvider'
+  systemProperty "iceberg.test.catalog.skip.defaults", "true"
+  systemProperty "spark.sql.sources.partitionOverwriteMode", "dynamic"
+  systemProperty "spark.sql.legacy.respectNullabilityInTextDatasetConversion", "true"
+  systemProperty "spark.driver.bindAddress", "127.0.0.1"
+
+  jvmArgs += [
+    '--add-opens=java.base/java.lang=ALL-UNNAMED',
+    '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+    '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
+    '--add-opens=java.base/java.io=ALL-UNNAMED',
+    '--add-opens=java.base/java.net=ALL-UNNAMED',
+    '--add-opens=java.base/java.nio=ALL-UNNAMED',
+    '--add-opens=java.base/java.util=ALL-UNNAMED',
+    '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+    '--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+    '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+    '--add-opens=java.base/sun.nio.cs=ALL-UNNAMED',
+    '--add-opens=java.base/sun.security.action=ALL-UNNAMED',
+    '--add-opens=java.base/sun.util.calendar=ALL-UNNAMED',
+    '--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED'
+  ]
+
+  filter {
+    includeTestsMatching "org.apache.iceberg.spark.sql.*"
+    includeTestsMatching "org.apache.iceberg.spark.actions.TestExpireSnapshotsAction"
+    includeTestsMatching "org.apache.iceberg.spark.source.TestSnapshotSelection"
+  }
+
+  // Load exclusions from the fixtures jar
+  doFirst {
+    configurations.openhouseCompatibilityRuntime.resolve().each { file ->
+      if (file.name.contains("tables-test-fixtures")) {
+        zipTree(file).matching { include "openhouse-incompatible-tests.txt" }.each { f ->
+          f.eachLine { line ->
+            line = line.trim()
+            if (line && !line.startsWith('#')) {
+              filter.excludeTestsMatching line
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -48,6 +48,12 @@ buildscript {
 String scalaVersion = System.getProperty("scalaVersion") != null ? System.getProperty("scalaVersion") : System.getProperty("defaultScalaVersion")
 String sparkVersionsString = System.getProperty("sparkVersions") != null ? System.getProperty("sparkVersions") : System.getProperty("defaultSparkVersions")
 List<String> sparkVersions = sparkVersionsString != null && !sparkVersionsString.isEmpty() ? sparkVersionsString.split(",") : []
+// OpenHouse compatibility testing configuration
+String openHouseCompatibilitySparkMajorVersion = findProperty("openhouseCompatibilitySparkMajorVersion") ?: '3.5'
+ext {
+  openHouseCompatibilityCoordinate = findProperty("openhouseCompatibilityCoordinate") ?:
+      'com.linkedin.openhouse:tables-test-fixtures-iceberg-1.5_2.12:0.0.+:uber'
+}
 
 try {
   // apply these plugins in a try-catch block so that we can handle cases without .git directory
@@ -128,6 +134,10 @@ allprojects {
   repositories {
     mavenCentral()
     mavenLocal()
+    // LinkedIn OpenHouse artifacts for compatibility testing
+    maven {
+      url "https://linkedin.jfrog.io/artifactory/openhouse"
+    }
   }
 }
 
@@ -335,6 +345,14 @@ project(':iceberg-common') {
 }
 
 project(':iceberg-core') {
+  configurations {
+    openhouseCompatibilityRuntime {
+      canBeConsumed = false
+      canBeResolved = true
+      description = 'Dependencies required for OpenHouse compatibility verification'
+    }
+  }
+
   test {
     useJUnitPlatform()
   }
@@ -370,6 +388,39 @@ project(':iceberg-core') {
     testImplementation libs.esotericsoftware.kryo
     testImplementation libs.guava.testlib
     testImplementation libs.awaitility
+
+    openhouseCompatibilityRuntime(rootProject.openHouseCompatibilityCoordinate) {
+      transitive = false
+    }
+    openhouseCompatibilityRuntime project(':iceberg-aws')
+    openhouseCompatibilityRuntime 'com.google.code.gson:gson:2.10.1'
+    openhouseCompatibilityRuntime 'com.zaxxer:HikariCP:4.0.3'
+  }
+
+  tasks.register('openhouseCompatibilityTest', Test) {
+    useJUnitPlatform()
+    group = 'verification'
+    description = 'Runs the OpenHouse compatibility subset for iceberg-core'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath + configurations.openhouseCompatibilityRuntime
+    systemProperty "iceberg.test.table.provider",
+        'org.apache.iceberg.openhouse.OpenHouseTestTableProvider'
+    filter {
+      includeTestsMatching "org.apache.iceberg.TestWapWorkflow"
+      includeTestsMatching "org.apache.iceberg.TestFastAppend"
+      includeTestsMatching "org.apache.iceberg.TestMergeAppend"
+      includeTestsMatching "org.apache.iceberg.TestOverwrite"
+      includeTestsMatching "org.apache.iceberg.TestReplacePartitions"
+      includeTestsMatching "org.apache.iceberg.TestRowDelta"
+      includeTestsMatching "org.apache.iceberg.TestDeleteFiles"
+      includeTestsMatching "org.apache.iceberg.TestTransaction"
+      includeTestsMatching "org.apache.iceberg.TestCreateTransaction"
+      includeTestsMatching "org.apache.iceberg.TestRemoveSnapshots"
+      includeTestsMatching "org.apache.iceberg.TestSnapshot"
+      includeTestsMatching "org.apache.iceberg.TestSnapshotSelection"
+      includeTestsMatching "org.apache.iceberg.TestRewriteFiles"
+      includeTestsMatching "org.apache.iceberg.TestRewriteManifests"
+    }
   }
 }
 
@@ -1029,6 +1080,13 @@ apply from: 'jmh.gradle'
 apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
 apply from: 'tasks.gradle'
+
+tasks.register('openhouseCompatibility') {
+  group = "verification"
+  description = "Runs all OpenHouse compatibility tests"
+  dependsOn project(':iceberg-core').tasks.openhouseCompatibilityTest
+  dependsOn project(":iceberg-spark:iceberg-spark-${openHouseCompatibilitySparkMajorVersion}_${scalaVersion}").tasks.openhouseCompatibilityTest
+}
 
 project(':iceberg-bom') {
   apply plugin: 'java-platform'

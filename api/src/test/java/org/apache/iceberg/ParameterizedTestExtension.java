@@ -70,18 +70,16 @@ public class ParameterizedTestExtension implements TestTemplateInvocationContext
   public Stream<TestTemplateInvocationContext> provideTestTemplateInvocationContexts(
       ExtensionContext context) {
 
-    // Search method annotated with @Parameters
+    // Search for methods annotated with @Parameters, preferring the most specific class
     final List<Method> parameterProviders =
         AnnotationSupport.findAnnotatedMethods(
             context.getRequiredTestClass(), Parameters.class, HierarchyTraversalMode.TOP_DOWN);
-    if (parameterProviders.isEmpty()) {
+    Method parameterProvider =
+        resolveParameterProvider(context.getRequiredTestClass(), parameterProviders);
+    if (parameterProvider == null) {
       throw new IllegalStateException("Cannot find any parameter provider");
     }
-    if (parameterProviders.size() > 1) {
-      throw new IllegalStateException("Multiple parameter providers are found");
-    }
 
-    Method parameterProvider = parameterProviders.get(0);
     // Get potential test name
     String testNameTemplate = parameterProvider.getAnnotation(Parameters.class).name();
 
@@ -125,6 +123,38 @@ public class ParameterizedTestExtension implements TestTemplateInvocationContext
         String.format(
             "Return type of @Parameters annotated method \"%s\" should be either Object[][] or Collection",
             parameterProvider));
+  }
+
+  private static Method resolveParameterProvider(
+      Class<?> testClass, List<Method> parameterProviders) {
+    if (parameterProviders.isEmpty()) {
+      return null;
+    }
+
+    Class<?> current = testClass;
+    while (current != null) {
+      Method selected = null;
+      for (Method candidate : parameterProviders) {
+        if (candidate.getDeclaringClass().equals(current)) {
+          if (selected != null) {
+            throw new IllegalStateException("Multiple parameter providers are found");
+          }
+          selected = candidate;
+        }
+      }
+
+      if (selected != null) {
+        return selected;
+      }
+
+      current = current.getSuperclass();
+    }
+
+    if (parameterProviders.size() > 1) {
+      throw new IllegalStateException("Multiple parameter providers are found");
+    }
+
+    return parameterProviders.get(0);
   }
 
   private static class FieldInjectingInvocationContext implements TestTemplateInvocationContext {

@@ -19,35 +19,59 @@
 package org.apache.iceberg.spark;
 
 import java.nio.file.Path;
-import org.apache.iceberg.ParameterizedTestExtension;
-import org.apache.iceberg.Parameters;
-import org.junit.jupiter.api.extension.ExtendWith;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.io.TempDir;
 
-@ExtendWith(ParameterizedTestExtension.class)
 public abstract class CatalogTestBase extends TestBaseWithCatalog {
 
-  // these parameters are broken out to avoid changes that need to modify lots of test suites
-  @Parameters(name = "catalogName = {0}, implementation = {1}, config = {2}")
-  protected static Object[][] parameters() {
-    return new Object[][] {
-      {
-        SparkCatalogConfig.HIVE.catalogName(),
-        SparkCatalogConfig.HIVE.implementation(),
-        SparkCatalogConfig.HIVE.properties()
-      },
-      {
-        SparkCatalogConfig.HADOOP.catalogName(),
-        SparkCatalogConfig.HADOOP.implementation(),
-        SparkCatalogConfig.HADOOP.properties()
-      },
-      {
-        SparkCatalogConfig.SPARK.catalogName(),
-        SparkCatalogConfig.SPARK.implementation(),
-        SparkCatalogConfig.SPARK.properties()
-      }
-    };
-  }
-
   @TempDir protected Path temp;
+
+  // these parameters are broken out to avoid changes that need to modify lots of test suites
+  protected static Object[][] baseCatalogParameters() {
+    List<Object[]> params = new ArrayList<>();
+
+    // Check if we should skip default catalogs
+    boolean skipDefaults = Boolean.getBoolean("iceberg.test.catalog.skip.defaults");
+
+    // Load external catalog provider if specified
+    String providerClassName = System.getProperty("iceberg.test.catalog.provider");
+    if (providerClassName != null) {
+      try {
+        TestCatalogProvider provider =
+            (TestCatalogProvider)
+                Class.forName(providerClassName).getDeclaredConstructor().newInstance();
+        // Must call beforeAll() to initialize the provider (e.g., start servers)
+        provider.beforeAll();
+        params.addAll(Arrays.asList(provider.getCatalogConfigurations()));
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to load catalog provider: " + providerClassName, e);
+      }
+    }
+
+    // Add default catalogs unless skipped
+    if (!skipDefaults) {
+      params.add(
+          new Object[] {
+            SparkCatalogConfig.HIVE.catalogName(),
+            SparkCatalogConfig.HIVE.implementation(),
+            SparkCatalogConfig.HIVE.properties()
+          });
+      params.add(
+          new Object[] {
+            SparkCatalogConfig.HADOOP.catalogName(),
+            SparkCatalogConfig.HADOOP.implementation(),
+            SparkCatalogConfig.HADOOP.properties()
+          });
+      params.add(
+          new Object[] {
+            SparkCatalogConfig.SPARK.catalogName(),
+            SparkCatalogConfig.SPARK.implementation(),
+            SparkCatalogConfig.SPARK.properties()
+          });
+    }
+
+    return params.toArray(new Object[0][]);
+  }
 }

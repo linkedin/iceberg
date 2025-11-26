@@ -22,10 +22,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.Parameter;
 import org.apache.iceberg.ParameterizedTestExtension;
 import org.apache.iceberg.Parameters;
@@ -37,6 +44,7 @@ import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopCatalog;
 import org.apache.iceberg.util.PropertyUtil;
+import org.apache.spark.sql.internal.SQLConf;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,6 +57,15 @@ public abstract class TestBaseWithCatalog extends TestBase {
 
   @Parameters(name = "catalogName = {0}, implementation = {1}, config = {2}")
   protected static Object[][] parameters() {
+    List<Object[]> params = new ArrayList<>();
+    if (!Boolean.getBoolean("iceberg.test.catalog.skip.defaults")) {
+      params.addAll(Arrays.asList(baseCatalogParameters()));
+    }
+    params.addAll(Arrays.asList(loadExternalCatalogs()));
+    return params.toArray(new Object[0][]);
+  }
+
+  protected static Object[][] baseCatalogParameters() {
     return new Object[][] {
       {
         SparkCatalogConfig.HADOOP.catalogName(),
@@ -56,6 +73,44 @@ public abstract class TestBaseWithCatalog extends TestBase {
         SparkCatalogConfig.HADOOP.properties()
       },
     };
+  }
+
+  private static Object[][] loadExternalCatalogs() {
+    List<Object[]> externalCatalogs = new ArrayList<>();
+
+    // Option 1: System property
+    String providerClass = System.getProperty("iceberg.test.catalog.provider");
+    if (providerClass != null) {
+      try {
+        TestCatalogProvider provider =
+            (TestCatalogProvider)
+                Class.forName(providerClass).getDeclaredConstructor().newInstance();
+        provider.beforeAll();
+        externalCatalogs.addAll(Arrays.asList(provider.getCatalogConfigurations()));
+      } catch (Exception e) {
+        System.err.println(
+            "Failed to load catalog provider from system property: " + e.getMessage());
+      }
+    }
+
+    // Option 2: ServiceLoader
+    try {
+      ServiceLoader<TestCatalogProvider> loader = ServiceLoader.load(TestCatalogProvider.class);
+      Iterator<TestCatalogProvider> iterator = loader.iterator();
+      while (iterator.hasNext()) {
+        try {
+          TestCatalogProvider provider = iterator.next();
+          provider.beforeAll();
+          externalCatalogs.addAll(Arrays.asList(provider.getCatalogConfigurations()));
+        } catch (Exception e) {
+          System.err.println("Failed to load catalog provider via ServiceLoader: " + e.getMessage());
+        }
+      }
+    } catch (Exception e) {
+      System.err.println("Failed to initialize ServiceLoader for TestCatalogProvider: " + e.getMessage());
+    }
+
+    return externalCatalogs.toArray(new Object[0][]);
   }
 
   @BeforeAll
@@ -91,15 +146,21 @@ public abstract class TestBaseWithCatalog extends TestBase {
 
   @BeforeEach
   public void before() {
-    this.validationCatalog =
-        catalogName.equals("testhadoop")
-            ? new HadoopCatalog(spark.sessionState().newHadoopConf(), "file:" + warehouse)
-            : catalog;
+    Catalog configuredValidationCatalog =
+        loadConfiguredValidationCatalog(catalogName, catalogConfig);
+    if (configuredValidationCatalog != null) {
+      this.validationCatalog = configuredValidationCatalog;
+    } else {
+      this.validationCatalog =
+          catalogName.equals("testhadoop")
+              ? new HadoopCatalog(spark.sessionState().newHadoopConf(), "file:" + warehouse)
+              : catalog;
+    }
     this.validationNamespaceCatalog = (SupportsNamespaces) validationCatalog;
 
-    spark.conf().set("spark.sql.catalog." + catalogName, implementation);
+    setCatalogConf("spark.sql.catalog." + catalogName, implementation);
     catalogConfig.forEach(
-        (key, value) -> spark.conf().set("spark.sql.catalog." + catalogName + "." + key, value));
+        (key, value) -> setCatalogConf("spark.sql.catalog." + catalogName + "." + key, value));
 
     if ("hadoop".equalsIgnoreCase(catalogConfig.get("type"))) {
       spark.conf().set("spark.sql.catalog." + catalogName + ".warehouse", "file:" + warehouse);
@@ -140,5 +201,25 @@ public abstract class TestBaseWithCatalog extends TestBase {
         planningMode.modeName(),
         TableProperties.DELETE_PLANNING_MODE,
         planningMode.modeName());
+  }
+
+  private Catalog loadConfiguredValidationCatalog(String name, Map<String, String> configuration) {
+    String catalogImpl = configuration.get(CatalogProperties.CATALOG_IMPL);
+    if (catalogImpl == null || catalogImpl.isEmpty()) {
+      return null;
+    }
+
+    Map<String, String> configCopy = new HashMap<>(configuration);
+    return CatalogUtil.loadCatalog(
+        catalogImpl, name + "-validation", configCopy, spark.sessionState().newHadoopConf());
+  }
+
+  private void setCatalogConf(String key, String value) {
+    spark.conf().set(key, value);
+    try {
+      SQLConf.get().setConfString(key, value);
+    } catch (IllegalArgumentException e) {
+      // Some keys may not be valid SQLConf keys, which is fine
+    }
   }
 }
