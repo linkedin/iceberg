@@ -1,13 +1,16 @@
 // OpenHouse compatibility test configuration for Spark modules
+// Applied to spark modules that need OpenHouse integration testing
 
 configurations {
   openhouseCompatibilityRuntime {
     canBeConsumed = false
     canBeResolved = true
+    description = 'Runtime dependencies for OpenHouse compatibility tests'
   }
 }
 
 dependencies {
+  // Uber jar with transitive=false to avoid classpath conflicts
   openhouseCompatibilityRuntime(rootProject.openHouseCompatibilityCoordinate) {
     transitive = false
   }
@@ -18,22 +21,28 @@ dependencies {
 }
 
 tasks.register('openhouseCompatibilityTest', Test) {
-  useJUnitPlatform()
   group = 'verification'
-  description = "Runs the OpenHouse compatibility suite for Spark ${sparkMajorVersion}"
+  description = "Run Iceberg tests against OpenHouse catalog (Spark ${sparkMajorVersion})"
+
+  useJUnitPlatform()
   maxHeapSize '2560m'
+
   testClassesDirs = sourceSets.test.output.classesDirs
   classpath = sourceSets.test.runtimeClasspath + configurations.openhouseCompatibilityRuntime
 
-  systemProperty "iceberg.test.spark.session.provider",
+  // Configure SPI providers
+  systemProperty 'iceberg.test.spark.session.provider',
       'org.apache.iceberg.spark.openhouse.OpenHouseSparkITestProvider'
-  systemProperty "iceberg.test.catalog.provider",
+  systemProperty 'iceberg.test.catalog.provider',
       'org.apache.iceberg.spark.openhouse.OpenHouseSparkITestProvider'
-  systemProperty "iceberg.test.catalog.skip.defaults", "true"
-  systemProperty "spark.sql.sources.partitionOverwriteMode", "dynamic"
-  systemProperty "spark.sql.legacy.respectNullabilityInTextDatasetConversion", "true"
-  systemProperty "spark.driver.bindAddress", "127.0.0.1"
+  systemProperty 'iceberg.test.catalog.skip.defaults', 'true'
 
+  // Spark configuration
+  systemProperty 'spark.sql.sources.partitionOverwriteMode', 'dynamic'
+  systemProperty 'spark.sql.legacy.respectNullabilityInTextDatasetConversion', 'true'
+  systemProperty 'spark.driver.bindAddress', '127.0.0.1'
+
+  // JVM args for Java 17+ compatibility
   jvmArgs += [
     '--add-opens=java.base/java.lang=ALL-UNNAMED',
     '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
@@ -51,17 +60,18 @@ tasks.register('openhouseCompatibilityTest', Test) {
     '--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED'
   ]
 
+  // Test filter - include SQL tests and specific action/source tests
   filter {
-    includeTestsMatching "org.apache.iceberg.spark.sql.*"
-    includeTestsMatching "org.apache.iceberg.spark.actions.TestExpireSnapshotsAction"
-    includeTestsMatching "org.apache.iceberg.spark.source.TestSnapshotSelection"
+    includeTestsMatching 'org.apache.iceberg.spark.sql.*'
+    includeTestsMatching 'org.apache.iceberg.spark.actions.TestExpireSnapshotsAction'
+    includeTestsMatching 'org.apache.iceberg.spark.source.TestSnapshotSelection'
   }
 
-  // Load exclusions from the fixtures jar
+  // Load exclusions from the fixtures jar at execution time
   doFirst {
     configurations.openhouseCompatibilityRuntime.resolve().each { file ->
-      if (file.name.contains("tables-test-fixtures")) {
-        zipTree(file).matching { include "openhouse-incompatible-tests.txt" }.each { f ->
+      if (file.name.contains('tables-test-fixtures')) {
+        zipTree(file).matching { include 'openhouse-incompatible-tests.txt' }.each { f ->
           f.eachLine { line ->
             line = line.trim()
             if (line && !line.startsWith('#')) {

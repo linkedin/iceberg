@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
@@ -53,19 +52,33 @@ import org.junit.jupiter.api.io.TempDir;
 
 @ExtendWith(ParameterizedTestExtension.class)
 public abstract class TestBaseWithCatalog extends TestBase {
+
+  private static final String CATALOG_PROVIDER_PROPERTY = "iceberg.test.catalog.provider";
+  private static final String SKIP_DEFAULTS_PROPERTY = "iceberg.test.catalog.skip.defaults";
+
   protected static File warehouse = null;
 
   @Parameters(name = "catalogName = {0}, implementation = {1}, config = {2}")
   protected static Object[][] parameters() {
     List<Object[]> params = new ArrayList<>();
-    if (!Boolean.getBoolean("iceberg.test.catalog.skip.defaults")) {
-      params.addAll(Arrays.asList(baseCatalogParameters()));
+
+    if (!Boolean.getBoolean(SKIP_DEFAULTS_PROPERTY)) {
+      params.addAll(Arrays.asList(defaultCatalogParameters()));
     }
-    params.addAll(Arrays.asList(loadExternalCatalogs()));
+
+    loadExternalCatalogProviders().forEach(provider -> {
+      try {
+        provider.beforeAll();
+        params.addAll(Arrays.asList(provider.getCatalogConfigurations()));
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to initialize catalog provider: " + provider, e);
+      }
+    });
+
     return params.toArray(new Object[0][]);
   }
 
-  protected static Object[][] baseCatalogParameters() {
+  protected static Object[][] defaultCatalogParameters() {
     return new Object[][] {
       {
         SparkCatalogConfig.HADOOP.catalogName(),
@@ -75,42 +88,25 @@ public abstract class TestBaseWithCatalog extends TestBase {
     };
   }
 
-  private static Object[][] loadExternalCatalogs() {
-    List<Object[]> externalCatalogs = new ArrayList<>();
+  private static List<TestCatalogProvider> loadExternalCatalogProviders() {
+    List<TestCatalogProvider> providers = new ArrayList<>();
 
-    // Option 1: System property
-    String providerClass = System.getProperty("iceberg.test.catalog.provider");
-    if (providerClass != null) {
+    // System property takes precedence
+    String providerClass = System.getProperty(CATALOG_PROVIDER_PROPERTY);
+    if (providerClass != null && !providerClass.isEmpty()) {
       try {
-        TestCatalogProvider provider =
+        providers.add(
             (TestCatalogProvider)
-                Class.forName(providerClass).getDeclaredConstructor().newInstance();
-        provider.beforeAll();
-        externalCatalogs.addAll(Arrays.asList(provider.getCatalogConfigurations()));
-      } catch (Exception e) {
-        System.err.println(
-            "Failed to load catalog provider from system property: " + e.getMessage());
+                Class.forName(providerClass).getDeclaredConstructor().newInstance());
+      } catch (ReflectiveOperationException e) {
+        throw new RuntimeException("Failed to instantiate " + providerClass, e);
       }
     }
 
-    // Option 2: ServiceLoader
-    try {
-      ServiceLoader<TestCatalogProvider> loader = ServiceLoader.load(TestCatalogProvider.class);
-      Iterator<TestCatalogProvider> iterator = loader.iterator();
-      while (iterator.hasNext()) {
-        try {
-          TestCatalogProvider provider = iterator.next();
-          provider.beforeAll();
-          externalCatalogs.addAll(Arrays.asList(provider.getCatalogConfigurations()));
-        } catch (Exception e) {
-          System.err.println("Failed to load catalog provider via ServiceLoader: " + e.getMessage());
-        }
-      }
-    } catch (Exception e) {
-      System.err.println("Failed to initialize ServiceLoader for TestCatalogProvider: " + e.getMessage());
-    }
+    // SPI discovery
+    ServiceLoader.load(TestCatalogProvider.class).forEach(providers::add);
 
-    return externalCatalogs.toArray(new Object[0][]);
+    return providers;
   }
 
   @BeforeAll
@@ -146,30 +142,49 @@ public abstract class TestBaseWithCatalog extends TestBase {
 
   @BeforeEach
   public void before() {
-    Catalog configuredValidationCatalog =
-        loadConfiguredValidationCatalog(catalogName, catalogConfig);
-    if (configuredValidationCatalog != null) {
-      this.validationCatalog = configuredValidationCatalog;
-    } else {
-      this.validationCatalog =
-          catalogName.equals("testhadoop")
-              ? new HadoopCatalog(spark.sessionState().newHadoopConf(), "file:" + warehouse)
-              : catalog;
-    }
+    this.validationCatalog = createValidationCatalog();
     this.validationNamespaceCatalog = (SupportsNamespaces) validationCatalog;
 
-    setCatalogConf("spark.sql.catalog." + catalogName, implementation);
-    catalogConfig.forEach(
-        (key, value) -> setCatalogConf("spark.sql.catalog." + catalogName + "." + key, value));
-
-    if ("hadoop".equalsIgnoreCase(catalogConfig.get("type"))) {
-      spark.conf().set("spark.sql.catalog." + catalogName + ".warehouse", "file:" + warehouse);
-    }
+    configureCatalog();
 
     this.tableName =
         (catalogName.equals("spark_catalog") ? "" : catalogName + ".") + "default.table";
 
     sql("CREATE NAMESPACE IF NOT EXISTS default");
+  }
+
+  private Catalog createValidationCatalog() {
+    String catalogImpl = catalogConfig.get(CatalogProperties.CATALOG_IMPL);
+    if (catalogImpl != null && !catalogImpl.isEmpty()) {
+      return CatalogUtil.loadCatalog(
+          catalogImpl,
+          catalogName + "-validation",
+          new HashMap<>(catalogConfig),
+          spark.sessionState().newHadoopConf());
+    }
+
+    return catalogName.equals("testhadoop")
+        ? new HadoopCatalog(spark.sessionState().newHadoopConf(), "file:" + warehouse)
+        : catalog;
+  }
+
+  private void configureCatalog() {
+    setSparkConf("spark.sql.catalog." + catalogName, implementation);
+    catalogConfig.forEach(
+        (key, value) -> setSparkConf("spark.sql.catalog." + catalogName + "." + key, value));
+
+    if ("hadoop".equalsIgnoreCase(catalogConfig.get("type"))) {
+      spark.conf().set("spark.sql.catalog." + catalogName + ".warehouse", "file:" + warehouse);
+    }
+  }
+
+  private void setSparkConf(String key, String value) {
+    spark.conf().set(key, value);
+    try {
+      SQLConf.get().setConfString(key, value);
+    } catch (IllegalArgumentException ignored) {
+      // Some keys may not be valid SQLConf keys
+    }
   }
 
   protected String tableName(String name) {
@@ -201,25 +216,5 @@ public abstract class TestBaseWithCatalog extends TestBase {
         planningMode.modeName(),
         TableProperties.DELETE_PLANNING_MODE,
         planningMode.modeName());
-  }
-
-  private Catalog loadConfiguredValidationCatalog(String name, Map<String, String> configuration) {
-    String catalogImpl = configuration.get(CatalogProperties.CATALOG_IMPL);
-    if (catalogImpl == null || catalogImpl.isEmpty()) {
-      return null;
-    }
-
-    Map<String, String> configCopy = new HashMap<>(configuration);
-    return CatalogUtil.loadCatalog(
-        catalogImpl, name + "-validation", configCopy, spark.sessionState().newHadoopConf());
-  }
-
-  private void setCatalogConf(String key, String value) {
-    spark.conf().set(key, value);
-    try {
-      SQLConf.get().setConfString(key, value);
-    } catch (IllegalArgumentException e) {
-      // Some keys may not be valid SQLConf keys, which is fine
-    }
   }
 }

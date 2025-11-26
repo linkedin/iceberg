@@ -52,14 +52,6 @@ project(":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}") {
     }
   }
 
-  configurations {
-    openhouseCompatibilityRuntime {
-      canBeConsumed = false
-      canBeResolved = true
-      description = 'Dependencies required for OpenHouse compatibility verification'
-    }
-  }
-
   dependencies {
     implementation project(path: ':iceberg-bundled-guava', configuration: 'shadow')
     api project(':iceberg-api')
@@ -115,16 +107,6 @@ project(":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}") {
     testImplementation project(path: ':iceberg-data', configuration: 'testArtifacts')
     testImplementation libs.sqlite.jdbc
     testImplementation libs.awaitility
-
-    // OpenHouse compatibility testing dependencies - uber jar with transitive=false
-    // avoids classpath conflicts since the jar is self-contained with shaded dependencies
-    openhouseCompatibilityRuntime(rootProject.openHouseCompatibilityCoordinate) {
-      transitive = false
-    }
-    openhouseCompatibilityRuntime project(':iceberg-aws')
-    openhouseCompatibilityRuntime 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.13.4'
-    openhouseCompatibilityRuntime 'com.google.code.gson:gson:2.10.1'
-    openhouseCompatibilityRuntime 'com.zaxxer:HikariCP:4.0.3'
   }
 
   test {
