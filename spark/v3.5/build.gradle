@@ -19,37 +19,6 @@
 
 String sparkMajorVersion = '3.5'
 String scalaVersion = System.getProperty("scalaVersion") != null ? System.getProperty("scalaVersion") : System.getProperty("defaultScalaVersion")
-String openHouseFixturesCoordinate = gradle.startParameter.systemPropertiesArgs.get("openhouseFixturesCoordinate")
-if (openHouseFixturesCoordinate != null) {
-  // The OpenHouse fixture is published as an executable Spring Boot jar by default. When consumers
-  // use it as a library we need the "-lib" (a.k.a. "uber") classifier that exposes the plain class
-  // files on the classpath. Automatically add the classifier when the caller only provides
-  // the typical groupId:artifactId:version coordinate.
-  int colonCount = openHouseFixturesCoordinate.count(":")
-  if (colonCount == 2) {
-    openHouseFixturesCoordinate = openHouseFixturesCoordinate + ":uber"
-  }
-}
-
-def sparkSessionProviderValue =
-    gradle.startParameter.systemPropertiesArgs.get("iceberg.test.spark.session.provider")
-def catalogProviderValue =
-    gradle.startParameter.systemPropertiesArgs.get("iceberg.test.catalog.provider")
-
-def skipDefaultCatalogsValue =
-    gradle.startParameter.systemPropertiesArgs.get("iceberg.test.catalog.skip.defaults")
-
-if (openHouseFixturesCoordinate != null) {
-  if (sparkSessionProviderValue == null || sparkSessionProviderValue.isEmpty()) {
-    sparkSessionProviderValue = 'org.apache.iceberg.spark.openhouse.OpenHouseSparkITestProvider'
-  }
-  if (catalogProviderValue == null || catalogProviderValue.isEmpty()) {
-    catalogProviderValue = 'org.apache.iceberg.spark.openhouse.OpenHouseSparkITestProvider'
-  }
-  if (skipDefaultCatalogsValue == null || skipDefaultCatalogsValue.isEmpty()) {
-    skipDefaultCatalogsValue = 'true'
-  }
-}
 
 def sparkProjects = [
     project(":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}"),
@@ -147,21 +116,8 @@ project(":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}") {
     testImplementation libs.sqlite.jdbc
     testImplementation libs.awaitility
 
-    if (openHouseFixturesCoordinate != null) {
-      testRuntimeOnly(openHouseFixturesCoordinate) {
-        exclude group: 'org.apache.iceberg'
-        exclude group: 'com.linkedin.iceberg'
-        exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j2-impl'
-        exclude group: 'org.apache.logging.log4j', module: 'log4j-to-slf4j'
-        exclude group: 'com.fasterxml.jackson.core'
-        exclude group: 'com.fasterxml.jackson.module'
-        exclude group: 'com.fasterxml.jackson.datatype'
-        exclude group: 'com.fasterxml.jackson.dataformat'
-      }
-      testRuntimeOnly project(':iceberg-aws')
-      testRuntimeOnly 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.13.4'
-    }
-
+    // OpenHouse compatibility testing dependencies - uber jar with transitive=false
+    // avoids classpath conflicts since the jar is self-contained with shaded dependencies
     openhouseCompatibilityRuntime(rootProject.openHouseCompatibilityCoordinate) {
       transitive = false
     }
@@ -171,14 +127,6 @@ project(":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}") {
     openhouseCompatibilityRuntime 'com.zaxxer:HikariCP:4.0.3'
   }
 
-  if (openHouseFixturesCoordinate != null) {
-    configurations {
-      testRuntimeClasspath {
-        exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j2-impl'
-      }
-    }
-  }
-
   test {
     useJUnitPlatform()
   }
@@ -186,17 +134,6 @@ project(":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}") {
   tasks.withType(Test).configureEach {
     // Vectorized reads need more memory
     maxHeapSize '2560m'
-
-    if (sparkSessionProviderValue != null && !sparkSessionProviderValue.isEmpty()) {
-      systemProperty "iceberg.test.spark.session.provider", sparkSessionProviderValue
-    }
-
-    if (catalogProviderValue != null && !catalogProviderValue.isEmpty()) {
-      systemProperty "iceberg.test.catalog.provider", catalogProviderValue
-    }
-    if (skipDefaultCatalogsValue != null && !skipDefaultCatalogsValue.isEmpty()) {
-      systemProperty "iceberg.test.catalog.skip.defaults", skipDefaultCatalogsValue
-    }
   }
 
   apply from: "$projectDir/../../openhouse.gradle"
@@ -300,12 +237,6 @@ project(":iceberg-spark:iceberg-spark-runtime-${sparkMajorVersion}_${scalaVersio
       exclude group: 'org.scala-lang'
       exclude group: 'org.scala-lang.modules'
     }
-
-    integrationImplementation {
-      // Log4j routing is handled via slf4j-simple/log4j-to-slf4j. Drop Spark's slf4j2 bridge to
-      // avoid Log4j enforcing mutual exclusivity at runtime.
-      exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j2-impl'
-    }
   }
 
   dependencies {
@@ -338,15 +269,6 @@ project(":iceberg-spark:iceberg-spark-runtime-${sparkMajorVersion}_${scalaVersio
     integrationImplementation project(path: ':iceberg-hive-metastore', configuration: 'testArtifacts')
     integrationImplementation project(path: ":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}", configuration: 'testArtifacts')
     integrationImplementation project(path: ":iceberg-spark:iceberg-spark-extensions-${sparkMajorVersion}_${scalaVersion}", configuration: 'testArtifacts')
-    if (openHouseFixturesCoordinate != null) {
-      integrationImplementation(openHouseFixturesCoordinate) {
-        // The fixtures already include Iceberg bits transitively; drop them to avoid conflicts
-        exclude group: 'org.apache.iceberg'
-      exclude group: 'com.linkedin.iceberg'
-        // Avoid conflicting SLF4J bridges; Iceberg already routes logging through log4j-to-slf4j
-        exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j2-impl'
-      }
-    }
     // Not allowed on our classpath, only the runtime jar is allowed
     integrationCompileOnly project(":iceberg-spark:iceberg-spark-extensions-${sparkMajorVersion}_${scalaVersion}")
     integrationCompileOnly project(":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}")
@@ -394,7 +316,7 @@ project(":iceberg-spark:iceberg-spark-runtime-${sparkMajorVersion}_${scalaVersio
     description = "Test Spark3 Runtime Jar against Spark ${sparkMajorVersion}"
     group = "verification"
     if (project.hasProperty('extraJvmArgs')) {
-    jvmArgs += project.property('extraJvmArgs')
+      jvmArgs += project.property('extraJvmArgs')
     }
     testClassesDirs = sourceSets.integration.output.classesDirs
     classpath = sourceSets.integration.runtimeClasspath + files(shadowJar.archiveFile.get().asFile.path)
@@ -402,19 +324,6 @@ project(":iceberg-spark:iceberg-spark-runtime-${sparkMajorVersion}_${scalaVersio
   }
   integrationTest.dependsOn shadowJar
   check.dependsOn integrationTest
-
-  tasks.withType(Test).configureEach {
-    if (sparkSessionProviderValue != null && !sparkSessionProviderValue.isEmpty()) {
-      systemProperty "iceberg.test.spark.session.provider", sparkSessionProviderValue
-    }
-
-    if (catalogProviderValue != null && !catalogProviderValue.isEmpty()) {
-      systemProperty "iceberg.test.catalog.provider", catalogProviderValue
-    }
-    if (skipDefaultCatalogsValue != null && !skipDefaultCatalogsValue.isEmpty()) {
-      systemProperty "iceberg.test.catalog.skip.defaults", skipDefaultCatalogsValue
-    }
-  }
 
   jar {
     enabled = false
