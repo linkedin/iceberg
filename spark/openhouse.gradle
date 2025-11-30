@@ -75,6 +75,14 @@ tasks.register('openhouseCompatibilityTest', Test) {
           f.eachLine { line ->
             line = line.trim()
             if (line && !line.startsWith('#')) {
+              // Replace # with . for Gradle test filter pattern
+              line = line.replace('#', '.')
+
+              // Append wildcard to handle parameterized tests
+              if (!line.endsWith('*')) {
+                line = line + '*'
+              }
+              println "DEBUG: Excluding ${line}"
               filter.excludeTestsMatching line
             }
           }

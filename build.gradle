@@ -407,6 +407,33 @@ project(':iceberg-core') {
     systemProperty 'iceberg.test.table.provider',
         'org.apache.iceberg.openhouse.OpenHouseTestTableProvider'
 
+    // Load exclusions from the fixtures jar at execution time
+    doFirst {
+      println "DEBUG: Resolving openhouseCompatibilityRuntime..."
+      configurations.openhouseCompatibilityRuntime.resolve().each { file ->
+        if (file.name.contains('tables-test-fixtures')) {
+          println "DEBUG: Found fixtures jar: ${file.name}"
+          zipTree(file).matching { include 'openhouse-incompatible-tests.txt' }.each { f ->
+            println "DEBUG: Found exclusions file: ${f}"
+            f.eachLine { line ->
+              line = line.trim()
+              if (line && !line.startsWith('#')) {
+                // Replace # with . for Gradle test filter pattern
+                line = line.replace('#', '.')
+
+                // Append wildcard to handle parameterized tests
+                if (!line.endsWith('*')) {
+                  line = line + '*'
+                }
+                println "DEBUG: Excluding ${line}"
+                filter.excludeTestsMatching line
+              }
+            }
+          }
+        }
+      }
+    }
+
     filter {
       includeTestsMatching 'org.apache.iceberg.TestWapWorkflow'
       includeTestsMatching 'org.apache.iceberg.TestFastAppend'
@@ -422,6 +449,12 @@ project(':iceberg-core') {
       includeTestsMatching 'org.apache.iceberg.TestSnapshotSelection'
       includeTestsMatching 'org.apache.iceberg.TestRewriteFiles'
       includeTestsMatching 'org.apache.iceberg.TestRewriteManifests'
+    }
+
+    testLogging {
+      events "passed", "skipped", "failed", "standardOut", "standardError"
+      showStandardStreams = true
+      exceptionFormat = 'full'
     }
   }
 }

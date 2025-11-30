@@ -225,21 +225,29 @@ public class TableTestBase {
   }
 
   List<File> listManifestFiles(File tableDirToList) {
-    return Lists.newArrayList(
+    File[] files =
         new File(tableDirToList, "metadata")
             .listFiles(
                 (dir, name) ->
                     !name.startsWith("snap")
-                        && Files.getFileExtension(name).equalsIgnoreCase("avro")));
+                        && Files.getFileExtension(name).equalsIgnoreCase("avro"));
+    if (files == null) {
+      return Lists.newArrayList();
+    }
+    return Lists.newArrayList(files);
   }
 
   List<File> listManifestLists(String tableDirToList) {
-    return Lists.newArrayList(
+    File[] files =
         new File(tableDirToList, "metadata")
             .listFiles(
                 (dir, name) ->
                     name.startsWith("snap")
-                        && Files.getFileExtension(name).equalsIgnoreCase("avro")));
+                        && Files.getFileExtension(name).equalsIgnoreCase("avro"));
+    if (files == null) {
+      return Lists.newArrayList();
+    }
+    return Lists.newArrayList(files);
   }
 
   public static long countAllMetadataFiles(File tableDir) {
@@ -294,15 +302,15 @@ public class TableTestBase {
   }
 
   TestTables.TestTable load() {
-    return TestTables.load(tableDir, "test");
+    return TestTables.load(tableDir, table.name());
   }
 
   Integer version() {
-    return TestTables.metadataVersion("test");
+    return TestTables.metadataVersion(table.name());
   }
 
   public TableMetadata readMetadata() {
-    return TestTables.readMetadata("test");
+    return TestTables.readMetadata(table.name());
   }
 
   ManifestFile writeManifest(DataFile... files) throws IOException {
