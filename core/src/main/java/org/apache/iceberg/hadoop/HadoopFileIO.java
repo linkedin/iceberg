@@ -98,6 +98,11 @@ public class HadoopFileIO implements HadoopConfigurable, DelegateFileIO {
   }
 
   @Override
+  public OutputFile newOutputFile(String path, Map<String, String> properties) {
+    return HadoopOutputFile.fromPath(new Path(path), hadoopConf.get(), properties);
+  }
+
+  @Override
   public void deleteFile(String path) {
     Path toDelete = new Path(path);
     FileSystem fs = Util.getFs(toDelete, hadoopConf.get());

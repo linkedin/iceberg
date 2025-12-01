@@ -78,6 +78,7 @@ public class SparkPositionDeletesRewrite implements Write {
   private final int specId;
   private final StructLike partition;
   private final Map<String, String> writeProperties;
+  private final short replicationFactor;
 
   /**
    * Constructs a {@link SparkPositionDeletesRewrite}.
@@ -112,6 +113,7 @@ public class SparkPositionDeletesRewrite implements Write {
     this.specId = specId;
     this.partition = partition;
     this.writeProperties = writeConf.writeProperties();
+    this.replicationFactor = writeConf.fileReplication();
   }
 
   @Override
@@ -137,7 +139,8 @@ public class SparkPositionDeletesRewrite implements Write {
           dsSchema,
           specId,
           partition,
-          writeProperties);
+          writeProperties,
+          replicationFactor);
     }
 
     @Override
@@ -189,6 +192,7 @@ public class SparkPositionDeletesRewrite implements Write {
     private final int specId;
     private final StructLike partition;
     private final Map<String, String> writeProperties;
+    private final short replicationFactor;
 
     PositionDeletesWriterFactory(
         Broadcast<Table> tableBroadcast,
@@ -200,7 +204,8 @@ public class SparkPositionDeletesRewrite implements Write {
         StructType dsSchema,
         int specId,
         StructLike partition,
-        Map<String, String> writeProperties) {
+        Map<String, String> writeProperties,
+        short replicationFactor) {
       this.tableBroadcast = tableBroadcast;
       this.queryId = queryId;
       this.format = format;
@@ -211,6 +216,7 @@ public class SparkPositionDeletesRewrite implements Write {
       this.specId = specId;
       this.partition = partition;
       this.writeProperties = writeProperties;
+      this.replicationFactor = replicationFactor;
     }
 
     @Override
@@ -221,6 +227,7 @@ public class SparkPositionDeletesRewrite implements Write {
           OutputFileFactory.builderFor(table, partitionId, taskId)
               .format(format)
               .operationId(queryId)
+              .replicationFactor(replicationFactor)
               .suffix("deletes")
               .build();
 

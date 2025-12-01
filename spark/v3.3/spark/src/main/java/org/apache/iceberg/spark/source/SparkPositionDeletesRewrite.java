@@ -74,6 +74,8 @@ public class SparkPositionDeletesRewrite implements Write {
   private final String fileSetId;
   private final int specId;
   private final StructLike partition;
+  private final Map<String, String> writeProperties;
+  private final short replicationFactor;
 
   /**
    * Constructs a {@link SparkPositionDeletesRewrite}.
@@ -106,6 +108,8 @@ public class SparkPositionDeletesRewrite implements Write {
     this.fileSetId = writeConf.rewrittenFileSetId();
     this.specId = specId;
     this.partition = partition;
+    this.writeProperties = writeConf.writeProperties();
+    this.replicationFactor = writeConf.deleteFileReplication();
   }
 
   @Override
@@ -129,7 +133,9 @@ public class SparkPositionDeletesRewrite implements Write {
           writeSchema,
           dsSchema,
           specId,
-          partition);
+          partition,
+          writeProperties,
+          replicationFactor);
     }
 
     @Override
@@ -174,6 +180,8 @@ public class SparkPositionDeletesRewrite implements Write {
     private final StructType dsSchema;
     private final int specId;
     private final StructLike partition;
+    private final Map<String, String> writeProperties;
+    private final short replicationFactor;
 
     PositionDeletesWriterFactory(
         Broadcast<Table> tableBroadcast,
@@ -183,7 +191,9 @@ public class SparkPositionDeletesRewrite implements Write {
         Schema writeSchema,
         StructType dsSchema,
         int specId,
-        StructLike partition) {
+        StructLike partition,
+        Map<String, String> writeProperties,
+        short replicationFactor) {
       this.tableBroadcast = tableBroadcast;
       this.queryId = queryId;
       this.format = format;
@@ -192,6 +202,8 @@ public class SparkPositionDeletesRewrite implements Write {
       this.dsSchema = dsSchema;
       this.specId = specId;
       this.partition = partition;
+      this.writeProperties = writeProperties;
+      this.replicationFactor = replicationFactor;
     }
 
     @Override
@@ -203,6 +215,7 @@ public class SparkPositionDeletesRewrite implements Write {
               .format(format)
               .operationId(queryId)
               .suffix("deletes")
+              .replicationFactor(replicationFactor)
               .build();
 
       Schema positionDeleteRowSchema = positionDeleteRowSchema();

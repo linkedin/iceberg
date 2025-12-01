@@ -545,4 +545,46 @@ public class TestSparkWriteConf extends TestBaseWithCatalog {
     assertThat(writeConf.copyOnWriteDistributionMode(MERGE)).isEqualTo(expectedMode);
     assertThat(writeConf.positionDeltaDistributionMode(MERGE)).isEqualTo(expectedMode);
   }
+
+  @TestTemplate
+  public void testFileReplicationDefault() {
+    Table table = validationCatalog.loadTable(tableIdent);
+    SparkWriteConf writeConf = new SparkWriteConf(spark, table, ImmutableMap.of());
+
+    // Default replication factor should be 3 as per DEFAULT_DELETE_FILE_REPLICATION
+    assertThat(writeConf.fileReplication()).isEqualTo((short) 3);
+  }
+
+  @TestTemplate
+  public void testFileReplicationFromWriteOption() {
+    Table table = validationCatalog.loadTable(tableIdent);
+
+    Map<String, String> writeOptions =
+        ImmutableMap.of(SparkWriteOptions.DELETE_FILE_REPLICATION, "5");
+
+    SparkWriteConf writeConf = new SparkWriteConf(spark, table, writeOptions);
+    assertThat(writeConf.fileReplication()).isEqualTo((short) 5);
+  }
+
+  @TestTemplate
+  public void testFileReplicationWithOne() {
+    Table table = validationCatalog.loadTable(tableIdent);
+
+    Map<String, String> writeOptions =
+        ImmutableMap.of(SparkWriteOptions.DELETE_FILE_REPLICATION, "1");
+
+    SparkWriteConf writeConf = new SparkWriteConf(spark, table, writeOptions);
+    assertThat(writeConf.fileReplication()).isEqualTo((short) 1);
+  }
+
+  @TestTemplate
+  public void testFileReplicationWithMaxValue() {
+    Table table = validationCatalog.loadTable(tableIdent);
+
+    Map<String, String> writeOptions =
+        ImmutableMap.of(SparkWriteOptions.DELETE_FILE_REPLICATION, String.valueOf(Short.MAX_VALUE));
+
+    SparkWriteConf writeConf = new SparkWriteConf(spark, table, writeOptions);
+    assertThat(writeConf.fileReplication()).isEqualTo(Short.MAX_VALUE);
+  }
 }
