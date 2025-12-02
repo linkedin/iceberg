@@ -113,7 +113,7 @@ public class SparkPositionDeletesRewrite implements Write {
     this.specId = specId;
     this.partition = partition;
     this.writeProperties = writeConf.writeProperties();
-    this.replicationFactor = writeConf.fileReplication();
+    this.replicationFactor = writeConf.deleteFileReplication();
   }
 
   @Override

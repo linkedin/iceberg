@@ -132,7 +132,7 @@ public class SparkWriteConf {
         .parse();
   }
 
-  public short fileReplication() {
+  public short deleteFileReplication() {
     return (short)
         confParser
             .intConf()

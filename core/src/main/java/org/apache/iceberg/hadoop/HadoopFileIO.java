@@ -98,8 +98,8 @@ public class HadoopFileIO implements HadoopConfigurable, DelegateFileIO {
   }
 
   @Override
-  public OutputFile newOutputFile(String path, Map<String, String> properties) {
-    return HadoopOutputFile.fromPath(new Path(path), hadoopConf.get(), properties);
+  public OutputFile newOutputFile(String path, Map<String, String> fileProperties) {
+    return HadoopOutputFile.fromPath(new Path(path), hadoopConf.get(), fileProperties);
   }
 
   @Override

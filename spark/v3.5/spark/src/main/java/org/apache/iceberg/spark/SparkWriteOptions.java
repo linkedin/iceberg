@@ -20,11 +20,10 @@ package org.apache.iceberg.spark;
 
 /** Spark DF write options */
 public class SparkWriteOptions {
+  private SparkWriteOptions() {}
 
   public static final String DELETE_FILE_REPLICATION = "delete-file-replication";
   public static final short DEFAULT_DELETE_FILE_REPLICATION = 3;
-
-  private SparkWriteOptions() {}
 
   // Fileformat for write operations(default: Table write.format.default )
   public static final String WRITE_FORMAT = "write-format";

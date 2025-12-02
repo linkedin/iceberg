@@ -547,44 +547,44 @@ public class TestSparkWriteConf extends TestBaseWithCatalog {
   }
 
   @TestTemplate
-  public void testFileReplicationDefault() {
+  public void testDeleteFileReplicationDefault() {
     Table table = validationCatalog.loadTable(tableIdent);
     SparkWriteConf writeConf = new SparkWriteConf(spark, table, ImmutableMap.of());
 
     // Default replication factor should be 3 as per DEFAULT_DELETE_FILE_REPLICATION
-    assertThat(writeConf.fileReplication()).isEqualTo((short) 3);
+    assertThat(writeConf.deleteFileReplication()).isEqualTo((short) 3);
   }
 
   @TestTemplate
-  public void testFileReplicationFromWriteOption() {
+  public void testDeleteFileReplicationFromWriteOption() {
     Table table = validationCatalog.loadTable(tableIdent);
 
     Map<String, String> writeOptions =
         ImmutableMap.of(SparkWriteOptions.DELETE_FILE_REPLICATION, "5");
 
     SparkWriteConf writeConf = new SparkWriteConf(spark, table, writeOptions);
-    assertThat(writeConf.fileReplication()).isEqualTo((short) 5);
+    assertThat(writeConf.deleteFileReplication()).isEqualTo((short) 5);
   }
 
   @TestTemplate
-  public void testFileReplicationWithOne() {
+  public void testDeleteFileReplicationWithOne() {
     Table table = validationCatalog.loadTable(tableIdent);
 
     Map<String, String> writeOptions =
         ImmutableMap.of(SparkWriteOptions.DELETE_FILE_REPLICATION, "1");
 
     SparkWriteConf writeConf = new SparkWriteConf(spark, table, writeOptions);
-    assertThat(writeConf.fileReplication()).isEqualTo((short) 1);
+    assertThat(writeConf.deleteFileReplication()).isEqualTo((short) 1);
   }
 
   @TestTemplate
-  public void testFileReplicationWithMaxValue() {
+  public void testDeleteFileReplicationWithMaxValue() {
     Table table = validationCatalog.loadTable(tableIdent);
 
     Map<String, String> writeOptions =
         ImmutableMap.of(SparkWriteOptions.DELETE_FILE_REPLICATION, String.valueOf(Short.MAX_VALUE));
 
     SparkWriteConf writeConf = new SparkWriteConf(spark, table, writeOptions);
-    assertThat(writeConf.fileReplication()).isEqualTo(Short.MAX_VALUE);
+    assertThat(writeConf.deleteFileReplication()).isEqualTo(Short.MAX_VALUE);
   }
 }

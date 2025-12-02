@@ -119,9 +119,7 @@ public class OutputFileFactory {
 
   private Map<String, String> getProperties() {
     Map<String, String> properties = Maps.newHashMap();
-    if (replicationFactorOptional.isPresent()) {
-      properties.put(FILE_REPLICATION_FACTOR, String.valueOf(replicationFactorOptional));
-    }
+    replicationFactorOptional.ifPresent(replicationFactor -> properties.put(FILE_REPLICATION_FACTOR, String.valueOf(replicationFactor)));
     return properties;
   }
 

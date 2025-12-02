@@ -23,6 +23,9 @@ public class SparkWriteOptions {
 
   private SparkWriteOptions() {}
 
+  public static final String DELETE_FILE_REPLICATION = "delete-file-replication";
+  public static final short DEFAULT_DELETE_FILE_REPLICATION = 3;
+
   // Fileformat for write operations(default: Table write.format.default )
   public static final String WRITE_FORMAT = "write-format";
 
@@ -79,4 +82,15 @@ public class SparkWriteOptions {
 
   // Isolation Level for DataFrame calls. Currently supported by overwritePartitions
   public static final String ISOLATION_LEVEL = "isolation-level";
+
+  // Controls write compress options
+  public static final String COMPRESSION_CODEC = "compression-codec";
+  public static final String COMPRESSION_LEVEL = "compression-level";
+  public static final String COMPRESSION_STRATEGY = "compression-strategy";
+
+  // Overrides the advisory partition size
+  public static final String ADVISORY_PARTITION_SIZE = "advisory-partition-size";
+
+  // Overrides the delete granularity
+  public static final String DELETE_GRANULARITY = "delete-granularity";
 }

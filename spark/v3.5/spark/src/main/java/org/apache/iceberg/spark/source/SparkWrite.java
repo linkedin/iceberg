@@ -134,7 +134,7 @@ abstract class SparkWrite implements Write, RequiresDistributionAndOrdering {
     this.writeRequirements = writeRequirements;
     this.outputSpecId = writeConf.outputSpecId();
     this.writeProperties = writeConf.writeProperties();
-    this.deleteFileReplication = writeConf.fileReplication();
+    this.deleteFileReplication = writeConf.deleteFileReplication();
   }
 
   @Override
