@@ -407,14 +407,19 @@ project(':iceberg-core') {
     systemProperty 'iceberg.test.table.provider',
         'org.apache.iceberg.openhouse.OpenHouseTestTableProvider'
 
-    // Load exclusions from the fixtures jar at execution time
+    // Test filter - initially exclude everything, then include from list
+    filter {
+      failOnNoMatchingTests = false
+    }
+
+    // Load inclusions from the fixtures jar at execution time
     doFirst {
       println "DEBUG: Resolving openhouseCompatibilityRuntime..."
       configurations.openhouseCompatibilityRuntime.resolve().each { file ->
         if (file.name.contains('tables-test-fixtures')) {
           println "DEBUG: Found fixtures jar: ${file.name}"
-          zipTree(file).matching { include 'openhouse-incompatible-tests.txt' }.each { f ->
-            println "DEBUG: Found exclusions file: ${f}"
+          zipTree(file).matching { include 'openhouse-iceberg-compatibility-tests.txt' }.each { f ->
+            println "DEBUG: Found inclusions file: ${f}"
             f.eachLine { line ->
               line = line.trim()
               if (line && !line.startsWith('#')) {
@@ -425,8 +430,8 @@ project(':iceberg-core') {
                 if (!line.endsWith('*')) {
                   line = line + '*'
                 }
-                println "DEBUG: Excluding ${line}"
-                filter.excludeTestsMatching line
+                println "DEBUG: Including ${line}"
+                filter.includeTestsMatching line
               }
             }
           }
@@ -434,22 +439,6 @@ project(':iceberg-core') {
       }
     }
 
-    filter {
-      includeTestsMatching 'org.apache.iceberg.TestWapWorkflow'
-      includeTestsMatching 'org.apache.iceberg.TestFastAppend'
-      includeTestsMatching 'org.apache.iceberg.TestMergeAppend'
-      includeTestsMatching 'org.apache.iceberg.TestOverwrite'
-      includeTestsMatching 'org.apache.iceberg.TestReplacePartitions'
-      includeTestsMatching 'org.apache.iceberg.TestRowDelta'
-      includeTestsMatching 'org.apache.iceberg.TestDeleteFiles'
-      includeTestsMatching 'org.apache.iceberg.TestTransaction'
-      includeTestsMatching 'org.apache.iceberg.TestCreateTransaction'
-      includeTestsMatching 'org.apache.iceberg.TestRemoveSnapshots'
-      includeTestsMatching 'org.apache.iceberg.TestSnapshot'
-      includeTestsMatching 'org.apache.iceberg.TestSnapshotSelection'
-      includeTestsMatching 'org.apache.iceberg.TestRewriteFiles'
-      includeTestsMatching 'org.apache.iceberg.TestRewriteManifests'
-    }
 
     testLogging {
       events "passed", "skipped", "failed", "standardOut", "standardError"
@@ -1121,6 +1110,7 @@ tasks.register('openhouseCompatibility') {
   description = "Runs all OpenHouse compatibility tests"
   dependsOn project(':iceberg-core').tasks.openhouseCompatibilityTest
   dependsOn project(":iceberg-spark:iceberg-spark-${openHouseCompatibilitySparkMajorVersion}_${scalaVersion}").tasks.openhouseCompatibilityTest
+  dependsOn project(":iceberg-spark:iceberg-spark-extensions-${openHouseCompatibilitySparkMajorVersion}_${scalaVersion}").tasks.openhouseCompatibilityTest
 }
 
 project(':iceberg-bom') {

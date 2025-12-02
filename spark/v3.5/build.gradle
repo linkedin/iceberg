@@ -122,6 +122,8 @@ project(":iceberg-spark:iceberg-spark-${sparkMajorVersion}_${scalaVersion}") {
 }
 
 project(":iceberg-spark:iceberg-spark-extensions-${sparkMajorVersion}_${scalaVersion}") {
+  ext.sparkMajorVersion = sparkMajorVersion
+  apply from: "$projectDir/../../openhouse.gradle"
   apply plugin: 'java-library'
   apply plugin: 'scala'
   apply plugin: 'com.github.alisiikh.scalastyle'

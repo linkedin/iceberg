@@ -60,18 +60,16 @@ tasks.register('openhouseCompatibilityTest', Test) {
     '--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED'
   ]
 
-  // Test filter - include SQL tests and specific action/source tests
+  // Test filter - initially exclude everything, then include from list
   filter {
-    includeTestsMatching 'org.apache.iceberg.spark.sql.*'
-    includeTestsMatching 'org.apache.iceberg.spark.actions.TestExpireSnapshotsAction'
-    includeTestsMatching 'org.apache.iceberg.spark.source.TestSnapshotSelection'
+    failOnNoMatchingTests = false
   }
 
-  // Load exclusions from the fixtures jar at execution time
+  // Load inclusions from the fixtures jar at execution time
   doFirst {
     configurations.openhouseCompatibilityRuntime.resolve().each { file ->
       if (file.name.contains('tables-test-fixtures')) {
-        zipTree(file).matching { include 'openhouse-incompatible-tests.txt' }.each { f ->
+        zipTree(file).matching { include 'openhouse-iceberg-compatibility-tests.txt' }.each { f ->
           f.eachLine { line ->
             line = line.trim()
             if (line && !line.startsWith('#')) {
@@ -82,8 +80,7 @@ tasks.register('openhouseCompatibilityTest', Test) {
               if (!line.endsWith('*')) {
                 line = line + '*'
               }
-              println "DEBUG: Excluding ${line}"
-              filter.excludeTestsMatching line
+              filter.includeTestsMatching line
             }
           }
         }

@@ -88,7 +88,7 @@ public abstract class TestBaseWithCatalog extends TestBase {
     };
   }
 
-  private static List<TestCatalogProvider> loadExternalCatalogProviders() {
+  protected static List<TestCatalogProvider> loadExternalCatalogProviders() {
     List<TestCatalogProvider> providers = new ArrayList<>();
 
     // System property takes precedence

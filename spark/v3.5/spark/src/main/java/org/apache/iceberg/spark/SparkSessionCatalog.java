@@ -308,7 +308,7 @@ public class SparkSessionCatalog<T extends TableCatalog & FunctionCatalog & Supp
         && options
             .get(CatalogUtil.ICEBERG_CATALOG_TYPE)
             .equalsIgnoreCase(CatalogUtil.ICEBERG_CATALOG_TYPE_HIVE)) {
-      validateHmsUri(options.get(CatalogProperties.URI));
+      // validateHmsUri(options.get(CatalogProperties.URI));
     }
 
     this.catalogName = name;
