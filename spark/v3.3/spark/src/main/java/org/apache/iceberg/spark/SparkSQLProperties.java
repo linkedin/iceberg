@@ -66,4 +66,16 @@ public class SparkSQLProperties {
 
   // Controls whether to report locality information to Spark while allocating input partitions
   public static final String LOCALITY = "spark.sql.iceberg.locality.enabled";
+
+  // Controls compression codec for write operations
+  public static final String COMPRESSION_CODEC = "spark.sql.iceberg.compression-codec";
+
+  // Controls compression level for write operations
+  public static final String COMPRESSION_LEVEL = "spark.sql.iceberg.compression-level";
+
+  // Controls compression strategy for write operations
+  public static final String COMPRESSION_STRATEGY = "spark.sql.iceberg.compression-strategy";
+
+  // Controls advisory partition size for write operations
+  public static final String ADVISORY_PARTITION_SIZE = "spark.sql.iceberg.advisory-partition-size";
 }
