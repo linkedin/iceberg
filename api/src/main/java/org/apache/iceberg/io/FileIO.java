@@ -82,7 +82,10 @@ public interface FileIO extends Serializable, Closeable {
    * @return an OutputFile for writing data
    */
   default OutputFile newOutputFile(String path, Map<String, String> properties) {
-    return newOutputFile(path);
+    throw new UnsupportedOperationException(
+        String.format(
+            "Creating output file at: %s with properties: %s is not " + "supported",
+            path, properties));
   }
 
   /** Delete the file at the given path. */

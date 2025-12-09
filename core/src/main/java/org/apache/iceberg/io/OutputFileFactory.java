@@ -18,6 +18,9 @@
  */
 package org.apache.iceberg.io;
 
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
+
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,9 +33,6 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.encryption.EncryptedOutputFile;
 import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
-
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
 /** Factory responsible for generating unique but recognizable data/delete file names. */
 public class OutputFileFactory {
@@ -120,8 +120,7 @@ public class OutputFileFactory {
   private Map<String, String> getProperties() {
     Map<String, String> properties = Maps.newHashMap();
     replicationFactor.ifPresent(
-        replication ->
-            properties.put(FILE_REPLICATION_FACTOR, String.valueOf(replication)));
+        replication -> properties.put(FILE_REPLICATION_FACTOR, String.valueOf(replication)));
     return properties;
   }
 
