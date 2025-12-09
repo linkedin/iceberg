@@ -18,9 +18,6 @@
  */
 package org.apache.iceberg.io;
 
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
-
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,6 +30,9 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.encryption.EncryptedOutputFile;
 import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
+
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
 /** Factory responsible for generating unique but recognizable data/delete file names. */
 public class OutputFileFactory {
@@ -52,7 +52,7 @@ public class OutputFileFactory {
   private final String operationId;
   private final AtomicInteger fileCount = new AtomicInteger(0);
   private final String suffix;
-  private final Optional<Short> replicationFactorOptional;
+  private final Optional<Short> replicationFactor;
 
   /**
    * Constructor with specific operationId. The [partitionId, taskId, operationId] triplet has to be
@@ -68,7 +68,7 @@ public class OutputFileFactory {
    * @param taskId Second part of the file name
    * @param operationId Third part of the file name
    * @param suffix Suffix part of the file name
-   * @param replicationFactorOptional the replication factor of output file
+   * @param replicationFactor the replication factor of output file
    */
   private OutputFileFactory(
       PartitionSpec spec,
@@ -80,7 +80,7 @@ public class OutputFileFactory {
       long taskId,
       String operationId,
       String suffix,
-      Optional<Short> replicationFactorOptional) {
+      Optional<Short> replicationFactor) {
     this.defaultSpec = spec;
     this.format = format;
     this.locations = locations;
@@ -90,7 +90,7 @@ public class OutputFileFactory {
     this.taskId = taskId;
     this.operationId = operationId;
     this.suffix = suffix;
-    this.replicationFactorOptional = replicationFactorOptional;
+    this.replicationFactor = replicationFactor;
   }
 
   public static Builder builderFor(Table table, int partitionId, long taskId) {
@@ -119,9 +119,9 @@ public class OutputFileFactory {
 
   private Map<String, String> getProperties() {
     Map<String, String> properties = Maps.newHashMap();
-    replicationFactorOptional.ifPresent(
-        replicationFactor ->
-            properties.put(FILE_REPLICATION_FACTOR, String.valueOf(replicationFactor)));
+    replicationFactor.ifPresent(
+        replication ->
+            properties.put(FILE_REPLICATION_FACTOR, String.valueOf(replication)));
     return properties;
   }
 

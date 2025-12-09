@@ -102,8 +102,6 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
   private final Map<String, String> extraSnapshotMetadata;
   private final Distribution requiredDistribution;
   private final SortOrder[] requiredOrdering;
-  private final Map<String, String> writeProperties;
-  private final short replicationFactor;
 
   private boolean cleanupOnAbort = true;
 
@@ -132,8 +130,6 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
     this.extraSnapshotMetadata = writeConf.extraSnapshotMetadata();
     this.requiredDistribution = requiredDistribution;
     this.requiredOrdering = requiredOrdering;
-    this.writeProperties = writeConf.writeProperties();
-    this.replicationFactor = writeConf.deleteFileReplication();
   }
 
   @Override
@@ -158,8 +154,7 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
       // broadcast the table metadata as the writer factory will be sent to executors
       Broadcast<Table> tableBroadcast =
           sparkContext.broadcast(SerializableTableWithSize.copyOf(table));
-      return new PositionDeltaWriteFactory(
-          tableBroadcast, command, context, writeProperties, replicationFactor);
+      return new PositionDeltaWriteFactory(tableBroadcast, command, context);
     }
 
     @Override
@@ -336,20 +331,11 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
     private final Broadcast<Table> tableBroadcast;
     private final Command command;
     private final Context context;
-    private final Map<String, String> writeProperties;
-    private final short replicationFactor;
 
-    PositionDeltaWriteFactory(
-        Broadcast<Table> tableBroadcast,
-        Command command,
-        Context context,
-        Map<String, String> writeProperties,
-        short replicationFactor) {
+    PositionDeltaWriteFactory(Broadcast<Table> tableBroadcast, Command command, Context context) {
       this.tableBroadcast = tableBroadcast;
       this.command = command;
       this.context = context;
-      this.writeProperties = writeProperties;
-      this.replicationFactor = replicationFactor;
     }
 
     @Override
@@ -366,7 +352,6 @@ class SparkPositionDeltaWrite implements DeltaWrite, RequiresDistributionAndOrde
               .format(context.deleteFileFormat())
               .operationId(context.queryId())
               .suffix("deletes")
-              .replicationFactor(replicationFactor)
               .build();
 
       SparkFileWriterFactory writerFactory =

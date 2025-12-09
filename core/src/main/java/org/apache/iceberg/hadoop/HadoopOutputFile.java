@@ -37,6 +37,7 @@ import org.apache.iceberg.io.PositionOutputStream;
 /** {@link OutputFile} implementation using the Hadoop {@link FileSystem} API. */
 public class HadoopOutputFile implements OutputFile, NativelyEncryptedFile {
 
+  private static final short DEFAULT_REPLICATION_FACTOR = 3;
   private final FileSystem fs;
   private final Path path;
   private final Configuration conf;
@@ -59,7 +60,7 @@ public class HadoopOutputFile implements OutputFile, NativelyEncryptedFile {
   }
 
   public static OutputFile fromPath(Path path, Configuration conf, Map<String, String> properties) {
-    short replicationFactor = -1;
+    short replicationFactor = DEFAULT_REPLICATION_FACTOR;
     if (properties != null) {
       String replicationFactorAsString = properties.get(OutputFileFactory.FILE_REPLICATION_FACTOR);
       if (replicationFactorAsString != null) {
