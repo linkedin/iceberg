@@ -18,6 +18,9 @@
  */
 package org.apache.iceberg.io;
 
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
+
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,9 +33,6 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.encryption.EncryptedOutputFile;
 import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
-
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
-import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
 /** Factory responsible for generating unique but recognizable data/delete file names. */
 public class OutputFileFactory {
@@ -110,18 +110,22 @@ public class OutputFileFactory {
 
   /** Generates an {@link EncryptedOutputFile} for unpartitioned writes. */
   public EncryptedOutputFile newOutputFile() {
-    OutputFile file =
-        ioSupplier
-            .get()
-            .newOutputFile(locations.newDataLocation(generateFilename()), getProperties());
+    OutputFile file;
+    if (replicationFactor.isPresent()) {
+      file =
+          ioSupplier
+              .get()
+              .newOutputFile(locations.newDataLocation(generateFilename()), getProperties());
+    } else {
+      file = ioSupplier.get().newOutputFile(locations.newDataLocation(generateFilename()));
+    }
     return encryptionManager.encrypt(file);
   }
 
   private Map<String, String> getProperties() {
     Map<String, String> properties = Maps.newHashMap();
     replicationFactor.ifPresent(
-        replication ->
-            properties.put(FILE_REPLICATION_FACTOR, String.valueOf(replication)));
+        replication -> properties.put(FILE_REPLICATION_FACTOR, String.valueOf(replication)));
     return properties;
   }
 
@@ -133,7 +137,12 @@ public class OutputFileFactory {
   /** Generates an {@link EncryptedOutputFile} for partitioned writes in a given spec. */
   public EncryptedOutputFile newOutputFile(PartitionSpec spec, StructLike partition) {
     String newDataLocation = locations.newDataLocation(spec, partition, generateFilename());
-    OutputFile rawOutputFile = ioSupplier.get().newOutputFile(newDataLocation, getProperties());
+    OutputFile rawOutputFile;
+    if (replicationFactor.isPresent()) {
+      rawOutputFile = ioSupplier.get().newOutputFile(newDataLocation, getProperties());
+    } else {
+      rawOutputFile = ioSupplier.get().newOutputFile(newDataLocation);
+    }
     return encryptionManager.encrypt(rawOutputFile);
   }
 
