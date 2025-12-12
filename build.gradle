@@ -894,8 +894,6 @@ project(':iceberg-snowflake') {
  * @return the project version (e.g., 1.2.0.4)
  */
 String getProjectVersion() {
-  return "1.2.0.4-alpha"
-
   if (project.hasProperty('ciVersion')) {
     String version = project.property('ciVersion')
     println "Version: ${version.padRight(27)}"
