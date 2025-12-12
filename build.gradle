@@ -693,7 +693,7 @@ project(':iceberg-hive-metastore') {
     fatJarPackagedDependencies ('org.apache.hive:hive-common:' + hiveVersion) {
       transitive = false
     }
-    fatJarPackagedDependencies ('org.apache.hive:hive-storage-api:' + hiveVersion) {
+    fatJarPackagedDependencies ('org.apache.hive:hive-storage-api:2.4.0') {
       transitive = false
     }
     fatJarPackagedDependencies ('org.apache.thrift:libthrift:0.9.3') {
@@ -702,7 +702,7 @@ project(':iceberg-hive-metastore') {
   }
 
   shadowJar {
-    archiveClassifier.set('shaded4')
+    archiveClassifier.set('shaded3')
     configurations = [project.configurations.fatJarPackagedDependencies]
     zip64 true
 
