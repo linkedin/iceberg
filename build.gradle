@@ -607,6 +607,18 @@ project(':iceberg-gcp') {
 }
 
 project(':iceberg-hive-metastore') {
+  apply plugin: 'com.github.johnrengelman.shadow'
+
+  tasks.shadowJar.dependsOn project(':iceberg-api').tasks.jar
+
+  configurations {
+    fatJarPackagedDependencies {}
+  }
+
+  ext {
+    hiveVersion = '2.3.8'
+  }
+
   dependencies {
     implementation project(path: ':iceberg-bundled-guava', configuration: 'shadow')
     implementation project(':iceberg-core')
@@ -671,6 +683,38 @@ project(':iceberg-hive-metastore') {
     }
 
     testImplementation project(path: ':iceberg-api', configuration: 'testArtifacts')
+
+    fatJarPackagedDependencies ('org.apache.hive:hive-metastore:' + hiveVersion) {
+      transitive = false
+    }
+    fatJarPackagedDependencies ('org.apache.hive:hive-serde:' + hiveVersion) {
+      transitive = false
+    }
+    fatJarPackagedDependencies ('org.apache.hive:hive-common:' + hiveVersion) {
+      transitive = false
+    }
+    fatJarPackagedDependencies ('org.apache.hive:hive-storage-api:' + hiveVersion) {
+      transitive = false
+    }
+    fatJarPackagedDependencies ('org.apache.thrift:libthrift:0.9.3') {
+      transitive = false
+    }
+  }
+
+  shadowJar {
+    archiveClassifier.set('shaded4')
+    configurations = [project.configurations.fatJarPackagedDependencies]
+    zip64 true
+
+    // include the LICENSE and NOTICE files for the shaded Jar
+    from(projectDir) {
+      include 'LICENSE'
+      include 'NOTICE'
+    }
+
+    relocate('org.apache', 'iceberghive.relocated.org.apache')
+
+    minimize()
   }
 }
 
@@ -878,12 +922,12 @@ String getProjectVersion() {
       standardOutput = stdout
     }
     String version = stdout.toString().trim()
-    
+
     // Remove 'v' prefix if present
     if (version.startsWith('v')) {
       version = version.substring(1)
     }
-    
+
     println "Version from git tag: ${version.padRight(30)}"
 
     return version
@@ -895,7 +939,7 @@ String getProjectVersion() {
 
 /**
  * Get version string for Javadoc using the current branch name.
- * 
+ *
  * @return branch name for Javadoc version
  */
 String getJavadocVersion() {
