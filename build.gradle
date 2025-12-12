@@ -632,7 +632,7 @@ project(':iceberg-hive-metastore') {
   }
 
   ext {
-    shadedHiveVersion = '1.1.0'
+    shadedHiveVersion = '2.3.8'
   }
 
   dependencies {
@@ -673,16 +673,10 @@ project(':iceberg-hive-metastore') {
     testImplementation project(path: ':iceberg-api', configuration: 'testArtifacts')
 
     fatJarPackagedDependencies("org.apache.hive:hive-metastore:" + shadedHiveVersion, commonExcludes)
-    fatJarPackagedDependencies(project(path: ':iceberg-bundled-guava', configuration: 'shadow'))
-    fatJarPackagedDependencies(project(':iceberg-core'))
-    fatJarPackagedDependencies(project(':iceberg-api'))
-    fatJarPackagedDependencies(project(':iceberg-common'))
-    fatJarPackagedDependencies("com.github.ben-manes.caffeine:caffeine")
-    fatJarPackagedDependencies("org.apache.hive:hive-storage-api:2.4.0")
   }
 
   shadowJar {
-    archiveClassifier.set('shaded-final')
+    archiveClassifier.set('shaded')
     configurations = [project.configurations.fatJarPackagedDependencies]
     zip64 true
 
@@ -699,8 +693,11 @@ project(':iceberg-hive-metastore') {
       exclude("schema/**")
     }
 
-    relocate('org', 'iceberghive.relocated.org')
+    relocate('org', 'iceberghive.relocated.org') {
+      exclude 'org.apache.iceberg.**'
+    }
     relocate('com', 'iceberghive.relocated.com')
+    relocate('javolution', 'iceberghive.relocated.javolution')
 
     minimize()
   }
@@ -897,6 +894,8 @@ project(':iceberg-snowflake') {
  * @return the project version (e.g., 1.2.0.4)
  */
 String getProjectVersion() {
+  return "1.2.0.4-alpha"
+
   if (project.hasProperty('ciVersion')) {
     String version = project.property('ciVersion')
     println "Version: ${version.padRight(27)}"
