@@ -123,7 +123,9 @@ class IcebergSparkSqlExtensionsParser(delegate: ParserInterface) extends ParserI
     if (isIcebergCommand(sqlTextAfterSubstitution)) {
       parse(sqlTextAfterSubstitution) { parser => astBuilder.visit(parser.singleStatement()) }.asInstanceOf[LogicalPlan]
     } else {
-      RewriteViewCommands(SparkSession.active).apply(delegate.parsePlan(sqlText))
+      // Iceberg views are not supported in LinkedIn, do not rewrite views
+      // RewriteViewCommands(SparkSession.active).apply(delegate.parsePlan(sqlText))
+      delegate.parsePlan(sqlText)
     }
   }
 
