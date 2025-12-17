@@ -695,6 +695,7 @@ project(':iceberg-hive-metastore') {
 
     relocate('org', 'iceberghive.relocated.org') {
       exclude 'org.apache.iceberg.**'
+      exclude 'org.apache.hadoop.hive.metastore.**'
     }
     relocate('com', 'iceberghive.relocated.com')
     relocate('javolution', 'iceberghive.relocated.javolution')
