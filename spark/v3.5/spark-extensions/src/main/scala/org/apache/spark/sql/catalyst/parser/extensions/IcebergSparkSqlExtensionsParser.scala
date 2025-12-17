@@ -59,6 +59,14 @@ class IcebergSparkSqlExtensionsParser(delegate: ParserInterface) extends ParserI
   private lazy val substitutor = substitutorCtor.newInstance(SQLConf.get)
   private lazy val astBuilder = new IcebergSqlExtensionsAstBuilder(delegate)
 
+  private def shouldRewriteViewCommands: Boolean = {
+    // default true to preserve existing behavior + tests
+    SQLConf.get.getConfString(
+      "spark.sql.iceberg.rewriteViewCommands.enabled",
+      "true"
+    ).toBoolean
+  }
+
   /**
    * Parse a string to a DataType.
    */
@@ -123,9 +131,11 @@ class IcebergSparkSqlExtensionsParser(delegate: ParserInterface) extends ParserI
     if (isIcebergCommand(sqlTextAfterSubstitution)) {
       parse(sqlTextAfterSubstitution) { parser => astBuilder.visit(parser.singleStatement()) }.asInstanceOf[LogicalPlan]
     } else {
-      // Iceberg views are not supported in LinkedIn, do not rewrite views
-      // RewriteViewCommands(SparkSession.active).apply(delegate.parsePlan(sqlText))
-      delegate.parsePlan(sqlText)
+      if (shouldRewriteViewCommands) {
+        RewriteViewCommands(SparkSession.active).apply(delegate.parsePlan(sqlText))
+      } else {
+        delegate.parsePlan(sqlText)
+      }
     }
   }
 
