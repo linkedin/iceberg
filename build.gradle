@@ -672,7 +672,12 @@ project(':iceberg-hive-metastore') {
 
     testImplementation project(path: ':iceberg-api', configuration: 'testArtifacts')
 
-    fatJarPackagedDependencies("org.apache.hive:hive-metastore:" + shadedHiveVersion, commonExcludes)
+    fatJarPackagedDependencies("org.apache.hive:hive-common:" + shadedHiveVersion) {
+      transitive = false
+    }
+    fatJarPackagedDependencies("org.apache.hive:hive-serde:" + shadedHiveVersion) {
+      transitive = false
+    }
   }
 
   shadowJar {
@@ -686,18 +691,10 @@ project(':iceberg-hive-metastore') {
       include 'NOTICE'
     }
 
-    dependencies {
-      exclude("images/**")
-      exclude("javax/**")
-      exclude("webapps/**")
-      exclude("schema/**")
-    }
-
-    relocate('org', 'iceberghive.relocated.org') {
+    relocate('org.apache', 'iceberghive.relocated.org.apache') {
       exclude 'org.apache.iceberg.**'
+      exclude 'org.apache.hadoop.hive.metastore.api.**'
     }
-    relocate('com', 'iceberghive.relocated.com')
-    relocate('javolution', 'iceberghive.relocated.javolution')
 
     minimize()
   }
