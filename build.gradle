@@ -678,6 +678,9 @@ project(':iceberg-hive-metastore') {
     fatJarPackagedDependencies("org.apache.hive:hive-serde:" + shadedHiveVersion) {
       transitive = false
     }
+    fatJarPackagedDependencies("org.apache.hive:hive-storage-api:2.4.0") {
+      transitive = false
+    }
   }
 
   shadowJar {
@@ -691,12 +694,11 @@ project(':iceberg-hive-metastore') {
       include 'NOTICE'
     }
 
-    relocate('org.apache', 'iceberghive.relocated.org.apache') {
+    relocate('org.apache.hadoop.hive', 'iceberghive.relocated.org.apache.hadoop.hive') {
       exclude 'org.apache.iceberg.**'
       exclude 'org.apache.hadoop.hive.metastore.api.**'
     }
-
-    minimize()
+    relocate('org.apache.hive', 'iceberghive.relocated.org.apache.hive')
   }
 }
 
