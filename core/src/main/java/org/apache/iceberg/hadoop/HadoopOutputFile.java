@@ -33,10 +33,13 @@ import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.io.OutputFileFactory;
 import org.apache.iceberg.io.PositionOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** {@link OutputFile} implementation using the Hadoop {@link FileSystem} API. */
 public class HadoopOutputFile implements OutputFile, NativelyEncryptedFile {
 
+  private static final Logger LOG = LoggerFactory.getLogger(HadoopOutputFile.class);
   private static final short DEFAULT_REPLICATION_FACTOR = 3;
   private final FileSystem fs;
   private final Path path;
@@ -64,7 +67,15 @@ public class HadoopOutputFile implements OutputFile, NativelyEncryptedFile {
     if (properties != null) {
       String replicationFactorAsString = properties.get(OutputFileFactory.FILE_REPLICATION_FACTOR);
       if (replicationFactorAsString != null) {
-        replicationFactor = Short.parseShort(replicationFactorAsString);
+        try {
+          replicationFactor = Short.parseShort(replicationFactorAsString);
+        } catch (NumberFormatException e) {
+          LOG.warn(
+              "Failed to parse replication factor: {}, defaulting to {}",
+              replicationFactorAsString,
+              DEFAULT_REPLICATION_FACTOR,
+              e);
+        }
       }
     }
     return fromPath(path, conf, replicationFactor);

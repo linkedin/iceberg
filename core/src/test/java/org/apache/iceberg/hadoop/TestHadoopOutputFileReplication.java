@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.io.OutputFileFactory;
 import org.apache.iceberg.io.PositionOutputStream;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.junit.jupiter.api.BeforeEach;
@@ -131,7 +132,9 @@ public class TestHadoopOutputFileReplication {
 
     OutputFile outputFile =
         fileIO.newOutputFile(
-            location, ImmutableMap.of("file-replication", String.valueOf(replicationFactor)));
+            location,
+            ImmutableMap.of(
+                OutputFileFactory.FILE_REPLICATION_FACTOR, String.valueOf(replicationFactor)));
 
     try (PositionOutputStream stream = outputFile.create()) {
       stream.write("test data from FileIO".getBytes());
@@ -154,5 +157,22 @@ public class TestHadoopOutputFileReplication {
     }
 
     assertThat(fileIO.newInputFile(location).exists()).isTrue();
+  }
+
+  @Test
+  public void testOutputFileWithInvalidReplication() throws IOException {
+    Path testPath = new Path(tempDir.toURI().toString(), "test-invalid-replication.txt");
+    String invalidReplication = "invalid";
+    OutputFile outputFile =
+        HadoopOutputFile.fromPath(
+            testPath,
+            conf,
+            ImmutableMap.of(OutputFileFactory.FILE_REPLICATION_FACTOR, invalidReplication));
+
+    try (PositionOutputStream stream = outputFile.create()) {
+      stream.write("test data".getBytes());
+    }
+
+    assertThat(fs.exists(testPath)).isTrue();
   }
 }
