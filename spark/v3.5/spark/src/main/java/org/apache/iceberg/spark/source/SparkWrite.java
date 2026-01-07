@@ -102,6 +102,7 @@ abstract class SparkWrite implements Write, RequiresDistributionAndOrdering {
   private final boolean useFanoutWriter;
   private final SparkWriteRequirements writeRequirements;
   private final Map<String, String> writeProperties;
+  private final short deleteFileReplication;
 
   private boolean cleanupOnAbort = true;
 
@@ -133,6 +134,7 @@ abstract class SparkWrite implements Write, RequiresDistributionAndOrdering {
     this.writeRequirements = writeRequirements;
     this.outputSpecId = writeConf.outputSpecId();
     this.writeProperties = writeConf.writeProperties();
+    this.deleteFileReplication = writeConf.deleteFileReplication();
   }
 
   @Override

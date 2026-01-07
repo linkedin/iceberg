@@ -120,4 +120,9 @@ subprojects {
       quiet = false
     }
   }
+
+  // Apply revapi plugin to specific projects for API compatibility checking
+  if (project.name in ['iceberg-api', 'iceberg-core', 'iceberg-parquet', 'iceberg-orc', 'iceberg-common', 'iceberg-data']) {
+    apply plugin: 'com.palantir.revapi'
+  }
 }

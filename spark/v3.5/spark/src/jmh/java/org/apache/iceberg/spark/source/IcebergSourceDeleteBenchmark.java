@@ -63,9 +63,11 @@ import org.slf4j.LoggerFactory;
 public abstract class IcebergSourceDeleteBenchmark extends IcebergSourceBenchmark {
   private static final Logger LOG = LoggerFactory.getLogger(IcebergSourceDeleteBenchmark.class);
   private static final long TARGET_FILE_SIZE_IN_BYTES = 512L * 1024 * 1024;
+  private static final short DELETE_FILE_REPLICATION = (short) 3;
 
   protected static final int NUM_FILES = 1;
   protected static final int NUM_ROWS = 10 * 1000 * 1000;
+  private static final short DEFAULT_REPLICATION_FACTOR = 3;
 
   @Setup
   public void setupBenchmark() throws IOException {
@@ -320,7 +322,11 @@ public abstract class IcebergSourceDeleteBenchmark extends IcebergSourceBenchmar
   }
 
   private OutputFileFactory newFileFactory() {
-    return OutputFileFactory.builderFor(table(), 1, 1).format(fileFormat()).build();
+    // OutputFileFactory is used only for creating delete files.
+    return OutputFileFactory.builderFor(table(), 1, 1)
+        .replicationFactor(DEFAULT_REPLICATION_FACTOR)
+        .format(fileFormat())
+        .build();
   }
 
   private CharSequence noisePath(CharSequence path) {
