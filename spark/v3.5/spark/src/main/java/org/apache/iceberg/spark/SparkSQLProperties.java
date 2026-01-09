@@ -93,4 +93,7 @@ public class SparkSQLProperties {
 
   // Controls the spark input split size.
   public static final String SPLIT_SIZE = "spark.sql.iceberg.split-size";
+
+  // Controls the delete file replication
+  public static final String DELETE_FILE_REPLICATION = "spark.sql.iceberg.delete-file-replication";
 }

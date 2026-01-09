@@ -23,8 +23,10 @@ public class SparkWriteOptions {
 
   private SparkWriteOptions() {}
 
+  // Configuration to tune the replication factor for delete files.
   public static final String DELETE_FILE_REPLICATION = "delete-file-replication";
 
+  // The default replication factor.
   public static final short DEFAULT_DELETE_FILE_REPLICATION = 3;
 
   // Fileformat for write operations(default: Table write.format.default )
