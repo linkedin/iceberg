@@ -97,4 +97,10 @@ public class SparkSQLProperties {
   public static final String EXECUTOR_CACHE_LOCALITY_ENABLED =
       "spark.sql.iceberg.executor-cache.locality.enabled";
   public static final boolean EXECUTOR_CACHE_LOCALITY_ENABLED_DEFAULT = false;
+
+  // Controls the spark input split size.
+  public static final String SPLIT_SIZE = "spark.sql.iceberg.split-size";
+
+  // Controls the replication factor for delete files
+  public static final String DELETE_FILE_REPLICATION = "spark.sql.iceberg.delete-file-replication";
 }

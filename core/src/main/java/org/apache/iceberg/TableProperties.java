@@ -371,4 +371,6 @@ public class TableProperties {
   public static final int ENCRYPTION_DEK_LENGTH_DEFAULT = 16;
 
   public static final int ENCRYPTION_AAD_LENGTH_DEFAULT = 16;
+
+  public static final String DELETE_FILE_REPLICATION = "write.delete-file-replication";
 }

@@ -73,6 +73,21 @@ public interface FileIO extends Serializable, Closeable {
   /** Get a {@link OutputFile} instance to write bytes to the file at the given path. */
   OutputFile newOutputFile(String path);
 
+  /**
+   * Get a {@link OutputFile} instance to write bytes to the file at the given path with specific
+   * properties.
+   *
+   * @param path the file path
+   * @param properties the properties for the output file
+   * @return an OutputFile for writing data
+   */
+  default OutputFile newOutputFile(String path, Map<String, String> properties) {
+    throw new UnsupportedOperationException(
+        String.format(
+            "Creating output file at: %s with properties: %s is not " + "supported",
+            path, properties));
+  }
+
   /** Delete the file at the given path. */
   void deleteFile(String path);
 

@@ -132,6 +132,17 @@ public class SparkWriteConf {
         .parse();
   }
 
+  public short deleteFileReplication() {
+    return (short)
+        confParser
+            .intConf()
+            .sessionConf(SparkSQLProperties.DELETE_FILE_REPLICATION)
+            .tableProperty(TableProperties.DELETE_FILE_REPLICATION)
+            .option(SparkWriteOptions.DELETE_FILE_REPLICATION)
+            .defaultValue(SparkWriteOptions.DEFAULT_DELETE_FILE_REPLICATION)
+            .parse();
+  }
+
   public String wapId() {
     return sessionConf.get(SparkSQLProperties.WAP_ID, null);
   }

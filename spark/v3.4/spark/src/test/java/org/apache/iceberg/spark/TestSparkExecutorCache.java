@@ -399,6 +399,11 @@ public class TestSparkExecutorCache extends SparkTestBaseWithCatalog {
     }
 
     @Override
+    public OutputFile newOutputFile(String path, Map<String, String> properties) {
+      return newOutputFile(path);
+    }
+
+    @Override
     public void deleteFile(String path) {
       File file = new File(path);
       if (!file.delete()) {
