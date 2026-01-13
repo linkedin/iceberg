@@ -48,6 +48,7 @@ import org.apache.iceberg.spark.SparkReadOptions;
 import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.iceberg.spark.SparkWriteOptions;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.connector.catalog.MetadataColumn;
@@ -90,10 +91,16 @@ public class SparkTable
           TableCapability.STREAMING_WRITE,
           TableCapability.OVERWRITE_BY_FILTER,
           TableCapability.OVERWRITE_DYNAMIC);
+  private static final Set<TableCapability> CAPABILITIES_WITH_ACCEPT_ANY_SCHEMA =
+      ImmutableSet.<TableCapability>builder()
+          .addAll(CAPABILITIES)
+          .add(TableCapability.ACCEPT_ANY_SCHEMA)
+          .build();
 
   private final Table icebergTable;
   private final Long snapshotId;
   private final boolean refreshEagerly;
+  private final Set<TableCapability> capabilities;
   private StructType lazyTableSchema = null;
   private SparkSession lazySpark = null;
 
@@ -105,6 +112,13 @@ public class SparkTable
     this.icebergTable = icebergTable;
     this.snapshotId = snapshotId;
     this.refreshEagerly = refreshEagerly;
+
+    boolean acceptAnySchema =
+        PropertyUtil.propertyAsBoolean(
+            icebergTable.properties(),
+            TableProperties.SPARK_WRITE_ACCEPT_ANY_SCHEMA,
+            TableProperties.SPARK_WRITE_ACCEPT_ANY_SCHEMA_DEFAULT);
+    this.capabilities = acceptAnySchema ? CAPABILITIES_WITH_ACCEPT_ANY_SCHEMA : CAPABILITIES;
   }
 
   private SparkSession sparkSession() {
@@ -177,7 +191,7 @@ public class SparkTable
 
   @Override
   public Set<TableCapability> capabilities() {
-    return CAPABILITIES;
+    return capabilities;
   }
 
   @Override
