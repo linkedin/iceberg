@@ -46,6 +46,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.relocated.com.google.common.math.LongMath;
 import org.apache.iceberg.spark.CommitMetadata;
 import org.apache.iceberg.spark.SparkReadOptions;
+import org.apache.iceberg.spark.SparkSQLProperties;
 import org.apache.iceberg.spark.SparkWriteOptions;
 import org.apache.iceberg.spark.TestBaseWithCatalog;
 import org.apache.iceberg.types.Types;
@@ -222,6 +223,51 @@ public class TestDataSourceOptions extends TestBaseWithCatalog {
     assertThat(resultDf.javaRDD().getNumPartitions())
         .as("Spark partitions should match")
         .isEqualTo(2);
+  }
+
+  @TestTemplate
+  public void testSplitSizeSessionConfigOverridesTableProperties() throws IOException {
+    String tableLocation = temp.resolve("iceberg-table").toFile().toString();
+
+    HadoopTables tables = new HadoopTables(CONF);
+    PartitionSpec spec = PartitionSpec.unpartitioned();
+    Map<String, String> options = Maps.newHashMap();
+    options.put(TableProperties.SPLIT_SIZE, String.valueOf(128L * 1024 * 1024)); // 128Mb
+    options.put(
+        TableProperties.DEFAULT_FILE_FORMAT,
+        String.valueOf(FileFormat.AVRO)); // Arbitrarily splittable
+    Table icebergTable = tables.create(SCHEMA, spec, options, tableLocation);
+
+    List<SimpleRecord> expectedRecords =
+        Lists.newArrayList(new SimpleRecord(1, "a"), new SimpleRecord(2, "b"));
+    Dataset<Row> originalDf = spark.createDataFrame(expectedRecords, SimpleRecord.class);
+    originalDf
+        .select("id", "data")
+        .repartition(1)
+        .write()
+        .format("iceberg")
+        .mode("append")
+        .save(tableLocation);
+
+    List<DataFile> files =
+        Lists.newArrayList(icebergTable.currentSnapshot().addedDataFiles(icebergTable.io()));
+    assertThat(files).as("Should have written 1 file").hasSize(1);
+
+    long fileSize = files.get(0).fileSizeInBytes();
+    long splitSize = LongMath.divide(fileSize, 2, RoundingMode.CEILING);
+
+    // Set split size via session config instead of read option
+    spark.conf().set(SparkSQLProperties.SPLIT_SIZE, String.valueOf(splitSize));
+
+    try {
+      Dataset<Row> resultDf = spark.read().format("iceberg").load(tableLocation);
+
+      assertThat(resultDf.javaRDD().getNumPartitions())
+          .as("Spark partitions should match when split size is set via session config")
+          .isEqualTo(2);
+    } finally {
+      spark.conf().unset(SparkSQLProperties.SPLIT_SIZE);
+    }
   }
 
   @TestTemplate
