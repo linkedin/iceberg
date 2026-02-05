@@ -185,4 +185,3 @@ public class TestDataFrameWriterV2 extends SparkTestBaseWithCatalog {
         sql("select * from %s order by id", tableName));
   }
 }
-
