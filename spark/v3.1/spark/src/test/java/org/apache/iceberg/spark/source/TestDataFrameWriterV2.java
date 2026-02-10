@@ -21,6 +21,7 @@ package org.apache.iceberg.spark.source;
 import org.apache.iceberg.AssertHelpers;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
+import org.apache.iceberg.spark.SparkSQLProperties;
 import org.apache.iceberg.spark.SparkTestBaseWithCatalog;
 import org.apache.spark.sql.AnalysisException;
 import org.apache.spark.sql.Dataset;
@@ -183,5 +184,97 @@ public class TestDataFrameWriterV2 extends SparkTestBaseWithCatalog {
         ImmutableList.of(
             row(1L, "a", null), row(2L, "b", null), row(3L, "c", 12.06F), row(4L, "d", 14.41F)),
         sql("select * from %s order by id", tableName));
+  }
+
+  @Test
+  public void testMergeSchemaSessionConf() throws Exception {
+    sql(
+        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='true')",
+        tableName, TableProperties.SPARK_WRITE_ACCEPT_ANY_SCHEMA);
+
+    Dataset<Row> twoColDF =
+        jsonToDF(
+            "id bigint, data string",
+            "{ \"id\": 1, \"data\": \"a\" }",
+            "{ \"id\": 2, \"data\": \"b\" }");
+
+    twoColDF.writeTo(tableName).append();
+
+    assertEquals(
+        "Should have initial 2-column rows",
+        ImmutableList.of(row(1L, "a"), row(2L, "b")),
+        sql("select * from %s order by id", tableName));
+
+    try {
+      spark.conf().set(SparkSQLProperties.MERGE_SCHEMA, "true");
+
+      Dataset<Row> threeColDF =
+          jsonToDF(
+              "id bigint, data string, new_col float",
+              "{ \"id\": 3, \"data\": \"c\", \"new_col\": 12.06 }",
+              "{ \"id\": 4, \"data\": \"d\", \"new_col\": 14.41 }");
+
+      // Append without passing merge-schema option; session conf should enable it
+      threeColDF.writeTo(tableName).append();
+
+      assertEquals(
+          "Should have 3-column rows when merge-schema is set via session conf",
+          ImmutableList.of(
+              row(1L, "a", null), row(2L, "b", null), row(3L, "c", 12.06F), row(4L, "d", 14.41F)),
+          sql("select * from %s order by id", tableName));
+    } finally {
+      spark.conf().unset(SparkSQLProperties.MERGE_SCHEMA);
+    }
+  }
+
+  /**
+   * Validates that when a column exists in both the table and the DataFrame but with incompatible
+   * types, the write fails both with and without mergeSchema. mergeSchema only adds new columns or
+   * widens nullability; it does not allow changing an existing column to an incompatible type.
+   */
+  @Test
+  public void testMergeSchemaIncompatibleTypeExistingColumn() throws Exception {
+    sql(
+        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='true')",
+        tableName, TableProperties.SPARK_WRITE_ACCEPT_ANY_SCHEMA);
+
+    // Table has: id bigint, data string
+    Dataset<Row> initialDF =
+        jsonToDF(
+            "id bigint, data string",
+            "{ \"id\": 1, \"data\": \"a\" }",
+            "{ \"id\": 2, \"data\": \"b\" }");
+    initialDF.writeTo(tableName).append();
+
+    // DataFrame has same column name "data" but incompatible type (int instead of string)
+    Dataset<Row> incompatibleTypeDF =
+        jsonToDF(
+            "id bigint, data int",
+            "{ \"id\": 3, \"data\": 10 }",
+            "{ \"id\": 4, \"data\": 20 }");
+
+    AssertHelpers.assertThrows(
+        "Write with incompatible type for existing column should fail when mergeSchema is disabled",
+        Exception.class,
+        null, // message may vary (e.g. type mismatch, schema, incompatible)
+        () -> {
+          try {
+            incompatibleTypeDF.writeTo(tableName).append();
+          } catch (NoSuchTableException e) {
+            throw new RuntimeException(e);
+          }
+        });
+
+    AssertHelpers.assertThrows(
+        "Write with incompatible type for existing column should fail when mergeSchema is enabled",
+        Exception.class,
+        null,
+        () -> {
+          try {
+            incompatibleTypeDF.writeTo(tableName).option("merge-schema", "true").append();
+          } catch (NoSuchTableException e) {
+            throw new RuntimeException(e);
+          }
+        });
   }
 }

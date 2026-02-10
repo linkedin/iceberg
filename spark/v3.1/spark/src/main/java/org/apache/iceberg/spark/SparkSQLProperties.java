@@ -48,4 +48,8 @@ public class SparkSQLProperties {
 
   // Controls the spark input split size.
   public static final String SPLIT_SIZE = "spark.sql.iceberg.split-size";
+
+  // Controls whether to merge the DataFrame schema with the table schema on write
+  public static final String MERGE_SCHEMA = "spark.sql.iceberg.merge-schema";
+  public static final boolean MERGE_SCHEMA_DEFAULT = false;
 }
