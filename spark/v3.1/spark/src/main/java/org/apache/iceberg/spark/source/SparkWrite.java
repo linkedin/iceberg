@@ -108,6 +108,7 @@ class SparkWrite {
   private final boolean partitionedFanoutEnabled;
   /** Pending schema update when mergeSchema was used; committed in commit() before data commit. */
   private final UpdateSchema pendingSchemaUpdate;
+
   private volatile boolean schemaUpdateCommitted = false;
 
   private boolean cleanupOnAbort = true;
@@ -121,7 +122,16 @@ class SparkWrite {
       String applicationName,
       Schema writeSchema,
       StructType dsSchema) {
-    this(spark, table, writeConf, writeInfo, applicationId, applicationName, writeSchema, dsSchema, null);
+    this(
+        spark,
+        table,
+        writeConf,
+        writeInfo,
+        applicationId,
+        applicationName,
+        writeSchema,
+        dsSchema,
+        null);
   }
 
   SparkWrite(

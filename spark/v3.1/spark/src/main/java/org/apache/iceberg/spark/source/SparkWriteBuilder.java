@@ -213,7 +213,8 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
           mergedSchema, writeSchema, writeConf.checkNullability(), writeConf.checkOrdering());
 
       // Defer commit to write commit phase so schema and data are only committed after data
-      // files are written. If the job fails after planning (e.g. OOM), the table schema is unchanged.
+      // files are written. If the job fails after planning (e.g. OOM), the table schema is
+      // unchanged.
       return new WriteSchemaResult(writeSchema, update);
     } else {
       Schema writeSchema = SparkSchemaUtil.convert(table.schema(), dsSchema);

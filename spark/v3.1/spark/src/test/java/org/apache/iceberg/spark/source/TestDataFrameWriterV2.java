@@ -249,9 +249,7 @@ public class TestDataFrameWriterV2 extends SparkTestBaseWithCatalog {
     // DataFrame has same column name "data" but incompatible type (int instead of string)
     Dataset<Row> incompatibleTypeDF =
         jsonToDF(
-            "id bigint, data int",
-            "{ \"id\": 3, \"data\": 10 }",
-            "{ \"id\": 4, \"data\": 20 }");
+            "id bigint, data int", "{ \"id\": 3, \"data\": 10 }", "{ \"id\": 4, \"data\": 20 }");
 
     AssertHelpers.assertThrows(
         "Write with incompatible type for existing column should fail when mergeSchema is disabled",
