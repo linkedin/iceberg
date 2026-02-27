@@ -38,6 +38,8 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.execution.ui.SQLExecutionUIData;
@@ -255,6 +257,11 @@ public abstract class SparkTestBase {
             .filter(x -> metricsIds.containsKey(x.getKey()))
             .collect(Collectors.toMap(x -> metricsIds.get(x.getKey()), x -> x.getValue()));
     Assert.assertEquals("Expected metric value not match", expectedMetrics, currentMetrics);
+  }
+
+  protected Dataset<Row> jsonToDF(String schema, String... records) {
+    Dataset<String> jsonDF = spark.createDataset(ImmutableList.copyOf(records), Encoders.STRING());
+    return spark.read().schema(schema).json(jsonDF);
   }
 
   @FunctionalInterface

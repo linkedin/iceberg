@@ -51,6 +51,7 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
@@ -105,6 +106,10 @@ class SparkWrite {
   private final StructType dsSchema;
   private final Map<String, String> extraSnapshotMetadata;
   private final boolean partitionedFanoutEnabled;
+  /** Pending schema update when mergeSchema was used; committed in commit() before data commit. */
+  private final UpdateSchema pendingSchemaUpdate;
+
+  private volatile boolean schemaUpdateCommitted = false;
 
   private boolean cleanupOnAbort = true;
 
@@ -117,6 +122,28 @@ class SparkWrite {
       String applicationName,
       Schema writeSchema,
       StructType dsSchema) {
+    this(
+        spark,
+        table,
+        writeConf,
+        writeInfo,
+        applicationId,
+        applicationName,
+        writeSchema,
+        dsSchema,
+        null);
+  }
+
+  SparkWrite(
+      SparkSession spark,
+      Table table,
+      SparkWriteConf writeConf,
+      LogicalWriteInfo writeInfo,
+      String applicationId,
+      String applicationName,
+      Schema writeSchema,
+      StructType dsSchema,
+      UpdateSchema pendingSchemaUpdate) {
     this.sparkContext = JavaSparkContext.fromSparkContext(spark.sparkContext());
     this.table = table;
     this.queryId = writeInfo.queryId();
@@ -130,6 +157,16 @@ class SparkWrite {
     this.dsSchema = dsSchema;
     this.extraSnapshotMetadata = writeConf.extraSnapshotMetadata();
     this.partitionedFanoutEnabled = writeConf.fanoutWriterEnabled();
+    this.pendingSchemaUpdate = pendingSchemaUpdate;
+  }
+
+  /** Commits the pending schema update (mergeSchema) if present. Called before data commit. */
+  private void commitPendingSchemaUpdate() {
+    if (pendingSchemaUpdate != null && !schemaUpdateCommitted) {
+      LOG.info("Committing schema update (mergeSchema) to table {}", table.name());
+      pendingSchemaUpdate.commit();
+      schemaUpdateCommitted = true;
+    }
   }
 
   BatchWrite asBatchAppend() {
@@ -262,6 +299,7 @@ class SparkWrite {
   private class BatchAppend extends BaseBatchWrite {
     @Override
     public void commit(WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       AppendFiles append = table.newAppend();
 
       int numFiles = 0;
@@ -277,6 +315,7 @@ class SparkWrite {
   private class DynamicOverwrite extends BaseBatchWrite {
     @Override
     public void commit(WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       Iterable<DataFile> files = files(messages);
 
       if (!files.iterator().hasNext()) {
@@ -307,6 +346,7 @@ class SparkWrite {
 
     @Override
     public void commit(WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       OverwriteFiles overwriteFiles = table.newOverwrite();
       overwriteFiles.overwriteByRowFilter(overwriteExpr);
 
@@ -350,6 +390,7 @@ class SparkWrite {
 
     @Override
     public void commit(WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       OverwriteFiles overwriteFiles = table.newOverwrite();
 
       List<DataFile> overwrittenFiles = overwrittenFiles();
@@ -420,6 +461,7 @@ class SparkWrite {
 
     @Override
     public void commit(WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       FileRewriteCoordinator coordinator = FileRewriteCoordinator.get();
 
       Set<DataFile> newDataFiles = Sets.newHashSetWithExpectedSize(messages.length);
@@ -500,6 +542,7 @@ class SparkWrite {
 
     @Override
     protected void doCommit(long epochId, WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       AppendFiles append = table.newFastAppend();
       int numFiles = 0;
       for (DataFile file : files(messages)) {
@@ -518,6 +561,7 @@ class SparkWrite {
 
     @Override
     public void doCommit(long epochId, WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       OverwriteFiles overwriteFiles = table.newOverwrite();
       overwriteFiles.overwriteByRowFilter(Expressions.alwaysTrue());
       int numFiles = 0;
