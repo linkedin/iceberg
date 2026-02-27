@@ -125,9 +125,9 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
             writeInfo,
             appId,
             appName,
-            schemaResult.writeSchema,
+            schemaResult.writeSchema(),
             dsSchema,
-            schemaResult.pendingSchemaUpdate);
+            schemaResult.pendingSchemaUpdate());
     if (overwriteByFilter) {
       return write.asOverwriteByFilter(overwriteExpr);
     } else if (overwriteDynamic) {
@@ -169,9 +169,9 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
             writeInfo,
             appId,
             appName,
-            schemaResult.writeSchema,
+            schemaResult.writeSchema(),
             dsSchema,
-            schemaResult.pendingSchemaUpdate);
+            schemaResult.pendingSchemaUpdate());
     if (overwriteByFilter) {
       return write.asStreamingOverwrite();
     } else {
@@ -187,12 +187,20 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
    * after planning (e.g. OOM in executors).
    */
   private static class WriteSchemaResult {
-    final Schema writeSchema;
-    final UpdateSchema pendingSchemaUpdate;
+    private final Schema writeSchema;
+    private final UpdateSchema pendingSchemaUpdate;
 
     WriteSchemaResult(Schema writeSchema, UpdateSchema pendingSchemaUpdate) {
       this.writeSchema = writeSchema;
       this.pendingSchemaUpdate = pendingSchemaUpdate;
+    }
+
+    Schema writeSchema() {
+      return this.writeSchema;
+    }
+
+    UpdateSchema pendingSchemaUpdate() {
+      return this.pendingSchemaUpdate;
     }
   }
 
