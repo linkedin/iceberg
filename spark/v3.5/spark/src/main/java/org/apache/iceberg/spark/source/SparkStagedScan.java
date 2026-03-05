@@ -39,8 +39,6 @@ class SparkStagedScan extends SparkScan {
   private final long splitSize;
   private final int splitLookback;
   private final long openFileCost;
-  private final boolean useDataOnlyWeight;
-
   private List<ScanTaskGroup<ScanTask>> taskGroups = null; // lazy cache of tasks
 
   SparkStagedScan(SparkSession spark, Table table, Schema expectedSchema, SparkReadConf readConf) {
@@ -49,7 +47,6 @@ class SparkStagedScan extends SparkScan {
     this.splitSize = readConf.splitSize();
     this.splitLookback = readConf.splitLookback();
     this.openFileCost = readConf.splitOpenFileCost();
-    this.useDataOnlyWeight = readConf.useDataOnlyWeight();
   }
 
   @Override
@@ -63,21 +60,16 @@ class SparkStagedScan extends SparkScan {
           table(),
           taskSetId);
 
-      if (useDataOnlyWeight) {
-        Function<ScanTask, Long> weightFunc =
-            task -> {
-              long dataSize =
-                  task instanceof ContentScanTask
-                      ? ((ContentScanTask<?>) task).length()
-                      : task.sizeBytes();
-              return Math.max(dataSize, task.filesCount() * openFileCost);
-            };
-        this.taskGroups =
-            TableScanUtil.planTaskGroups(tasks, splitSize, splitLookback, openFileCost, weightFunc);
-      } else {
-        this.taskGroups =
-            TableScanUtil.planTaskGroups(tasks, splitSize, splitLookback, openFileCost);
-      }
+      Function<ScanTask, Long> weightFunc =
+          task -> {
+            long dataSize =
+                task instanceof ContentScanTask
+                    ? ((ContentScanTask<?>) task).length()
+                    : task.sizeBytes();
+            return Math.max(dataSize, task.filesCount() * openFileCost);
+          };
+      this.taskGroups =
+          TableScanUtil.planTaskGroups(tasks, splitSize, splitLookback, openFileCost, weightFunc);
     }
     return taskGroups;
   }
@@ -98,20 +90,13 @@ class SparkStagedScan extends SparkScan {
         && readSchema().equals(that.readSchema())
         && Objects.equals(splitSize, that.splitSize)
         && Objects.equals(splitLookback, that.splitLookback)
-        && Objects.equals(openFileCost, that.openFileCost)
-        && useDataOnlyWeight == that.useDataOnlyWeight;
+        && Objects.equals(openFileCost, that.openFileCost);
   }
 
   @Override
   public int hashCode() {
     return Objects.hash(
-        table().name(),
-        taskSetId,
-        readSchema(),
-        splitSize,
-        splitLookback,
-        openFileCost,
-        useDataOnlyWeight);
+        table().name(), taskSetId, readSchema(), splitSize, splitLookback, openFileCost);
   }
 
   @Override

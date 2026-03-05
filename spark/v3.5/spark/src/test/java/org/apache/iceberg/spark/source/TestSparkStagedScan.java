@@ -131,7 +131,7 @@ public class TestSparkStagedScan extends CatalogTestBase {
   }
 
   @TestTemplate
-  public void testDataOnlyWeightTaskGroupPlanning() throws NoSuchTableException, IOException {
+  public void testDataOnlyWeightIsDefault() throws NoSuchTableException, IOException {
     sql("CREATE TABLE %s (id INT, data STRING) USING iceberg", tableName);
 
     List<SimpleRecord> records =
@@ -177,34 +177,19 @@ public class TestSparkStagedScan extends CatalogTestBase {
           .as("sizeBytes should be larger than data-only length due to delete files")
           .isGreaterThan(dataOnlySize);
 
-      // with data-only weight: both files should fit in one partition
+      // data-only weight is used by default: both files should fit in one partition
       // because their data-only sizes sum to exactly dataOnlySize
-      Dataset<Row> dataOnlyDF =
+      Dataset<Row> scanDF =
           spark
               .read()
               .format("iceberg")
               .option(SparkReadOptions.SCAN_TASK_SET_ID, setID)
               .option(SparkReadOptions.SPLIT_SIZE, dataOnlySize)
               .option(SparkReadOptions.FILE_OPEN_COST, "0")
-              .option(SparkReadOptions.USE_DATA_ONLY_WEIGHT, "true")
               .load(tableName);
-      assertThat(dataOnlyDF.javaRDD().getNumPartitions())
+      assertThat(scanDF.javaRDD().getNumPartitions())
           .as("Data-only weight should pack both files into 1 partition")
           .isEqualTo(1);
-
-      // without data-only weight: inflated sizeBytes should cause 2 partitions
-      // because the sizeBytes of both files together exceeds dataOnlySize
-      Dataset<Row> defaultDF =
-          spark
-              .read()
-              .format("iceberg")
-              .option(SparkReadOptions.SCAN_TASK_SET_ID, setID)
-              .option(SparkReadOptions.SPLIT_SIZE, dataOnlySize)
-              .option(SparkReadOptions.FILE_OPEN_COST, "0")
-              .load(tableName);
-      assertThat(defaultDF.javaRDD().getNumPartitions())
-          .as("Default weight (with deletes) should produce more partitions")
-          .isGreaterThan(1);
     }
   }
 }

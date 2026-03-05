@@ -49,7 +49,6 @@ class SparkBinPackDataRewriter extends SparkSizeBasedDataRewriter {
             .option(SparkReadOptions.SCAN_TASK_SET_ID, groupId)
             .option(SparkReadOptions.SPLIT_SIZE, splitSize(inputSize(group)))
             .option(SparkReadOptions.FILE_OPEN_COST, "0")
-            .option(SparkReadOptions.USE_DATA_ONLY_WEIGHT, "true")
             .load(groupId);
 
     // write the packed data into new files where each split becomes a new file

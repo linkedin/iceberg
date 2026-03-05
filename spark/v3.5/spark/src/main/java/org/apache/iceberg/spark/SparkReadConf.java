@@ -288,14 +288,6 @@ public class SparkReadConf {
         .parse();
   }
 
-  public boolean useDataOnlyWeight() {
-    return confParser
-        .booleanConf()
-        .option(SparkReadOptions.USE_DATA_ONLY_WEIGHT)
-        .defaultValue(false)
-        .parse();
-  }
-
   public int parallelism() {
     int defaultParallelism = spark.sparkContext().defaultParallelism();
     int numShufflePartitions = spark.sessionState().conf().numShufflePartitions();
