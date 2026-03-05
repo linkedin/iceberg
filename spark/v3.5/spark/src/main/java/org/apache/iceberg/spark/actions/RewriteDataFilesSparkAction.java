@@ -200,9 +200,9 @@ public class RewriteDataFilesSparkAction
     long pickedTasksSizeBytes = 0;
     int pickedTasksCount = 0;
     for (FileScanTask task : tasks) {
-      if (pickedTasksSizeBytes + task.sizeBytes() <= maxTotalFilesSizeBytes) {
+      if (pickedTasksSizeBytes + task.length() <= maxTotalFilesSizeBytes) {
         pickedTasksCount++;
-        pickedTasksSizeBytes += task.sizeBytes();
+        pickedTasksSizeBytes += task.length();
       } else {
         break;
       }
