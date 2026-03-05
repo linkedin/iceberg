@@ -73,8 +73,7 @@ class SparkStagedScan extends SparkScan {
               return Math.max(dataSize, task.filesCount() * openFileCost);
             };
         this.taskGroups =
-            TableScanUtil.planTaskGroups(
-                tasks, splitSize, splitLookback, openFileCost, weightFunc);
+            TableScanUtil.planTaskGroups(tasks, splitSize, splitLookback, openFileCost, weightFunc);
       } else {
         this.taskGroups =
             TableScanUtil.planTaskGroups(tasks, splitSize, splitLookback, openFileCost);
