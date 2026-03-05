@@ -20,8 +20,6 @@ package org.apache.iceberg.spark.source;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Function;
-import org.apache.iceberg.ContentScanTask;
 import org.apache.iceberg.ScanTask;
 import org.apache.iceberg.ScanTaskGroup;
 import org.apache.iceberg.Schema;
@@ -60,16 +58,8 @@ class SparkStagedScan extends SparkScan {
           table(),
           taskSetId);
 
-      Function<ScanTask, Long> weightFunc =
-          task -> {
-            long dataSize =
-                task instanceof ContentScanTask
-                    ? ((ContentScanTask<?>) task).length()
-                    : task.sizeBytes();
-            return Math.max(dataSize, task.filesCount() * openFileCost);
-          };
       this.taskGroups =
-          TableScanUtil.planTaskGroups(tasks, splitSize, splitLookback, openFileCost, weightFunc);
+          TableScanUtil.planTaskGroupsWithDataSize(tasks, splitSize, splitLookback, openFileCost);
     }
     return taskGroups;
   }

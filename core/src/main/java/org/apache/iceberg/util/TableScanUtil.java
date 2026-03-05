@@ -26,6 +26,7 @@ import org.apache.iceberg.BaseCombinedScanTask;
 import org.apache.iceberg.BaseScanTaskGroup;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.ContentFile;
+import org.apache.iceberg.ContentScanTask;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MergeableScanTask;
@@ -107,6 +108,23 @@ public class TableScanUtil {
       List<T> tasks, long splitSize, int lookback, long openFileCost) {
     return Lists.newArrayList(
         planTaskGroups(CloseableIterable.withNoopClose(tasks), splitSize, lookback, openFileCost));
+  }
+
+  /**
+   * Plans task groups using data-only file size (ContentScanTask::length) as the weight, ignoring
+   * delete file sizes. For non-ContentScanTask tasks, falls back to sizeBytes().
+   */
+  public static <T extends ScanTask> List<ScanTaskGroup<T>> planTaskGroupsWithDataSize(
+      List<T> tasks, long splitSize, int lookback, long openFileCost) {
+    Function<T, Long> weightFunc =
+        task -> {
+          long dataSize =
+              task instanceof ContentScanTask
+                  ? ((ContentScanTask<?>) task).length()
+                  : task.sizeBytes();
+          return Math.max(dataSize, task.filesCount() * openFileCost);
+        };
+    return planTaskGroups(tasks, splitSize, lookback, openFileCost, weightFunc);
   }
 
   public static <T extends ScanTask> List<ScanTaskGroup<T>> planTaskGroups(
