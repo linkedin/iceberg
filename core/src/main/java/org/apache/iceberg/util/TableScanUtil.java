@@ -109,9 +109,32 @@ public class TableScanUtil {
         planTaskGroups(CloseableIterable.withNoopClose(tasks), splitSize, lookback, openFileCost));
   }
 
+  public static <T extends ScanTask> List<ScanTaskGroup<T>> planTaskGroups(
+      List<T> tasks,
+      long splitSize,
+      int lookback,
+      long openFileCost,
+      Function<T, Long> weightFunc) {
+    return Lists.newArrayList(
+        planTaskGroups(
+            CloseableIterable.withNoopClose(tasks), splitSize, lookback, openFileCost, weightFunc));
+  }
+
   @SuppressWarnings("unchecked")
   public static <T extends ScanTask> CloseableIterable<ScanTaskGroup<T>> planTaskGroups(
       CloseableIterable<T> tasks, long splitSize, int lookback, long openFileCost) {
+    Function<T, Long> defaultWeightFunc =
+        task -> Math.max(task.sizeBytes(), task.filesCount() * openFileCost);
+    return planTaskGroups(tasks, splitSize, lookback, openFileCost, defaultWeightFunc);
+  }
+
+  @SuppressWarnings("unchecked")
+  public static <T extends ScanTask> CloseableIterable<ScanTaskGroup<T>> planTaskGroups(
+      CloseableIterable<T> tasks,
+      long splitSize,
+      int lookback,
+      long openFileCost,
+      Function<T, Long> weightFunc) {
 
     validatePlanningArguments(splitSize, lookback, openFileCost);
 
@@ -128,9 +151,6 @@ public class TableScanUtil {
                       }
                     }),
             tasks);
-
-    Function<T, Long> weightFunc =
-        task -> Math.max(task.sizeBytes(), task.filesCount() * openFileCost);
 
     return CloseableIterable.transform(
         CloseableIterable.combine(

@@ -95,4 +95,9 @@ public class SparkReadOptions {
   public static final String TIMESTAMP_AS_OF = "timestampAsOf";
 
   public static final String AGGREGATE_PUSH_DOWN_ENABLED = "aggregate-push-down-enabled";
+
+  // Use data-only size (ContentScanTask::length) as weight for task group planning
+  // instead of the default sizeBytes() which includes delete file sizes.
+  // Used by bin-pack compaction to produce correctly-sized output files.
+  public static final String USE_DATA_ONLY_WEIGHT = "use-data-only-weight";
 }
