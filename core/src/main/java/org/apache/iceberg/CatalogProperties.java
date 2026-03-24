@@ -140,6 +140,7 @@ public class CatalogProperties {
   public static final String LOCK_TABLE = "lock.table";
 
   public static final String APP_ID = "app-id";
+  public static final String APP_NAME = "app-name";
   public static final String USER = "user";
 
   /**
