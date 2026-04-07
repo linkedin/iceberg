@@ -63,6 +63,7 @@ public class RemoveOrphanFilesProcedure extends BaseProcedure {
         ProcedureParameter.optional("equal_schemes", STRING_MAP),
         ProcedureParameter.optional("equal_authorities", STRING_MAP),
         ProcedureParameter.optional("prefix_mismatch_mode", DataTypes.StringType),
+        ProcedureParameter.optional("stream_results", DataTypes.BooleanType),
       };
 
   private static final StructType OUTPUT_TYPE =
@@ -135,6 +136,7 @@ public class RemoveOrphanFilesProcedure extends BaseProcedure {
 
     PrefixMismatchMode prefixMismatchMode =
         args.isNullAt(8) ? null : PrefixMismatchMode.fromString(args.getString(8));
+    boolean streamResults = args.isNullAt(9) ? false : args.getBoolean(9);
 
     return withIcebergTable(
         tableIdent,
@@ -180,6 +182,10 @@ public class RemoveOrphanFilesProcedure extends BaseProcedure {
 
           if (prefixMismatchMode != null) {
             action.prefixMismatchMode(prefixMismatchMode);
+          }
+
+          if (streamResults) {
+            action.option("stream-results", "true");
           }
 
           DeleteOrphanFiles.Result result = action.execute();
