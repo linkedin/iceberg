@@ -20,7 +20,9 @@ package org.apache.iceberg.spark.source;
 
 import static org.apache.iceberg.TableProperties.SPARK_WRITE_PARTITIONED_FANOUT_ENABLED;
 import static org.apache.iceberg.types.Types.NestedField.optional;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
@@ -40,6 +42,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.hadoop.HadoopTables;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.SparkWriteOptions;
@@ -646,6 +649,62 @@ public class TestSparkDataWrite {
         result.orderBy("id").as(Encoders.bean(SimpleRecord.class)).collectAsList();
     Assert.assertEquals("Number of rows should match", records.size(), actual.size());
     Assert.assertEquals("Result rows should match", records, actual);
+  }
+
+  @Test
+  public void testAbortDeleteFailureDoesNotMaskCommitFailure() throws IOException {
+    File parent = temp.newFolder(format.toString());
+    File location = new File(parent, "abort_suppress");
+
+    HadoopTables tables = new HadoopTables(CONF);
+    PartitionSpec spec = PartitionSpec.builderFor(SCHEMA).identity("data").build();
+    Table table = tables.create(SCHEMA, spec, location.toString());
+
+    List<SimpleRecord> records =
+        Lists.newArrayList(
+            new SimpleRecord(1, "a"), new SimpleRecord(2, "b"), new SimpleRecord(3, "c"));
+
+    Dataset<Row> df = spark.createDataFrame(records, SimpleRecord.class);
+
+    // Make commit fail with a RuntimeException (not CommitStateUnknownException,
+    // so cleanupOnAbort stays true and abort will attempt file deletion)
+    AppendFiles append = table.newAppend();
+    AppendFiles spyAppend = spy(append);
+    doThrow(new RuntimeException("Simulated commit failure"))
+        .when(spyAppend)
+        .commit();
+
+    // Make file deletion also fail during abort to verify the delete failure
+    // is suppressed and does not mask the original commit failure
+    Table spyTable = spy(table);
+    when(spyTable.newAppend()).thenReturn(spyAppend);
+    FileIO spyIO = spy(table.io());
+    doThrow(new RuntimeException("Simulated HDFS delete failure"))
+        .when(spyIO)
+        .deleteFile(anyString());
+    when(spyTable.io()).thenReturn(spyIO);
+
+    SparkTable sparkTable = new SparkTable(spyTable, false);
+    String manualTableName = "abort_delete_suppress";
+    ManualSource.setTable(manualTableName, sparkTable);
+
+    // The write should fail with the original commit failure.
+    // With suppressFailureWhenFinished() in abort, delete failures are logged
+    // at WARN level but suppressed, allowing the original commit failure to surface.
+    AssertHelpers.assertThrowsWithCause(
+        "Should throw the original commit failure, not the delete failure from abort",
+        SparkException.class,
+        "Writing job aborted",
+        RuntimeException.class,
+        "Simulated commit failure",
+        () ->
+            df.select("id", "data")
+                .sort("data")
+                .write()
+                .format("org.apache.iceberg.spark.source.ManualSource")
+                .option(ManualSource.TABLE_NAME, manualTableName)
+                .mode(SaveMode.Append)
+                .save(location.toString()));
   }
 
   public enum IcebergOptionsType {
