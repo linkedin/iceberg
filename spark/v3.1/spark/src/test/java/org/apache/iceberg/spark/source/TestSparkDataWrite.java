@@ -670,9 +670,7 @@ public class TestSparkDataWrite {
     // so cleanupOnAbort stays true and abort will attempt file deletion)
     AppendFiles append = table.newAppend();
     AppendFiles spyAppend = spy(append);
-    doThrow(new RuntimeException("Simulated commit failure"))
-        .when(spyAppend)
-        .commit();
+    doThrow(new RuntimeException("Simulated commit failure")).when(spyAppend).commit();
 
     // Make file deletion also fail during abort to verify the delete failure
     // is suppressed and does not mask the original commit failure
