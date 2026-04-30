@@ -20,14 +20,6 @@ package org.apache.iceberg.spark.source;
 
 import static org.apache.iceberg.IsolationLevel.SERIALIZABLE;
 import static org.apache.iceberg.IsolationLevel.SNAPSHOT;
-import static org.apache.iceberg.TableProperties.COMMIT_MAX_RETRY_WAIT_MS;
-import static org.apache.iceberg.TableProperties.COMMIT_MAX_RETRY_WAIT_MS_DEFAULT;
-import static org.apache.iceberg.TableProperties.COMMIT_MIN_RETRY_WAIT_MS;
-import static org.apache.iceberg.TableProperties.COMMIT_MIN_RETRY_WAIT_MS_DEFAULT;
-import static org.apache.iceberg.TableProperties.COMMIT_NUM_RETRIES;
-import static org.apache.iceberg.TableProperties.COMMIT_NUM_RETRIES_DEFAULT;
-import static org.apache.iceberg.TableProperties.COMMIT_TOTAL_RETRY_TIME_MS;
-import static org.apache.iceberg.TableProperties.COMMIT_TOTAL_RETRY_TIME_MS_DEFAULT;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -69,7 +61,6 @@ import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.spark.CommitMetadata;
 import org.apache.iceberg.spark.FileRewriteCoordinator;
 import org.apache.iceberg.spark.SparkWriteConf;
-import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.Tasks;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
@@ -92,6 +83,11 @@ import org.slf4j.LoggerFactory;
 
 class SparkWrite {
   private static final Logger LOG = LoggerFactory.getLogger(SparkWrite.class);
+
+  private static final int DELETE_NUM_RETRIES = 3;
+  private static final int DELETE_MIN_RETRY_WAIT_MS = 100; // 100 ms
+  private static final int DELETE_MAX_RETRY_WAIT_MS = 30 * 1000; // 30 seconds
+  private static final int DELETE_TOTAL_RETRY_TIME_MS = 2 * 60 * 1000; // 2 minutes
 
   private final JavaSparkContext sparkContext;
   private final Table table;
@@ -244,18 +240,16 @@ class SparkWrite {
 
   private void abort(WriterCommitMessage[] messages) {
     if (cleanupOnAbort) {
-      Map<String, String> props = table.properties();
       Tasks.foreach(files(messages))
-          .retry(PropertyUtil.propertyAsInt(props, COMMIT_NUM_RETRIES, COMMIT_NUM_RETRIES_DEFAULT))
+          .retry(DELETE_NUM_RETRIES)
           .exponentialBackoff(
-              PropertyUtil.propertyAsInt(
-                  props, COMMIT_MIN_RETRY_WAIT_MS, COMMIT_MIN_RETRY_WAIT_MS_DEFAULT),
-              PropertyUtil.propertyAsInt(
-                  props, COMMIT_MAX_RETRY_WAIT_MS, COMMIT_MAX_RETRY_WAIT_MS_DEFAULT),
-              PropertyUtil.propertyAsInt(
-                  props, COMMIT_TOTAL_RETRY_TIME_MS, COMMIT_TOTAL_RETRY_TIME_MS_DEFAULT),
+              DELETE_MIN_RETRY_WAIT_MS,
+              DELETE_MAX_RETRY_WAIT_MS,
+              DELETE_TOTAL_RETRY_TIME_MS,
               2.0 /* exponential */)
-          .throwFailureWhenFinished()
+          .suppressFailureWhenFinished()
+          .onFailure(
+              (file, exc) -> LOG.warn("Failed to delete {} during job abort", file.path(), exc))
           .run(
               file -> {
                 table.io().deleteFile(file.path().toString());
@@ -668,8 +662,15 @@ class SparkWrite {
 
   private static <T extends ContentFile<T>> void deleteFiles(FileIO io, List<T> files) {
     Tasks.foreach(files)
-        .throwFailureWhenFinished()
-        .noRetry()
+        .suppressFailureWhenFinished()
+        .retry(DELETE_NUM_RETRIES)
+        .exponentialBackoff(
+            DELETE_MIN_RETRY_WAIT_MS,
+            DELETE_MAX_RETRY_WAIT_MS,
+            DELETE_TOTAL_RETRY_TIME_MS,
+            2.0 /* exponential */)
+        .onFailure(
+            (file, exc) -> LOG.warn("Failed to delete {} during task abort", file.path(), exc))
         .run(file -> io.deleteFile(file.path().toString()));
   }
 
