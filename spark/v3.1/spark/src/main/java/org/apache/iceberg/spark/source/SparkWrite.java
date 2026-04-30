@@ -20,6 +20,8 @@ package org.apache.iceberg.spark.source;
 
 import static org.apache.iceberg.IsolationLevel.SERIALIZABLE;
 import static org.apache.iceberg.IsolationLevel.SNAPSHOT;
+import static org.apache.iceberg.TableProperties.WRITE_ABORT_SUPPRESS_DELETE_FAILURES;
+import static org.apache.iceberg.TableProperties.WRITE_ABORT_SUPPRESS_DELETE_FAILURES_DEFAULT;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -61,6 +63,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.spark.CommitMetadata;
 import org.apache.iceberg.spark.FileRewriteCoordinator;
 import org.apache.iceberg.spark.SparkWriteConf;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.Tasks;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
@@ -240,20 +243,27 @@ class SparkWrite {
 
   private void abort(WriterCommitMessage[] messages) {
     if (cleanupOnAbort) {
-      Tasks.foreach(files(messages))
-          .retry(DELETE_NUM_RETRIES)
-          .exponentialBackoff(
-              DELETE_MIN_RETRY_WAIT_MS,
-              DELETE_MAX_RETRY_WAIT_MS,
-              DELETE_TOTAL_RETRY_TIME_MS,
-              2.0 /* exponential */)
-          .suppressFailureWhenFinished()
-          .onFailure(
-              (file, exc) -> LOG.warn("Failed to delete {} during job abort", file.path(), exc))
-          .run(
-              file -> {
-                table.io().deleteFile(file.path().toString());
-              });
+      boolean suppressFailures =
+          PropertyUtil.propertyAsBoolean(
+              table.properties(),
+              WRITE_ABORT_SUPPRESS_DELETE_FAILURES,
+              WRITE_ABORT_SUPPRESS_DELETE_FAILURES_DEFAULT);
+      Tasks.Builder<DataFile> builder =
+          Tasks.foreach(files(messages))
+              .retry(DELETE_NUM_RETRIES)
+              .exponentialBackoff(
+                  DELETE_MIN_RETRY_WAIT_MS,
+                  DELETE_MAX_RETRY_WAIT_MS,
+                  DELETE_TOTAL_RETRY_TIME_MS,
+                  2.0 /* exponential */)
+              .onFailure(
+                  (file, exc) -> LOG.warn("Failed to delete {} during job abort", file.path(), exc));
+      if (suppressFailures) {
+        builder.suppressFailureWhenFinished();
+      } else {
+        builder.throwFailureWhenFinished();
+      }
+      builder.run(file -> table.io().deleteFile(file.path().toString()));
     } else {
       LOG.warn(
           "Skipping cleaning up of data files because Iceberg was unable to determine the final commit state");
@@ -633,6 +643,11 @@ class SparkWrite {
       Table table = tableBroadcast.value();
       PartitionSpec spec = table.spec();
       FileIO io = table.io();
+      boolean suppressAbortDeleteFailures =
+          PropertyUtil.propertyAsBoolean(
+              table.properties(),
+              WRITE_ABORT_SUPPRESS_DELETE_FAILURES,
+              WRITE_ABORT_SUPPRESS_DELETE_FAILURES_DEFAULT);
 
       OutputFileFactory fileFactory =
           OutputFileFactory.builderFor(table, partitionId, taskId).format(format).build();
@@ -644,7 +659,8 @@ class SparkWrite {
               .build();
 
       if (spec.isUnpartitioned()) {
-        return new UnpartitionedDataWriter(writerFactory, fileFactory, io, spec, targetFileSize);
+        return new UnpartitionedDataWriter(
+            writerFactory, fileFactory, io, spec, targetFileSize, suppressAbortDeleteFailures);
 
       } else {
         return new PartitionedDataWriter(
@@ -655,38 +671,43 @@ class SparkWrite {
             writeSchema,
             dsSchema,
             targetFileSize,
-            partitionedFanoutEnabled);
+            partitionedFanoutEnabled,
+            suppressAbortDeleteFailures);
       }
     }
   }
 
-  private static <T extends ContentFile<T>> void deleteFiles(FileIO io, List<T> files) {
-    Tasks.foreach(files)
-        .suppressFailureWhenFinished()
-        .retry(DELETE_NUM_RETRIES)
-        .exponentialBackoff(
-            DELETE_MIN_RETRY_WAIT_MS,
-            DELETE_MAX_RETRY_WAIT_MS,
-            DELETE_TOTAL_RETRY_TIME_MS,
-            2.0 /* exponential */)
-        .onFailure(
-            (file, exc) -> LOG.warn("Failed to delete {} during task abort", file.path(), exc))
-        .run(file -> io.deleteFile(file.path().toString()));
+  private static <T extends ContentFile<T>> void deleteFiles(
+      FileIO io, List<T> files, boolean suppressFailures) {
+    Tasks.Builder<T> builder =
+        Tasks.foreach(files)
+            .noRetry()
+            .onFailure(
+                (file, exc) -> LOG.warn("Failed to delete {} during task abort", file.path(), exc));
+    if (suppressFailures) {
+      builder.suppressFailureWhenFinished();
+    } else {
+      builder.throwFailureWhenFinished();
+    }
+    builder.run(file -> io.deleteFile(file.path().toString()));
   }
 
   private static class UnpartitionedDataWriter implements DataWriter<InternalRow> {
     private final FileWriter<InternalRow, DataWriteResult> delegate;
     private final FileIO io;
+    private final boolean suppressAbortDeleteFailures;
 
     private UnpartitionedDataWriter(
         SparkFileWriterFactory writerFactory,
         OutputFileFactory fileFactory,
         FileIO io,
         PartitionSpec spec,
-        long targetFileSize) {
+        long targetFileSize,
+        boolean suppressAbortDeleteFailures) {
       this.delegate =
           new RollingDataWriter<>(writerFactory, fileFactory, io, targetFileSize, spec, null);
       this.io = io;
+      this.suppressAbortDeleteFailures = suppressAbortDeleteFailures;
     }
 
     @Override
@@ -709,7 +730,7 @@ class SparkWrite {
       close();
 
       DataWriteResult result = delegate.result();
-      deleteFiles(io, result.dataFiles());
+      deleteFiles(io, result.dataFiles(), suppressAbortDeleteFailures);
     }
 
     @Override
@@ -724,6 +745,7 @@ class SparkWrite {
     private final PartitionSpec spec;
     private final PartitionKey partitionKey;
     private final InternalRowWrapper internalRowWrapper;
+    private final boolean suppressAbortDeleteFailures;
 
     private PartitionedDataWriter(
         SparkFileWriterFactory writerFactory,
@@ -733,7 +755,8 @@ class SparkWrite {
         Schema dataSchema,
         StructType dataSparkType,
         long targetFileSize,
-        boolean fanoutEnabled) {
+        boolean fanoutEnabled,
+        boolean suppressAbortDeleteFailures) {
       if (fanoutEnabled) {
         this.delegate = new FanoutDataWriter<>(writerFactory, fileFactory, io, targetFileSize);
       } else {
@@ -743,6 +766,7 @@ class SparkWrite {
       this.spec = spec;
       this.partitionKey = new PartitionKey(spec, dataSchema);
       this.internalRowWrapper = new InternalRowWrapper(dataSparkType);
+      this.suppressAbortDeleteFailures = suppressAbortDeleteFailures;
     }
 
     @Override
@@ -766,7 +790,7 @@ class SparkWrite {
       close();
 
       DataWriteResult result = delegate.result();
-      deleteFiles(io, result.dataFiles());
+      deleteFiles(io, result.dataFiles(), suppressAbortDeleteFailures);
     }
 
     @Override

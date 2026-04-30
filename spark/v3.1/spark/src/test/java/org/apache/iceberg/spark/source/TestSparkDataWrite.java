@@ -652,6 +652,59 @@ public class TestSparkDataWrite {
   }
 
   @Test
+  public void testAbortDeleteFailureSurfacesWhenSuppressDisabled() throws IOException {
+    File parent = temp.newFolder(format.toString());
+    File location = new File(parent, "abort_suppress_off");
+
+    HadoopTables tables = new HadoopTables(CONF);
+    PartitionSpec spec = PartitionSpec.builderFor(SCHEMA).identity("data").build();
+    Table table = tables.create(SCHEMA, spec, location.toString());
+    table
+        .updateProperties()
+        .set(TableProperties.WRITE_ABORT_SUPPRESS_DELETE_FAILURES, "false")
+        .commit();
+
+    List<SimpleRecord> records =
+        Lists.newArrayList(
+            new SimpleRecord(1, "a"), new SimpleRecord(2, "b"), new SimpleRecord(3, "c"));
+
+    Dataset<Row> df = spark.createDataFrame(records, SimpleRecord.class);
+
+    AppendFiles append = table.newAppend();
+    AppendFiles spyAppend = spy(append);
+    doThrow(new RuntimeException("Simulated commit failure")).when(spyAppend).commit();
+
+    Table spyTable = spy(table);
+    when(spyTable.newAppend()).thenReturn(spyAppend);
+    FileIO spyIO = spy(table.io());
+    doThrow(new RuntimeException("Simulated HDFS delete failure"))
+        .when(spyIO)
+        .deleteFile(anyString());
+    when(spyTable.io()).thenReturn(spyIO);
+
+    SparkTable sparkTable = new SparkTable(spyTable, false);
+    String manualTableName = "abort_delete_propagate";
+    ManualSource.setTable(manualTableName, sparkTable);
+
+    // With suppression disabled, the delete failure during abort surfaces as the cause
+    // instead of the original commit failure.
+    AssertHelpers.assertThrowsWithCause(
+        "Should throw the delete failure when suppression is disabled",
+        SparkException.class,
+        "Writing job aborted",
+        RuntimeException.class,
+        "Simulated HDFS delete failure",
+        () ->
+            df.select("id", "data")
+                .sort("data")
+                .write()
+                .format("org.apache.iceberg.spark.source.ManualSource")
+                .option(ManualSource.TABLE_NAME, manualTableName)
+                .mode(SaveMode.Append)
+                .save(location.toString()));
+  }
+
+  @Test
   public void testAbortDeleteFailureDoesNotMaskCommitFailure() throws IOException {
     File parent = temp.newFolder(format.toString());
     File location = new File(parent, "abort_suppress");
