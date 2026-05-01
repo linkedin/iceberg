@@ -714,8 +714,8 @@ public class TestSparkDataWrite {
         .anyMatch(s -> containsMessage(s, "Simulated HDFS delete failure"));
   }
 
-  private static boolean containsMessage(Throwable t, String fragment) {
-    for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+  private static boolean containsMessage(Throwable throwable, String fragment) {
+    for (Throwable cur = throwable; cur != null; cur = cur.getCause()) {
       if (cur.getMessage() != null && cur.getMessage().contains(fragment)) {
         return true;
       }
