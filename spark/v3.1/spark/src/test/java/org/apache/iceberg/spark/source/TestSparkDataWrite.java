@@ -20,6 +20,8 @@ package org.apache.iceberg.spark.source;
 
 import static org.apache.iceberg.TableProperties.SPARK_WRITE_PARTITIONED_FANOUT_ENABLED;
 import static org.apache.iceberg.types.Types.NestedField.optional;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -686,22 +688,39 @@ public class TestSparkDataWrite {
     String manualTableName = "abort_delete_propagate";
     ManualSource.setTable(manualTableName, sparkTable);
 
-    // With suppression disabled, the delete failure during abort surfaces as the cause
-    // instead of the original commit failure.
-    AssertHelpers.assertThrowsWithCause(
-        "Should throw the delete failure when suppression is disabled",
-        SparkException.class,
-        "Writing job aborted",
-        RuntimeException.class,
-        "Simulated HDFS delete failure",
-        () ->
-            df.select("id", "data")
-                .sort("data")
-                .write()
-                .format("org.apache.iceberg.spark.source.ManualSource")
-                .option(ManualSource.TABLE_NAME, manualTableName)
-                .mode(SaveMode.Append)
-                .save(location.toString()));
+    // With suppression disabled, the abort itself throws the delete failure. Spark wraps the
+    // original commit failure as the cause and adds the abort exception to the cause's
+    // suppressed list, then throws SparkException("Writing job failed.", commitFailure).
+    Throwable thrown =
+        catchThrowable(
+            () ->
+                df.select("id", "data")
+                    .sort("data")
+                    .write()
+                    .format("org.apache.iceberg.spark.source.ManualSource")
+                    .option(ManualSource.TABLE_NAME, manualTableName)
+                    .mode(SaveMode.Append)
+                    .save(location.toString()));
+
+    assertThat(thrown)
+        .isInstanceOf(SparkException.class)
+        .hasMessageContaining("Writing job failed")
+        .hasCauseInstanceOf(RuntimeException.class);
+    assertThat(thrown.getCause())
+        .as("SparkException cause should be the original commit failure")
+        .hasMessageContaining("Simulated commit failure");
+    assertThat(thrown.getCause().getSuppressed())
+        .as("Delete failure should be attached to the commit cause as a suppressed exception")
+        .anyMatch(s -> containsMessage(s, "Simulated HDFS delete failure"));
+  }
+
+  private static boolean containsMessage(Throwable t, String fragment) {
+    for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+      if (cur.getMessage() != null && cur.getMessage().contains(fragment)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Test

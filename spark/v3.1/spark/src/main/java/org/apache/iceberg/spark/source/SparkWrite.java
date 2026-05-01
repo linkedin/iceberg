@@ -257,7 +257,8 @@ class SparkWrite {
                   DELETE_TOTAL_RETRY_TIME_MS,
                   2.0 /* exponential */)
               .onFailure(
-                  (file, exc) -> LOG.warn("Failed to delete {} during job abort", file.path(), exc));
+                  (file, exc) ->
+                      LOG.warn("Failed to delete {} during job abort", file.path(), exc));
       if (suppressFailures) {
         builder.suppressFailureWhenFinished();
       } else {
