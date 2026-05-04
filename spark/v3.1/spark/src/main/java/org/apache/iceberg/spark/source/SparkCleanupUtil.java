@@ -101,11 +101,7 @@ class SparkCleanupUtil {
   }
 
   private static void deletePaths(
-      String context,
-      FileIO io,
-      List<String> paths,
-      boolean suppressFailure,
-      boolean enableRetry) {
+      String context, FileIO io, List<String> paths, boolean suppressFailure, boolean enableRetry) {
     if (io instanceof SupportsBulkOperations) {
       SupportsBulkOperations bulkIO = (SupportsBulkOperations) io;
       bulkDelete(context, bulkIO, paths, suppressFailure);
