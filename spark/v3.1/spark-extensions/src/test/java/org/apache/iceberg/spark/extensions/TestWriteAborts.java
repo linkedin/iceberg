@@ -189,8 +189,7 @@ public class TestWriteAborts extends SparkExtensionsTestBase {
     // number of files written before the task failed, but it should be small (coalesce(1) on
     // 4 input rows). The default retry would produce >= 4 attempts per file.
     int attempts = CustomFileIO.deleteAttempts.get();
-    Assert.assertTrue(
-        "Expected at least one delete attempt, got " + attempts, attempts >= 1);
+    Assert.assertTrue("Expected at least one delete attempt, got " + attempts, attempts >= 1);
     Assert.assertTrue(
         "Expected fewer than 4 delete attempts when retry is disabled, but got " + attempts,
         attempts < 4);
