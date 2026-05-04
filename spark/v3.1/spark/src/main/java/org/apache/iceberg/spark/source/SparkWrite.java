@@ -40,6 +40,7 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.expressions.Expression;
@@ -57,6 +58,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.CommitMetadata;
 import org.apache.iceberg.spark.FileRewriteCoordinator;
 import org.apache.iceberg.spark.SparkWriteConf;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -92,6 +94,8 @@ class SparkWrite {
   private final StructType dsSchema;
   private final Map<String, String> extraSnapshotMetadata;
   private final boolean partitionedFanoutEnabled;
+  private final boolean suppressFailureOnAbort;
+  private final boolean retryOnAbort;
   /** Pending schema update when mergeSchema was used; committed in commit() before data commit. */
   private final UpdateSchema pendingSchemaUpdate;
 
@@ -143,6 +147,16 @@ class SparkWrite {
     this.dsSchema = dsSchema;
     this.extraSnapshotMetadata = writeConf.extraSnapshotMetadata();
     this.partitionedFanoutEnabled = writeConf.fanoutWriterEnabled();
+    this.suppressFailureOnAbort =
+        PropertyUtil.propertyAsBoolean(
+            table.properties(),
+            TableProperties.SPARK_WRITE_ABORT_SUPPRESS_FAILURE_ENABLED,
+            TableProperties.SPARK_WRITE_ABORT_SUPPRESS_FAILURE_ENABLED_DEFAULT);
+    this.retryOnAbort =
+        PropertyUtil.propertyAsBoolean(
+            table.properties(),
+            TableProperties.SPARK_WRITE_ABORT_RETRY_ENABLED,
+            TableProperties.SPARK_WRITE_ABORT_RETRY_ENABLED_DEFAULT);
     this.pendingSchemaUpdate = pendingSchemaUpdate;
   }
 
@@ -189,7 +203,14 @@ class SparkWrite {
     Broadcast<Table> tableBroadcast =
         sparkContext.broadcast(SerializableTableWithSize.copyOf(table));
     return new WriterFactory(
-        tableBroadcast, format, targetFileSize, writeSchema, dsSchema, partitionedFanoutEnabled);
+        tableBroadcast,
+        format,
+        targetFileSize,
+        writeSchema,
+        dsSchema,
+        partitionedFanoutEnabled,
+        suppressFailureOnAbort,
+        retryOnAbort);
   }
 
   private void commitOperation(SnapshotUpdate<?> operation, String description) {
@@ -230,7 +251,8 @@ class SparkWrite {
 
   private void abort(WriterCommitMessage[] messages) {
     if (cleanupOnAbort) {
-      SparkCleanupUtil.deleteFiles("job abort", table.io(), files(messages));
+      SparkCleanupUtil.deleteFiles(
+          "job abort", table.io(), files(messages), suppressFailureOnAbort, retryOnAbort);
     } else {
       LOG.warn("Skipping cleanup of written files");
     }
@@ -577,6 +599,8 @@ class SparkWrite {
     private final Schema writeSchema;
     private final StructType dsSchema;
     private final boolean partitionedFanoutEnabled;
+    private final boolean suppressFailureOnAbort;
+    private final boolean retryOnAbort;
 
     protected WriterFactory(
         Broadcast<Table> tableBroadcast,
@@ -584,13 +608,17 @@ class SparkWrite {
         long targetFileSize,
         Schema writeSchema,
         StructType dsSchema,
-        boolean partitionedFanoutEnabled) {
+        boolean partitionedFanoutEnabled,
+        boolean suppressFailureOnAbort,
+        boolean retryOnAbort) {
       this.tableBroadcast = tableBroadcast;
       this.format = format;
       this.targetFileSize = targetFileSize;
       this.writeSchema = writeSchema;
       this.dsSchema = dsSchema;
       this.partitionedFanoutEnabled = partitionedFanoutEnabled;
+      this.suppressFailureOnAbort = suppressFailureOnAbort;
+      this.retryOnAbort = retryOnAbort;
     }
 
     @Override
@@ -614,7 +642,14 @@ class SparkWrite {
               .build();
 
       if (spec.isUnpartitioned()) {
-        return new UnpartitionedDataWriter(writerFactory, fileFactory, io, spec, targetFileSize);
+        return new UnpartitionedDataWriter(
+            writerFactory,
+            fileFactory,
+            io,
+            spec,
+            targetFileSize,
+            suppressFailureOnAbort,
+            retryOnAbort);
 
       } else {
         return new PartitionedDataWriter(
@@ -625,7 +660,9 @@ class SparkWrite {
             writeSchema,
             dsSchema,
             targetFileSize,
-            partitionedFanoutEnabled);
+            partitionedFanoutEnabled,
+            suppressFailureOnAbort,
+            retryOnAbort);
       }
     }
   }
@@ -633,16 +670,22 @@ class SparkWrite {
   private static class UnpartitionedDataWriter implements DataWriter<InternalRow> {
     private final FileWriter<InternalRow, DataWriteResult> delegate;
     private final FileIO io;
+    private final boolean suppressFailureOnAbort;
+    private final boolean retryOnAbort;
 
     private UnpartitionedDataWriter(
         SparkFileWriterFactory writerFactory,
         OutputFileFactory fileFactory,
         FileIO io,
         PartitionSpec spec,
-        long targetFileSize) {
+        long targetFileSize,
+        boolean suppressFailureOnAbort,
+        boolean retryOnAbort) {
       this.delegate =
           new RollingDataWriter<>(writerFactory, fileFactory, io, targetFileSize, spec, null);
       this.io = io;
+      this.suppressFailureOnAbort = suppressFailureOnAbort;
+      this.retryOnAbort = retryOnAbort;
     }
 
     @Override
@@ -665,7 +708,8 @@ class SparkWrite {
       close();
 
       DataWriteResult result = delegate.result();
-      SparkCleanupUtil.deleteTaskFiles(io, result.dataFiles());
+      SparkCleanupUtil.deleteTaskFiles(
+          io, result.dataFiles(), suppressFailureOnAbort, retryOnAbort);
     }
 
     @Override
@@ -680,6 +724,8 @@ class SparkWrite {
     private final PartitionSpec spec;
     private final PartitionKey partitionKey;
     private final InternalRowWrapper internalRowWrapper;
+    private final boolean suppressFailureOnAbort;
+    private final boolean retryOnAbort;
 
     private PartitionedDataWriter(
         SparkFileWriterFactory writerFactory,
@@ -689,7 +735,9 @@ class SparkWrite {
         Schema dataSchema,
         StructType dataSparkType,
         long targetFileSize,
-        boolean fanoutEnabled) {
+        boolean fanoutEnabled,
+        boolean suppressFailureOnAbort,
+        boolean retryOnAbort) {
       if (fanoutEnabled) {
         this.delegate = new FanoutDataWriter<>(writerFactory, fileFactory, io, targetFileSize);
       } else {
@@ -699,6 +747,8 @@ class SparkWrite {
       this.spec = spec;
       this.partitionKey = new PartitionKey(spec, dataSchema);
       this.internalRowWrapper = new InternalRowWrapper(dataSparkType);
+      this.suppressFailureOnAbort = suppressFailureOnAbort;
+      this.retryOnAbort = retryOnAbort;
     }
 
     @Override
@@ -722,7 +772,8 @@ class SparkWrite {
       close();
 
       DataWriteResult result = delegate.result();
-      SparkCleanupUtil.deleteTaskFiles(io, result.dataFiles());
+      SparkCleanupUtil.deleteTaskFiles(
+          io, result.dataFiles(), suppressFailureOnAbort, retryOnAbort);
     }
 
     @Override

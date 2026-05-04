@@ -48,13 +48,20 @@ class SparkCleanupUtil {
    * Attempts to delete as many files produced by a task as possible.
    *
    * <p>Note this method will log Spark task info and is supposed to be called only on executors.
-   * Use {@link #deleteFiles(String, FileIO, List)} to delete files on the driver.
+   * Use {@link #deleteFiles(String, FileIO, List, boolean, boolean)} to delete files on the driver.
    *
    * @param io a {@link FileIO} instance used for deleting files
    * @param files a list of files to delete
+   * @param suppressFailure whether to suppress per-file failures and continue; when false, the
+   *     first failure is rethrown after the run completes
+   * @param enableRetry whether to retry individual file deletions on transient failures
    */
-  public static void deleteTaskFiles(FileIO io, List<? extends ContentFile<?>> files) {
-    deleteFiles(taskInfo(), io, files);
+  public static void deleteTaskFiles(
+      FileIO io,
+      List<? extends ContentFile<?>> files,
+      boolean suppressFailure,
+      boolean enableRetry) {
+    deleteFiles(taskInfo(), io, files, suppressFailure, enableRetry);
   }
 
   // the format matches what Spark uses for internal logging
@@ -79,22 +86,36 @@ class SparkCleanupUtil {
    * @param context a helpful description of the operation invoking this method
    * @param io a {@link FileIO} instance used for deleting files
    * @param files a list of files to delete
+   * @param suppressFailure whether to suppress per-file failures and continue; when false, the
+   *     first failure is rethrown after the run completes
+   * @param enableRetry whether to retry individual file deletions on transient failures
    */
-  public static void deleteFiles(String context, FileIO io, List<? extends ContentFile<?>> files) {
+  public static void deleteFiles(
+      String context,
+      FileIO io,
+      List<? extends ContentFile<?>> files,
+      boolean suppressFailure,
+      boolean enableRetry) {
     List<String> paths = Lists.transform(files, file -> file.path().toString());
-    deletePaths(context, io, paths);
+    deletePaths(context, io, paths, suppressFailure, enableRetry);
   }
 
-  private static void deletePaths(String context, FileIO io, List<String> paths) {
+  private static void deletePaths(
+      String context,
+      FileIO io,
+      List<String> paths,
+      boolean suppressFailure,
+      boolean enableRetry) {
     if (io instanceof SupportsBulkOperations) {
       SupportsBulkOperations bulkIO = (SupportsBulkOperations) io;
-      bulkDelete(context, bulkIO, paths);
+      bulkDelete(context, bulkIO, paths, suppressFailure);
     } else {
-      delete(context, io, paths);
+      delete(context, io, paths, suppressFailure, enableRetry);
     }
   }
 
-  private static void bulkDelete(String context, SupportsBulkOperations io, List<String> paths) {
+  private static void bulkDelete(
+      String context, SupportsBulkOperations io, List<String> paths, boolean suppressFailure) {
     try {
       io.deleteFiles(paths);
       LOG.info("Deleted {} file(s) using bulk deletes ({})", paths.size(), context);
@@ -106,28 +127,40 @@ class SparkCleanupUtil {
           deletedFilesCount,
           paths.size(),
           context);
+      if (!suppressFailure) {
+        throw e;
+      }
     }
   }
 
-  private static void delete(String context, FileIO io, List<String> paths) {
+  private static void delete(
+      String context, FileIO io, List<String> paths, boolean suppressFailure, boolean enableRetry) {
     AtomicInteger deletedFilesCount = new AtomicInteger(0);
 
-    Tasks.foreach(paths)
-        .executeWith(ThreadPools.getWorkerPool())
-        .stopRetryOn(NotFoundException.class)
-        .suppressFailureWhenFinished()
-        .onFailure((path, exc) -> LOG.warn("Failed to delete {} ({})", path, context, exc))
-        .retry(DELETE_NUM_RETRIES)
-        .exponentialBackoff(
-            DELETE_MIN_RETRY_WAIT_MS,
-            DELETE_MAX_RETRY_WAIT_MS,
-            DELETE_TOTAL_RETRY_TIME_MS,
-            2 /* exponential */)
-        .run(
-            path -> {
-              io.deleteFile(path);
-              deletedFilesCount.incrementAndGet();
-            });
+    Tasks.Builder<String> builder =
+        Tasks.foreach(paths)
+            .executeWith(ThreadPools.getWorkerPool())
+            .stopRetryOn(NotFoundException.class)
+            .throwFailureWhenFinished(!suppressFailure)
+            .onFailure((path, exc) -> LOG.warn("Failed to delete {} ({})", path, context, exc));
+
+    if (enableRetry) {
+      builder
+          .retry(DELETE_NUM_RETRIES)
+          .exponentialBackoff(
+              DELETE_MIN_RETRY_WAIT_MS,
+              DELETE_MAX_RETRY_WAIT_MS,
+              DELETE_TOTAL_RETRY_TIME_MS,
+              2 /* exponential */);
+    } else {
+      builder.noRetry();
+    }
+
+    builder.run(
+        path -> {
+          io.deleteFile(path);
+          deletedFilesCount.incrementAndGet();
+        });
 
     if (deletedFilesCount.get() < paths.size()) {
       LOG.warn("Deleted only {} of {} file(s) ({})", deletedFilesCount, paths.size(), context);
