@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.optimizer.RewriteMergeInto
 import org.apache.spark.sql.catalyst.optimizer.RewriteUpdate
 import org.apache.spark.sql.catalyst.parser.extensions.IcebergSparkSqlExtensionsParser
 import org.apache.spark.sql.execution.datasources.v2.ExtendedDataSourceV2Strategy
+import org.apache.spark.sql.execution.datasources.v2.ExtendedV2Writes
 
 class IcebergSparkSessionExtensions extends (SparkSessionExtensions => Unit) {
 
@@ -50,6 +51,11 @@ class IcebergSparkSessionExtensions extends (SparkSessionExtensions => Unit) {
     extensions.injectOptimizerRule { spark => RewriteDelete(spark) }
     extensions.injectOptimizerRule { spark => RewriteUpdate(spark) }
     extensions.injectOptimizerRule { spark => RewriteMergeInto(spark) }
+
+    // pre-CBO extensions
+    // attach the Iceberg table's required distribution and ordering to V2 writes after
+    // the optimizer has resolved the write target but before physical planning
+    extensions.injectPreCBORule { _ => ExtendedV2Writes }
 
     // planner extensions
     extensions.injectPlannerStrategy { spark => ExtendedDataSourceV2Strategy(spark) }
