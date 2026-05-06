@@ -29,6 +29,9 @@ import org.apache.spark.sql.catalyst.plans.logical.Sort
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.utils.DistributionAndOrderingUtils
 import org.apache.spark.sql.catalyst.utils.PlanUtils.isIcebergRelation
+import org.apache.spark.sql.connector.iceberg.distributions.Distribution
+import org.apache.spark.sql.connector.iceberg.distributions.OrderedDistribution
+import org.apache.spark.sql.connector.iceberg.expressions.SortOrder
 
 /**
  * Backport of the Spark 3.2 V2Writes idea to the v3.1 logical plan API. In Spark 3.1
@@ -39,6 +42,11 @@ import org.apache.spark.sql.catalyst.utils.PlanUtils.isIcebergRelation
  * v3.1-only path: no Write is built here; ExtendedDataSourceV2Strategy still constructs the
  * Write at physical planning. This rule only attaches the required distribution and ordering
  * to the query feeding the write.
+ *
+ * Ordering policy: only RANGE distribution or an explicit table sort order produces a required
+ * ordering. For HASH/NONE on a partitioned-but-unsorted table the rule does NOT synthesize a
+ * sort from the partition spec, matching Spark 3.5's SparkWrite behavior; clustering across
+ * partitions in that case is handled by the writer (fanout writers, in particular).
  *
  * Row-level commands (MERGE/UPDATE/DELETE) are intentionally skipped: their rewriters already
  * call buildWritePlan, which prepares the query before constructing AppendData/ReplaceData. The
@@ -74,7 +82,26 @@ object ExtendedV2Writes extends Rule[LogicalPlan] {
   private def prepareQuery(r: DataSourceV2Relation, query: LogicalPlan): LogicalPlan = {
     val icebergTable = Spark3Util.toIcebergTable(r.table)
     val distribution = Spark3Util.buildRequiredDistribution(icebergTable)
-    val ordering = Spark3Util.buildRequiredOrdering(distribution, icebergTable)
+    val ordering = requiredOrdering(distribution, icebergTable)
     DistributionAndOrderingUtils.prepareQuery(distribution, ordering, query, conf)
+  }
+
+  // Match Spark 3.5 behavior: only attach a required local sort when the distribution itself is
+  // ordered (RANGE) or the table has an explicit user-supplied sort order. For HASH/NONE on a
+  // partitioned-but-unsorted table, do NOT synthesize a sort from the partition spec — leave that
+  // responsibility to the writer (e.g. fanout writers handle multi-partition tasks). Spark3Util's
+  // buildRequiredOrdering would otherwise fall through to SortOrderUtil.buildSortOrder, which
+  // adds the partition columns as the ordering and forces a local Sort into the plan.
+  private def requiredOrdering(
+      distribution: Distribution,
+      icebergTable: org.apache.iceberg.Table): Array[SortOrder] = {
+    distribution match {
+      case od: OrderedDistribution =>
+        od.ordering
+      case _ if !icebergTable.sortOrder().isUnsorted =>
+        Spark3Util.convert(icebergTable.sortOrder())
+      case _ =>
+        Array.empty[SortOrder]
+    }
   }
 }
