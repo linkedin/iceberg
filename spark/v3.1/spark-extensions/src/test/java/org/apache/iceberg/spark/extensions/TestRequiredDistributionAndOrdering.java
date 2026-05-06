@@ -457,6 +457,160 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
     }
   }
 
+  // The rule still wraps the query in RepartitionByExpression + Sort; both must
+  // handle a zero-row plan cleanly without producing a failed snapshot.
+  @Test
+  public void testEmptyInputWithHashDistribution() throws NoSuchTableException {
+    sql(
+        "CREATE TABLE %s (id INT, category STRING, data STRING) "
+            + "USING iceberg "
+            + "PARTITIONED BY (bucket(4, id))",
+        tableName);
+    sql(
+        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='hash')",
+        tableName, TableProperties.WRITE_DISTRIBUTION_MODE);
+
+    Dataset<Row> emptyDF = unclusteredInput().where("1 = 0");
+    emptyDF.writeTo(tableName).append();
+
+    assertEquals(
+        "Row count must be zero",
+        ImmutableList.of(row(0L)),
+        sql("SELECT count(*) FROM %s", tableName));
+  }
+
+  // Tests that catalyst-level handling of nulls in the local sort and (for hash mode) the cluster
+  // expression doesn't break.
+  @Test
+  public void testNullPartitionValuesWithHashDistribution() throws NoSuchTableException {
+    sql(
+        "CREATE TABLE %s (id INT, category STRING, data STRING) "
+            + "USING iceberg "
+            + "PARTITIONED BY (category)",
+        tableName);
+    sql(
+        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='hash')",
+        tableName, TableProperties.WRITE_DISTRIBUTION_MODE);
+
+    List<ThreeColumnRecord> data =
+        ImmutableList.of(
+            new ThreeColumnRecord(1, null, "d1"),
+            new ThreeColumnRecord(2, null, "d2"),
+            new ThreeColumnRecord(3, null, "d3"),
+            new ThreeColumnRecord(4, null, "d4"));
+    Dataset<Row> inputDF =
+        spark
+            .createDataFrame(data, ThreeColumnRecord.class)
+            .selectExpr("c1 AS id", "c2 AS category", "c3 AS data")
+            .repartition(4);
+
+    inputDF.writeTo(tableName).append();
+
+    assertEquals(
+        "Row count must match",
+        ImmutableList.of(row(4L)),
+        sql("SELECT count(*) FROM %s", tableName));
+  }
+
+  // With many possible buckets the rule's local sort is the main thing keeping records clustered
+  // for ClusteredDataWriter.
+  @Test
+  public void testHighCardinalityBucketWithHashDistribution() throws NoSuchTableException {
+    sql(
+        "CREATE TABLE %s (id INT, category STRING, data STRING) "
+            + "USING iceberg "
+            + "PARTITIONED BY (bucket(64, id))",
+        tableName);
+    sql(
+        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='hash')",
+        tableName, TableProperties.WRITE_DISTRIBUTION_MODE);
+
+    Dataset<Row> inputDF = unclusteredInput();
+    inputDF.writeTo(tableName).append();
+
+    assertEquals(
+        "Row count must match",
+        ImmutableList.of(row(20L)),
+        sql("SELECT count(*) FROM %s", tableName));
+  }
+
+  // The rule's local sort still has to leave that task with rows clustered by spec.
+  @Test
+  public void testHashDistributionWithSingleShufflePartition() throws NoSuchTableException {
+    sql(
+        "CREATE TABLE %s (id INT, category STRING, data STRING) "
+            + "USING iceberg "
+            + "PARTITIONED BY (bucket(4, id))",
+        tableName);
+    sql(
+        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='hash')",
+        tableName, TableProperties.WRITE_DISTRIBUTION_MODE);
+
+    String original = spark.conf().get("spark.sql.shuffle.partitions");
+    spark.conf().set("spark.sql.shuffle.partitions", "1");
+    try {
+      unclusteredInput().writeTo(tableName).append();
+    } finally {
+      spark.conf().set("spark.sql.shuffle.partitions", original);
+    }
+
+    assertEquals(
+        "Row count must match",
+        ImmutableList.of(row(20L)),
+        sql("SELECT count(*) FROM %s", tableName));
+  }
+
+  // AQE coalesces post-shuffle partitions. Confirms the rule's RepartitionByExpression
+  // survives AQE's reshaping enough that the writer still sees clustered input.
+  @Test
+  public void testHashDistributionWithAQEEnabled() throws NoSuchTableException {
+    sql(
+        "CREATE TABLE %s (id INT, category STRING, data STRING) "
+            + "USING iceberg "
+            + "PARTITIONED BY (bucket(4, id))",
+        tableName);
+    sql(
+        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='hash')",
+        tableName, TableProperties.WRITE_DISTRIBUTION_MODE);
+
+    String original = spark.conf().get("spark.sql.adaptive.enabled");
+    spark.conf().set("spark.sql.adaptive.enabled", "true");
+    try {
+      unclusteredInput().writeTo(tableName).append();
+    } finally {
+      spark.conf().set("spark.sql.adaptive.enabled", original);
+    }
+
+    assertEquals(
+        "Row count must match",
+        ImmutableList.of(row(20L)),
+        sql("SELECT count(*) FROM %s", tableName));
+  }
+
+  // With write.spark.fanout.enabled=true the FanoutDataWriter is used, which
+  // doesn't require clustered input. The rule still injects a repartition + sort; this test
+  // confirms that injection is benign — the write succeeds and rows are accounted for.
+  @Test
+  public void testFanoutWriterWithHashDistribution() throws NoSuchTableException {
+    sql(
+        "CREATE TABLE %s (id INT, category STRING, data STRING) "
+            + "USING iceberg "
+            + "PARTITIONED BY (bucket(4, id))",
+        tableName);
+    sql(
+        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='hash', '%s'='true')",
+        tableName,
+        TableProperties.WRITE_DISTRIBUTION_MODE,
+        TableProperties.SPARK_WRITE_PARTITIONED_FANOUT_ENABLED);
+
+    unclusteredInput().writeTo(tableName).append();
+
+    assertEquals(
+        "Row count must match",
+        ImmutableList.of(row(20L)),
+        sql("SELECT count(*) FROM %s", tableName));
+  }
+
   // Builds a 20-row dataset spread across all 4 buckets and randomly shuffled across 4 Spark
   // partitions, so each task sees rows for multiple buckets — the worst-case input for a
   // ClusteredDataWriter without re-clustering.
