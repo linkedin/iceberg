@@ -20,6 +20,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.iceberg.spark.Spark3Util
+import org.apache.iceberg.util.SortOrderUtil
 import org.apache.spark.sql.catalyst.plans.logical.AppendData
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.OverwriteByExpression
@@ -30,28 +31,25 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.utils.DistributionAndOrderingUtils
 import org.apache.spark.sql.catalyst.utils.PlanUtils.isIcebergRelation
 import org.apache.spark.sql.connector.iceberg.distributions.Distribution
+import org.apache.spark.sql.connector.iceberg.distributions.Distributions
 import org.apache.spark.sql.connector.iceberg.distributions.OrderedDistribution
 import org.apache.spark.sql.connector.iceberg.expressions.SortOrder
 
 /**
- * Backport of the Spark 3.2 V2Writes idea to the v3.1 logical plan API. In Spark 3.1
- * AppendData/OverwriteByExpression/OverwritePartitionsDynamic do not carry a Write, so the
- * required distribution and ordering are looked up from the Iceberg table directly via
- * Spark3Util — the same helpers RewriteRowLevelOperationHelper.buildWritePlan uses.
+ * Backport of Spark 3.2's V2Writes idea for v3.1's AppendData/OverwriteByExpression/
+ * OverwritePartitionsDynamic. Attaches a local Sort to the query feeding the write when the
+ * table has an explicit sort order or RANGE distribution; never attaches an Exchange.
  *
- * v3.1-only path: no Write is built here; ExtendedDataSourceV2Strategy still constructs the
- * Write at physical planning. This rule only attaches the required distribution and ordering
- * to the query feeding the write.
+ * No distribution: Spark 3.1 only has strict RepartitionByExpression. Spark 3.4+'s
+ * RebalancePartitions (the non-strict node Spark 3.5's V2Writes emits for Iceberg) doesn't
+ * exist here, and forcing a strict repartition would turn skewed partition keys into stragglers.
  *
- * Ordering policy: only RANGE distribution or an explicit table sort order produces a required
- * ordering. For HASH/NONE on a partitioned-but-unsorted table the rule does NOT synthesize a
- * sort from the partition spec, matching Spark 3.5's SparkWrite behavior; clustering across
- * partitions in that case is handled by the writer (fanout writers, in particular).
+ * No synthesized partition-spec sort: matches Spark 3.5. When a sort is attached, partition
+ * cols are prepended via SortOrderUtil so ClusteredDataWriter sees per-task clustering;
+ * unsorted partitioned tables need fanout (or pre-clustering by the user).
  *
- * Row-level commands (MERGE/UPDATE/DELETE) are intentionally skipped: their rewriters already
- * call buildWritePlan, which prepares the query before constructing AppendData/ReplaceData. The
- * Sort / RepartitionByExpression guard avoids double-wrapping that already-prepared query (and
- * also respects an explicit ORDER BY / DISTRIBUTE BY in a user-issued INSERT).
+ * MERGE/UPDATE/DELETE are skipped — RewriteRowLevelOperationHelper.buildWritePlan already
+ * prepares those queries; alreadyPrepared() detects its output shape to avoid double-wrapping.
  */
 object ExtendedV2Writes extends Rule[LogicalPlan] {
 
@@ -69,10 +67,9 @@ object ExtendedV2Writes extends Rule[LogicalPlan] {
       o.withNewQuery(prepareQuery(r, query))
   }
 
-  // DistributionAndOrderingUtils.prepareQuery wraps its input in either a RepartitionByExpression
-  // with no explicit numPartitions, or a non-global Sort over such a RepartitionByExpression. Only
-  // those exact shapes are treated as already-prepared so that user code (coalesce, repartition(N),
-  // global ORDER BY, sortWithinPartitions on a non-shuffled source) is left untouched.
+  // Matches the shapes RewriteRowLevelOperationHelper.buildWritePlan produces. Bare
+  // Sort(_, false, _) is intentionally NOT matched — it would swallow a user's
+  // sortWithinPartitions on the wrong columns and skip the table-required ordering.
   private def alreadyPrepared(query: LogicalPlan): Boolean = query match {
     case Sort(_, false, RepartitionByExpression(_, _, None)) => true
     case RepartitionByExpression(_, _, None) => true
@@ -81,17 +78,17 @@ object ExtendedV2Writes extends Rule[LogicalPlan] {
 
   private def prepareQuery(r: DataSourceV2Relation, query: LogicalPlan): LogicalPlan = {
     val icebergTable = Spark3Util.toIcebergTable(r.table)
-    val distribution = Spark3Util.buildRequiredDistribution(icebergTable)
-    val ordering = requiredOrdering(distribution, icebergTable)
-    DistributionAndOrderingUtils.prepareQuery(distribution, ordering, query, conf)
+    // Distribution is computed only so requiredOrdering can read OrderedDistribution.ordering;
+    // we then pass unspecified() so no Exchange is attached. See class doc.
+    val tableDistribution = Spark3Util.buildRequiredDistribution(icebergTable)
+    val ordering = requiredOrdering(tableDistribution, icebergTable)
+    DistributionAndOrderingUtils.prepareQuery(
+      Distributions.unspecified(), ordering, query, conf)
   }
 
-  // Match Spark 3.5 behavior: only attach a required local sort when the distribution itself is
-  // ordered (RANGE) or the table has an explicit user-supplied sort order. For HASH/NONE on a
-  // partitioned-but-unsorted table, do NOT synthesize a sort from the partition spec — leave that
-  // responsibility to the writer (e.g. fanout writers handle multi-partition tasks). Spark3Util's
-  // buildRequiredOrdering would otherwise fall through to SortOrderUtil.buildSortOrder, which
-  // adds the partition columns as the ordering and forces a local Sort into the plan.
+  // Sort attached only for RANGE (OrderedDistribution) or an explicit table sort order. Use
+  // SortOrderUtil.buildSortOrder so partition cols are prepended — sorting by user fields
+  // alone won't cluster a partition transform (e.g. `id` doesn't cluster `bucket(N, id)`).
   private def requiredOrdering(
       distribution: Distribution,
       icebergTable: org.apache.iceberg.Table): Array[SortOrder] = {
@@ -99,7 +96,7 @@ object ExtendedV2Writes extends Rule[LogicalPlan] {
       case od: OrderedDistribution =>
         od.ordering
       case _ if !icebergTable.sortOrder().isUnsorted =>
-        Spark3Util.convert(icebergTable.sortOrder())
+        Spark3Util.convert(SortOrderUtil.buildSortOrder(icebergTable))
       case _ =>
         Array.empty[SortOrder]
     }

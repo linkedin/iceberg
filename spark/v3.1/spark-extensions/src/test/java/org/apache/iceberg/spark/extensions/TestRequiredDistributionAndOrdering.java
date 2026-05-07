@@ -48,11 +48,8 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
     sql("DROP TABLE IF EXISTS %s", tableName);
   }
 
-  // For an unsorted, partitioned table with a bucket transform, the rule must NOT synthesize a
-  // local sort from the partition spec (matching Spark 3.5's SparkWrite policy). Fanout is enabled
-  // here so the FanoutDataWriter — which doesn't require pre-clustered input — handles the bucket
-  // transitions; without fanout the ClusteredDataWriter would reject this same input, as the
-  // companion *FailsWithoutRule tests show.
+  // Unsorted partitioned table: rule must not synthesize a partition-spec sort. Fanout is
+  // enabled so FanoutDataWriter accepts the unclustered bucket transitions.
   @Test
   public void testNoSyntheticPartitionSortWithBucketTransforms() throws NoSuchTableException {
     sql(
@@ -177,10 +174,8 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         sql("SELECT count(*) FROM %s", tableName));
   }
 
-  // The "InsertValuesOn..." tests verify that INSERT VALUES into an unsorted partitioned table
-  // works for various partition transform types. The rule no longer synthesizes a sort from the
-  // partition spec, so each table enables fanout so the FanoutDataWriter handles the unclustered
-  // VALUES list without requiring per-task partition clustering.
+  // INSERT VALUES into an unsorted partitioned table across various transform types. Fanout is
+  // enabled because the rule no longer clusters unsorted tables.
 
   @Test
   public void testInsertValuesOnDecimalBucketedColumn() {
@@ -256,14 +251,13 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
   // dotted identifiers. v3.2 fixed this by indexing schema-quoted names; that fix is out of scope
   // for this backport.
 
-  // The tests below feed deliberately unclustered input. The rule clusters across tasks via a
-  // RepartitionByExpression for HASH/RANGE distribution, and adds a local sort only when the
-  // table has an explicit sort order or a RANGE distribution. For HASH/NONE on an unsorted
-  // partitioned table the rule does not synthesize a sort from the partition spec, so the
-  // ClusteredDataWriter would reject those scenarios — those cases enable fanout so the
-  // FanoutDataWriter handles the unclustered input. The companion *FailsWithoutRule tests below
-  // pin down what the writer requires when the rule is disabled.
+  // Unclustered input. Rule attaches a local Sort (with partition prefix) for sorted/RANGE
+  // tables; HASH/NONE on unsorted tables is a no-op, so those enable fanout. Distribution is
+  // never injected — see ExtendedV2Writes class doc. *FailsWithoutRule tests below pin down
+  // baseline writer behavior when the rule is disabled.
 
+  // HASH on an unsorted table: rule is a no-op. Fanout enabled. For rule-injected clustering
+  // here, set a sort order — see testHashDistributionWithExplicitSortOrder.
   @Test
   public void testHashDistributionModeViaTableProperty() throws NoSuchTableException {
     sql(
@@ -272,8 +266,10 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
             + "PARTITIONED BY (bucket(4, id))",
         tableName);
     sql(
-        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='hash')",
-        tableName, TableProperties.WRITE_DISTRIBUTION_MODE);
+        "ALTER TABLE %s SET TBLPROPERTIES ('%s'='hash', '%s'='true')",
+        tableName,
+        TableProperties.WRITE_DISTRIBUTION_MODE,
+        TableProperties.SPARK_WRITE_PARTITIONED_FANOUT_ENABLED);
 
     Table table = validationCatalog.loadTable(tableIdent);
     Assert.assertEquals(
@@ -409,10 +405,7 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         sql("SELECT count(*) FROM %s", tableName));
   }
 
-  // The tests below disable ExtendedV2Writes so the same unclustered input reaches the
-  // ClusteredDataWriter without any rule-injected repartition or local sort. Each one asserts
-  // the writer rejects it — establishing the pre-rule baseline that the positive tests above
-  // are claiming to fix.
+  // Rule disabled — asserts ClusteredDataWriter rejects unclustered input. Pre-rule baseline.
 
   @Test
   public void testNoneDistributionFailsWithoutRule() {
@@ -474,8 +467,7 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
     }
   }
 
-  // The rule wraps the query in a RepartitionByExpression for HASH; that wrapping must
-  // handle a zero-row plan cleanly without producing a failed snapshot.
+  // Empty input on the rule's no-op path (HASH unsorted): must still produce a clean snapshot.
   @Test
   public void testEmptyInputWithHashDistribution() throws NoSuchTableException {
     sql(
@@ -496,8 +488,7 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         sql("SELECT count(*) FROM %s", tableName));
   }
 
-  // Tests that catalyst-level handling of nulls in the local sort and (for hash mode) the cluster
-  // expression doesn't break.
+  // Null partition values, one row per task — trivially clustered. Null-handling guard.
   @Test
   public void testNullPartitionValuesWithHashDistribution() throws NoSuchTableException {
     sql(
@@ -529,10 +520,7 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         sql("SELECT count(*) FROM %s", tableName));
   }
 
-  // High-cardinality bucket transform with HASH distribution: hash collisions in the post-shuffle
-  // partitioning can co-locate multiple buckets in a single task. Without a synthesized local
-  // sort, those rows would be interleaved by bucket and ClusteredDataWriter would reject — fanout
-  // is enabled so FanoutDataWriter accepts the unclustered tail.
+  // High-cardinality bucket transform: rule is a no-op (unsorted), fanout handles unclustering.
   @Test
   public void testHighCardinalityBucketWithHashDistribution() throws NoSuchTableException {
     sql(
@@ -555,8 +543,7 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         sql("SELECT count(*) FROM %s", tableName));
   }
 
-  // Forcing a single shuffle partition collapses all 4 bucket values into one task. The rule no
-  // longer adds a local sort, so the rows are unclustered within the task — fanout is required.
+  // Single shuffle partition → all bucket values in one task, unclustered. Fanout required.
   @Test
   public void testHashDistributionWithSingleShufflePartition() throws NoSuchTableException {
     sql(
@@ -584,8 +571,7 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         sql("SELECT count(*) FROM %s", tableName));
   }
 
-  // AQE coalesces post-shuffle partitions, which can merge multiple buckets into one task. With
-  // no synthesized local sort, fanout is needed to absorb the unclustered tail.
+  // AQE coalesces post-shuffle partitions → multiple buckets in one task. Fanout required.
   @Test
   public void testHashDistributionWithAQEEnabled() throws NoSuchTableException {
     sql(
@@ -613,9 +599,7 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         sql("SELECT count(*) FROM %s", tableName));
   }
 
-  // With write.spark.fanout.enabled=true the FanoutDataWriter is used, which doesn't require
-  // clustered input. The rule still injects a repartition (no sort, since the table is unsorted);
-  // this test confirms the write succeeds and all rows are accounted for.
+  // Fanout writer accepts unclustered input directly. Rule is a no-op (unsorted, no distribution).
   @Test
   public void testFanoutWriterWithHashDistribution() throws NoSuchTableException {
     sql(
@@ -637,9 +621,8 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         sql("SELECT count(*) FROM %s", tableName));
   }
 
-  // Builds a 20-row dataset spread across all 4 buckets and randomly shuffled across 4 Spark
-  // partitions, so each task sees rows for multiple buckets — the worst-case input for a
-  // ClusteredDataWriter without re-clustering.
+  // 20 rows across 4 buckets, randomly spread across 4 Spark partitions. Worst-case
+  // unclustered input for ClusteredDataWriter.
   private Dataset<Row> unclusteredInput() {
     List<ThreeColumnRecord> data =
         ImmutableList.of(
