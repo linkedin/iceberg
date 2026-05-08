@@ -20,7 +20,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.iceberg.spark.Spark3Util
-import org.apache.iceberg.util.SortOrderUtil
 import org.apache.spark.sql.catalyst.plans.logical.AppendData
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.logical.OverwriteByExpression
@@ -36,20 +35,18 @@ import org.apache.spark.sql.connector.iceberg.distributions.OrderedDistribution
 import org.apache.spark.sql.connector.iceberg.expressions.SortOrder
 
 /**
- * Backport of Spark 3.2's V2Writes idea for v3.1's AppendData/OverwriteByExpression/
- * OverwritePartitionsDynamic. Attaches a local Sort to the query feeding the write when the
- * table has an explicit sort order or RANGE distribution; never attaches an Exchange.
+ * Backport of Spark 3.2's V2Writes for v3.1 AppendData/OverwriteByExpression/
+ * OverwritePartitionsDynamic. Attaches a local Sort only when the table has an explicit sort
+ * order or RANGE distribution; never attaches an Exchange. Unsorted partitioned writes thus
+ * require write.spark.fanout.enabled=true or pre-clustered input.
  *
  * No distribution: Spark 3.1 only has strict RepartitionByExpression. Spark 3.4+'s
- * RebalancePartitions (the non-strict node Spark 3.5's V2Writes emits for Iceberg) doesn't
- * exist here, and forcing a strict repartition would turn skewed partition keys into stragglers.
- *
- * No synthesized partition-spec sort: matches Spark 3.5. When a sort is attached, partition
- * cols are prepended via SortOrderUtil so ClusteredDataWriter sees per-task clustering;
- * unsorted partitioned tables need fanout (or pre-clustering by the user).
+ * RebalancePartitions (used by Spark 3.5's V2Writes) doesn't exist here, and a strict
+ * repartition would turn skewed partition keys into stragglers.
  *
  * MERGE/UPDATE/DELETE are skipped — RewriteRowLevelOperationHelper.buildWritePlan already
- * prepares those queries; alreadyPrepared() detects its output shape to avoid double-wrapping.
+ * prepares those queries (using the unwrapped Spark3Util.buildRequiredOrdering, which still
+ * synthesizes the partition prefix); alreadyPrepared() detects its shape to avoid double-wrap.
  */
 object ExtendedV2Writes extends Rule[LogicalPlan] {
 
@@ -78,27 +75,23 @@ object ExtendedV2Writes extends Rule[LogicalPlan] {
 
   private def prepareQuery(r: DataSourceV2Relation, query: LogicalPlan): LogicalPlan = {
     val icebergTable = Spark3Util.toIcebergTable(r.table)
-    // Distribution is computed only so requiredOrdering can read OrderedDistribution.ordering;
-    // we then pass unspecified() so no Exchange is attached. See class doc.
+    // Distribution is computed only to surface OrderedDistribution.ordering; we always pass
+    // unspecified() to prepareQuery so no Exchange is attached.
     val tableDistribution = Spark3Util.buildRequiredDistribution(icebergTable)
     val ordering = requiredOrdering(tableDistribution, icebergTable)
     DistributionAndOrderingUtils.prepareQuery(
       Distributions.unspecified(), ordering, query, conf)
   }
 
-  // Sort attached only for RANGE (OrderedDistribution) or an explicit table sort order. Use
-  // SortOrderUtil.buildSortOrder so partition cols are prepended — sorting by user fields
-  // alone won't cluster a partition transform (e.g. `id` doesn't cluster `bucket(N, id)`).
+  // Delegate to Spark3Util.buildRequiredOrdering only for OrderedDistribution or sorted tables.
+  // Unsorted tables get an empty ordering — fanout or pre-clustered input is required.
   private def requiredOrdering(
       distribution: Distribution,
       icebergTable: org.apache.iceberg.Table): Array[SortOrder] = {
-    distribution match {
-      case od: OrderedDistribution =>
-        od.ordering
-      case _ if !icebergTable.sortOrder().isUnsorted =>
-        Spark3Util.convert(SortOrderUtil.buildSortOrder(icebergTable))
-      case _ =>
-        Array.empty[SortOrder]
+    if (distribution.isInstanceOf[OrderedDistribution] || !icebergTable.sortOrder().isUnsorted) {
+      Spark3Util.buildRequiredOrdering(distribution, icebergTable)
+    } else {
+      Array.empty[SortOrder]
     }
   }
 }
