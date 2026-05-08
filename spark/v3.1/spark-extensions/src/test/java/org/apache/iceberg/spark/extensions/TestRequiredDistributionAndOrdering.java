@@ -621,6 +621,26 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         sql("SELECT count(*) FROM %s", tableName));
   }
 
+  // saveAsTable("append") on an existing V2 table produces AppendData, the same plan node the
+  // rule matches for writeTo(...).append(). RANGE distribution keeps the rule active (sort
+  // attached) so this exercises the full path, not the no-op branch.
+  @Test
+  public void testSaveAsTableAppendWithRangeDistribution() throws NoSuchTableException {
+    sql(
+        "CREATE TABLE %s (id INT, category STRING, data STRING) "
+            + "USING iceberg "
+            + "PARTITIONED BY (bucket(4, id))",
+        tableName);
+    sql("ALTER TABLE %s WRITE ORDERED BY category, id", tableName);
+
+    unclusteredInput().write().mode("append").saveAsTable(tableName);
+
+    assertEquals(
+        "Row count must match",
+        ImmutableList.of(row(20L)),
+        sql("SELECT count(*) FROM %s", tableName));
+  }
+
   // 20 rows across 4 buckets, randomly spread across 4 Spark partitions. Worst-case
   // unclustered input for ClusteredDataWriter.
   private Dataset<Row> unclusteredInput() {
