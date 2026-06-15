@@ -399,6 +399,15 @@ acceptedBreaks:
         \ @ org.apache.iceberg.BaseReplacePartitions"
       new: "method org.apache.iceberg.BaseReplacePartitions org.apache.iceberg.BaseReplacePartitions::toBranch(java.lang.String)"
       justification: "Introducing branch snapshot operations for BaseReplacePartitions"
+    - code: "java.method.returnTypeTypeParametersChanged"
+      old: "method org.apache.avro.generic.GenericEnumSymbol org.apache.avro.Conversion<T>::toEnumSymbol(T,\
+        \ org.apache.avro.Schema, org.apache.avro.LogicalType) @ org.apache.iceberg.avro.UUIDConversion"
+      new: "method org.apache.avro.generic.GenericEnumSymbol<?> org.apache.avro.Conversion<T>::toEnumSymbol(T,\
+        \ org.apache.avro.Schema, org.apache.avro.LogicalType) @ org.apache.iceberg.avro.UUIDConversion"
+      justification: "Avro 1.11.1 -> 1.11.4 (CVE-2024-47561): generic-type-parameter\
+        \ refinement on inherited Avro method (GenericEnumSymbol -> GenericEnumSymbol<?>).\
+        \ Binary-compatible via type erasure; only the source-level signature changed.\
+        \ Iceberg's UUIDConversion does not override this method."
     org.apache.iceberg:iceberg-orc:
     - code: "java.method.removed"
       old: "method org.apache.iceberg.orc.ORC.WriteBuilder org.apache.iceberg.orc.ORC.WriteBuilder::config(java.lang.String,\
