@@ -591,3 +591,12 @@ acceptedBreaks:
         \ boolean)"
       justification: "IncrementalScanEvent should only be constructed by Iceberg code.\
         \ Hence the change of constructor params shouldn't affect users"
+    - code: "java.method.returnTypeTypeParametersChanged"
+      old: "method org.apache.avro.generic.GenericEnumSymbol org.apache.avro.Conversion<T>::toEnumSymbol(T,\
+        \ org.apache.avro.Schema, org.apache.avro.LogicalType) @ org.apache.iceberg.avro.UUIDConversion"
+      new: "method org.apache.avro.generic.GenericEnumSymbol<?> org.apache.avro.Conversion<T>::toEnumSymbol(T,\
+        \ org.apache.avro.Schema, org.apache.avro.LogicalType) @ org.apache.iceberg.avro.UUIDConversion"
+      justification: "Avro 1.11.1 -> 1.11.4 (CVE-2024-47561): generic-type-parameter\
+        \ refinement on inherited Avro method (GenericEnumSymbol -> GenericEnumSymbol<?>).\
+        \ Binary-compatible via type erasure; only the source-level signature changed.\
+        \ Iceberg's UUIDConversion does not override this method."
