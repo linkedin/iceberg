@@ -676,7 +676,12 @@ public class TestRewritePositionDeleteFilesAction extends CatalogTestBase {
         TableProperties.FORMAT_VERSION,
         "2",
         TableProperties.DEFAULT_FILE_FORMAT,
-        format.toString());
+        format.toString(),
+        // This fork defaults partitioned writes to NONE distribution; these tests expect data to be
+        // clustered into one file per partition, so request HASH explicitly to keep file counts
+        // deterministic regardless of input parallelism.
+        TableProperties.WRITE_DISTRIBUTION_MODE,
+        TableProperties.WRITE_DISTRIBUTION_MODE_HASH);
   }
 
   private void writeRecords(Table table, int files, int numRecords) {
