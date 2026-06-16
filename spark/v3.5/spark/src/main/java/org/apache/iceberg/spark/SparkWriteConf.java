@@ -316,7 +316,7 @@ public class SparkWriteConf {
     if (table.sortOrder().isSorted()) {
       return RANGE;
     } else if (table.spec().isPartitioned()) {
-      return HASH;
+      return NONE;
     } else {
       return NONE;
     }
