@@ -125,8 +125,11 @@ public class TestSparkDistributionAndOrderingUtil extends TestBaseWithCatalog {
   //
   // PARTITIONED BY date, days(ts) UNORDERED
   // -------------------------------------------------------------------------
-  // write mode is NOT SET -> CLUSTER BY date, days(ts) + LOCALLY ORDER BY date, days(ts)
-  // write mode is NOT SET (fanout) -> CLUSTER BY date, days(ts) + empty ordering
+  // NOTE: in this fork the default write distribution mode for partitioned tables is NONE
+  // (not HASH), so "write mode is NOT SET" behaves like "write mode is NONE" below
+  // (see SparkWriteConf#defaultWriteDistributionMode).
+  // write mode is NOT SET -> unspecified distribution + LOCALLY ORDER BY date, days(ts)
+  // write mode is NOT SET (fanout) -> unspecified distribution + empty ordering
   // write mode is NONE -> unspecified distribution + LOCALLY ORDERED BY date, days(ts)
   // write mode is NONE (fanout) -> unspecified distribution + empty ordering
   // write mode is HASH -> CLUSTER BY date, days(ts) + LOCALLY ORDER BY date, days(ts)
@@ -243,21 +246,19 @@ public class TestSparkDistributionAndOrderingUtil extends TestBaseWithCatalog {
 
     disableFanoutWriters(table);
 
-    Expression[] expectedClustering =
-        new Expression[] {Expressions.identity("date"), Expressions.days("ts")};
-    Distribution expectedDistribution = Distributions.clustered(expectedClustering);
-
+    // The default distribution mode for partitioned tables is NONE in this fork, so no clustering
+    // is requested; only the local ordering on the partition columns is retained.
     SortOrder[] expectedOrdering =
         new SortOrder[] {
           Expressions.sort(Expressions.column("date"), SortDirection.ASCENDING),
           Expressions.sort(Expressions.days("ts"), SortDirection.ASCENDING)
         };
 
-    checkWriteDistributionAndOrdering(table, expectedDistribution, expectedOrdering);
+    checkWriteDistributionAndOrdering(table, UNSPECIFIED_DISTRIBUTION, expectedOrdering);
 
     enableFanoutWriters(table);
 
-    checkWriteDistributionAndOrdering(table, expectedDistribution, EMPTY_ORDERING);
+    checkWriteDistributionAndOrdering(table, UNSPECIFIED_DISTRIBUTION, EMPTY_ORDERING);
   }
 
   @TestTemplate

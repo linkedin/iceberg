@@ -1600,6 +1600,12 @@ public abstract class TestIcebergSourceTablesBase extends TestBase {
   public void testPartitionsTableDeleteStats() {
     TableIdentifier tableIdentifier = TableIdentifier.of("db", "partitions_test");
     Table table = createTable(tableIdentifier, SCHEMA, SPEC);
+    // This fork defaults partitioned writes to NONE distribution; request HASH so each partition's
+    // rows are clustered into a single data file, as this test's file_count assertions expect.
+    table
+        .updateProperties()
+        .set(TableProperties.WRITE_DISTRIBUTION_MODE, TableProperties.WRITE_DISTRIBUTION_MODE_HASH)
+        .commit();
     Table partitionsTable = loadTable(tableIdentifier, "partitions");
     Dataset<Row> df1 =
         spark.createDataFrame(
