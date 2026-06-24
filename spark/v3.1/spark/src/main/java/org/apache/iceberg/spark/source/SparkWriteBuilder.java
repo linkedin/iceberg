@@ -21,6 +21,7 @@ package org.apache.iceberg.spark.source;
 import org.apache.iceberg.IsolationLevel;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
@@ -109,9 +110,7 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
         handleTimestampWithoutZone || !SparkUtil.hasTimestampWithoutZone(table.schema()),
         SparkUtil.TIMESTAMP_WITHOUT_TIMEZONE_ERROR);
 
-    Schema writeSchema = SparkSchemaUtil.convert(table.schema(), dsSchema);
-    TypeUtil.validateWriteSchema(
-        table.schema(), writeSchema, writeConf.checkNullability(), writeConf.checkOrdering());
+    WriteSchemaResult schemaResult = validateOrMergeWriteSchema(table, dsSchema, writeConf);
     SparkUtil.validatePartitionTransforms(table.spec());
 
     // Get application id and name
@@ -119,7 +118,16 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
     String appName = spark.sparkContext().appName();
 
     SparkWrite write =
-        new SparkWrite(spark, table, writeConf, writeInfo, appId, appName, writeSchema, dsSchema);
+        new SparkWrite(
+            spark,
+            table,
+            writeConf,
+            writeInfo,
+            appId,
+            appName,
+            schemaResult.writeSchema(),
+            dsSchema,
+            schemaResult.pendingSchemaUpdate());
     if (overwriteByFilter) {
       return write.asOverwriteByFilter(overwriteExpr);
     } else if (overwriteDynamic) {
@@ -138,9 +146,7 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
         handleTimestampWithoutZone || !SparkUtil.hasTimestampWithoutZone(table.schema()),
         SparkUtil.TIMESTAMP_WITHOUT_TIMEZONE_ERROR);
 
-    Schema writeSchema = SparkSchemaUtil.convert(table.schema(), dsSchema);
-    TypeUtil.validateWriteSchema(
-        table.schema(), writeSchema, writeConf.checkNullability(), writeConf.checkOrdering());
+    WriteSchemaResult schemaResult = validateOrMergeWriteSchema(table, dsSchema, writeConf);
     SparkUtil.validatePartitionTransforms(table.spec());
 
     // Change to streaming write if it is just append
@@ -156,11 +162,73 @@ class SparkWriteBuilder implements WriteBuilder, SupportsDynamicOverwrite, Suppo
     String appName = spark.sparkContext().appName();
 
     SparkWrite write =
-        new SparkWrite(spark, table, writeConf, writeInfo, appId, appName, writeSchema, dsSchema);
+        new SparkWrite(
+            spark,
+            table,
+            writeConf,
+            writeInfo,
+            appId,
+            appName,
+            schemaResult.writeSchema(),
+            dsSchema,
+            schemaResult.pendingSchemaUpdate());
     if (overwriteByFilter) {
       return write.asStreamingOverwrite();
     } else {
       return write.asStreamingAppend();
+    }
+  }
+
+  /**
+   * Result of schema validation/merge: the write schema to use and an optional pending schema
+   * update. When mergeSchema is used, the update is not committed during planning; it is committed
+   * in the write's commit() phase so that schema and data are committed only after data files are
+   * written. This avoids leaving the table with an advanced schema but no new data if the job fails
+   * after planning (e.g. OOM in executors).
+   */
+  private static class WriteSchemaResult {
+    private final Schema writeSchema;
+    private final UpdateSchema pendingSchemaUpdate;
+
+    WriteSchemaResult(Schema writeSchema, UpdateSchema pendingSchemaUpdate) {
+      this.writeSchema = writeSchema;
+      this.pendingSchemaUpdate = pendingSchemaUpdate;
+    }
+
+    Schema writeSchema() {
+      return this.writeSchema;
+    }
+
+    UpdateSchema pendingSchemaUpdate() {
+      return this.pendingSchemaUpdate;
+    }
+  }
+
+  private static WriteSchemaResult validateOrMergeWriteSchema(
+      Table table, StructType dsSchema, SparkWriteConf writeConf) {
+    if (writeConf.mergeSchema()) {
+      // convert the dataset schema and assign fresh ids for new fields
+      Schema newSchema = SparkSchemaUtil.convertWithFreshIds(table.schema(), dsSchema);
+
+      // prepare schema update and get final id assignments and merged schema (do NOT commit yet)
+      UpdateSchema update = table.updateSchema().unionByNameWith(newSchema);
+      Schema mergedSchema = update.apply();
+
+      // reconvert the dsSchema without assignment to use the ids assigned by UpdateSchema
+      Schema writeSchema = SparkSchemaUtil.convert(mergedSchema, dsSchema);
+
+      TypeUtil.validateWriteSchema(
+          mergedSchema, writeSchema, writeConf.checkNullability(), writeConf.checkOrdering());
+
+      // Defer commit to write commit phase so schema and data are only committed after data
+      // files are written. If the job fails after planning (e.g. OOM), the table schema is
+      // unchanged.
+      return new WriteSchemaResult(writeSchema, update);
+    } else {
+      Schema writeSchema = SparkSchemaUtil.convert(table.schema(), dsSchema);
+      TypeUtil.validateWriteSchema(
+          table.schema(), writeSchema, writeConf.checkNullability(), writeConf.checkOrdering());
+      return new WriteSchemaResult(writeSchema, null);
     }
   }
 }

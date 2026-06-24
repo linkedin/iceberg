@@ -20,24 +20,13 @@ package org.apache.iceberg.spark.source;
 
 import static org.apache.iceberg.IsolationLevel.SERIALIZABLE;
 import static org.apache.iceberg.IsolationLevel.SNAPSHOT;
-import static org.apache.iceberg.TableProperties.COMMIT_MAX_RETRY_WAIT_MS;
-import static org.apache.iceberg.TableProperties.COMMIT_MAX_RETRY_WAIT_MS_DEFAULT;
-import static org.apache.iceberg.TableProperties.COMMIT_MIN_RETRY_WAIT_MS;
-import static org.apache.iceberg.TableProperties.COMMIT_MIN_RETRY_WAIT_MS_DEFAULT;
-import static org.apache.iceberg.TableProperties.COMMIT_NUM_RETRIES;
-import static org.apache.iceberg.TableProperties.COMMIT_NUM_RETRIES_DEFAULT;
-import static org.apache.iceberg.TableProperties.COMMIT_TOTAL_RETRY_TIME_MS;
-import static org.apache.iceberg.TableProperties.COMMIT_TOTAL_RETRY_TIME_MS_DEFAULT;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.iceberg.AppendFiles;
-import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
@@ -51,6 +40,7 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
@@ -62,14 +52,11 @@ import org.apache.iceberg.io.FileWriter;
 import org.apache.iceberg.io.OutputFileFactory;
 import org.apache.iceberg.io.PartitioningWriter;
 import org.apache.iceberg.io.RollingDataWriter;
-import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
-import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
-import org.apache.iceberg.relocated.com.google.common.collect.Sets;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.CommitMetadata;
 import org.apache.iceberg.spark.FileRewriteCoordinator;
 import org.apache.iceberg.spark.SparkWriteConf;
-import org.apache.iceberg.util.PropertyUtil;
-import org.apache.iceberg.util.Tasks;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -105,6 +92,10 @@ class SparkWrite {
   private final StructType dsSchema;
   private final Map<String, String> extraSnapshotMetadata;
   private final boolean partitionedFanoutEnabled;
+  /** Pending schema update when mergeSchema was used; committed in commit() before data commit. */
+  private final UpdateSchema pendingSchemaUpdate;
+
+  private volatile boolean schemaUpdateCommitted = false;
 
   private boolean cleanupOnAbort = true;
 
@@ -117,6 +108,28 @@ class SparkWrite {
       String applicationName,
       Schema writeSchema,
       StructType dsSchema) {
+    this(
+        spark,
+        table,
+        writeConf,
+        writeInfo,
+        applicationId,
+        applicationName,
+        writeSchema,
+        dsSchema,
+        null);
+  }
+
+  SparkWrite(
+      SparkSession spark,
+      Table table,
+      SparkWriteConf writeConf,
+      LogicalWriteInfo writeInfo,
+      String applicationId,
+      String applicationName,
+      Schema writeSchema,
+      StructType dsSchema,
+      UpdateSchema pendingSchemaUpdate) {
     this.sparkContext = JavaSparkContext.fromSparkContext(spark.sparkContext());
     this.table = table;
     this.queryId = writeInfo.queryId();
@@ -130,6 +143,16 @@ class SparkWrite {
     this.dsSchema = dsSchema;
     this.extraSnapshotMetadata = writeConf.extraSnapshotMetadata();
     this.partitionedFanoutEnabled = writeConf.fanoutWriterEnabled();
+    this.pendingSchemaUpdate = pendingSchemaUpdate;
+  }
+
+  /** Commits the pending schema update (mergeSchema) if present. Called before data commit. */
+  private void commitPendingSchemaUpdate() {
+    if (pendingSchemaUpdate != null && !schemaUpdateCommitted) {
+      LOG.info("Committing schema update (mergeSchema) to table {}", table.name());
+      pendingSchemaUpdate.commit();
+      schemaUpdateCommitted = true;
+    }
   }
 
   BatchWrite asBatchAppend() {
@@ -207,39 +230,23 @@ class SparkWrite {
 
   private void abort(WriterCommitMessage[] messages) {
     if (cleanupOnAbort) {
-      Map<String, String> props = table.properties();
-      Tasks.foreach(files(messages))
-          .retry(PropertyUtil.propertyAsInt(props, COMMIT_NUM_RETRIES, COMMIT_NUM_RETRIES_DEFAULT))
-          .exponentialBackoff(
-              PropertyUtil.propertyAsInt(
-                  props, COMMIT_MIN_RETRY_WAIT_MS, COMMIT_MIN_RETRY_WAIT_MS_DEFAULT),
-              PropertyUtil.propertyAsInt(
-                  props, COMMIT_MAX_RETRY_WAIT_MS, COMMIT_MAX_RETRY_WAIT_MS_DEFAULT),
-              PropertyUtil.propertyAsInt(
-                  props, COMMIT_TOTAL_RETRY_TIME_MS, COMMIT_TOTAL_RETRY_TIME_MS_DEFAULT),
-              2.0 /* exponential */)
-          .throwFailureWhenFinished()
-          .run(
-              file -> {
-                table.io().deleteFile(file.path().toString());
-              });
+      SparkCleanupUtil.deleteFiles("job abort", table.io(), files(messages));
     } else {
-      LOG.warn(
-          "Skipping cleaning up of data files because Iceberg was unable to determine the final commit state");
+      LOG.warn("Skipping cleanup of written files");
     }
   }
 
-  private Iterable<DataFile> files(WriterCommitMessage[] messages) {
-    if (messages.length > 0) {
-      return Iterables.concat(
-          Iterables.transform(
-              Arrays.asList(messages),
-              message ->
-                  message != null
-                      ? ImmutableList.copyOf(((TaskCommit) message).files())
-                      : ImmutableList.of()));
+  private List<DataFile> files(WriterCommitMessage[] messages) {
+    List<DataFile> files = Lists.newArrayList();
+
+    for (WriterCommitMessage message : messages) {
+      if (message != null) {
+        TaskCommit taskCommit = (TaskCommit) message;
+        files.addAll(Arrays.asList(taskCommit.files()));
+      }
     }
-    return ImmutableList.of();
+
+    return files;
   }
 
   private abstract class BaseBatchWrite implements BatchWrite {
@@ -262,6 +269,7 @@ class SparkWrite {
   private class BatchAppend extends BaseBatchWrite {
     @Override
     public void commit(WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       AppendFiles append = table.newAppend();
 
       int numFiles = 0;
@@ -277,9 +285,10 @@ class SparkWrite {
   private class DynamicOverwrite extends BaseBatchWrite {
     @Override
     public void commit(WriterCommitMessage[] messages) {
-      Iterable<DataFile> files = files(messages);
+      commitPendingSchemaUpdate();
+      List<DataFile> files = files(messages);
 
-      if (!files.iterator().hasNext()) {
+      if (files.isEmpty()) {
         LOG.info("Dynamic overwrite is empty, skipping commit");
         return;
       }
@@ -307,6 +316,7 @@ class SparkWrite {
 
     @Override
     public void commit(WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       OverwriteFiles overwriteFiles = table.newOverwrite();
       overwriteFiles.overwriteByRowFilter(overwriteExpr);
 
@@ -350,6 +360,7 @@ class SparkWrite {
 
     @Override
     public void commit(WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       OverwriteFiles overwriteFiles = table.newOverwrite();
 
       List<DataFile> overwrittenFiles = overwrittenFiles();
@@ -420,14 +431,9 @@ class SparkWrite {
 
     @Override
     public void commit(WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       FileRewriteCoordinator coordinator = FileRewriteCoordinator.get();
-
-      Set<DataFile> newDataFiles = Sets.newHashSetWithExpectedSize(messages.length);
-      for (DataFile file : files(messages)) {
-        newDataFiles.add(file);
-      }
-
-      coordinator.stageRewrite(table, fileSetID, Collections.unmodifiableSet(newDataFiles));
+      coordinator.stageRewrite(table, fileSetID, ImmutableSet.copyOf(files(messages)));
     }
   }
 
@@ -500,6 +506,7 @@ class SparkWrite {
 
     @Override
     protected void doCommit(long epochId, WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       AppendFiles append = table.newFastAppend();
       int numFiles = 0;
       for (DataFile file : files(messages)) {
@@ -518,6 +525,7 @@ class SparkWrite {
 
     @Override
     public void doCommit(long epochId, WriterCommitMessage[] messages) {
+      commitPendingSchemaUpdate();
       OverwriteFiles overwriteFiles = table.newOverwrite();
       overwriteFiles.overwriteByRowFilter(Expressions.alwaysTrue());
       int numFiles = 0;
@@ -622,13 +630,6 @@ class SparkWrite {
     }
   }
 
-  private static <T extends ContentFile<T>> void deleteFiles(FileIO io, List<T> files) {
-    Tasks.foreach(files)
-        .throwFailureWhenFinished()
-        .noRetry()
-        .run(file -> io.deleteFile(file.path().toString()));
-  }
-
   private static class UnpartitionedDataWriter implements DataWriter<InternalRow> {
     private final FileWriter<InternalRow, DataWriteResult> delegate;
     private final FileIO io;
@@ -664,7 +665,7 @@ class SparkWrite {
       close();
 
       DataWriteResult result = delegate.result();
-      deleteFiles(io, result.dataFiles());
+      SparkCleanupUtil.deleteTaskFiles(io, result.dataFiles());
     }
 
     @Override
@@ -721,7 +722,7 @@ class SparkWrite {
       close();
 
       DataWriteResult result = delegate.result();
-      deleteFiles(io, result.dataFiles());
+      SparkCleanupUtil.deleteTaskFiles(io, result.dataFiles());
     }
 
     @Override

@@ -16,11 +16,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
-import groovy.transform.Memoized
-import java.util.regex.Matcher
-import java.util.regex.Pattern
-
 buildscript {
   repositories {
     maven { url "https://plugins.gradle.org/m2/" }
@@ -612,6 +607,34 @@ project(':iceberg-gcp') {
 }
 
 project(':iceberg-hive-metastore') {
+  apply plugin: 'com.github.johnrengelman.shadow'
+
+  tasks.shadowJar.dependsOn project(':iceberg-api').tasks.jar
+
+  configurations {
+    fatJarPackagedDependencies {}
+  }
+
+  def commonExcludes = {
+    exclude group: 'org.apache.avro', module: 'avro'
+    exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+    exclude group: 'org.pentaho' // missing dependency
+    exclude group: 'org.apache.hbase'
+    exclude group: 'org.apache.logging.log4j'
+    exclude group: 'co.cask.tephra'
+    exclude group: 'com.google.code.findbugs', module: 'jsr305'
+    exclude group: 'org.eclipse.jetty.aggregate', module: 'jetty-all'
+    exclude group: 'org.eclipse.jetty.orbit', module: 'javax.servlet'
+    exclude group: 'org.apache.parquet', module: 'parquet-hadoop-bundle'
+    exclude group: 'com.tdunning', module: 'json'
+    exclude group: 'javax.transaction', module: 'transaction-api'
+    exclude group: 'com.zaxxer', module: 'HikariCP'
+  }
+
+  ext {
+    shadedHiveVersion = '2.3.8'
+  }
+
   dependencies {
     implementation project(path: ':iceberg-bundled-guava', configuration: 'shadow')
     implementation project(':iceberg-core')
@@ -622,21 +645,7 @@ project(':iceberg-hive-metastore') {
 
     compileOnly "org.apache.avro:avro"
 
-    compileOnly("org.apache.hive:hive-metastore") {
-      exclude group: 'org.apache.avro', module: 'avro'
-      exclude group: 'org.slf4j', module: 'slf4j-log4j12'
-      exclude group: 'org.pentaho' // missing dependency
-      exclude group: 'org.apache.hbase'
-      exclude group: 'org.apache.logging.log4j'
-      exclude group: 'co.cask.tephra'
-      exclude group: 'com.google.code.findbugs', module: 'jsr305'
-      exclude group: 'org.eclipse.jetty.aggregate', module: 'jetty-all'
-      exclude group: 'org.eclipse.jetty.orbit', module: 'javax.servlet'
-      exclude group: 'org.apache.parquet', module: 'parquet-hadoop-bundle'
-      exclude group: 'com.tdunning', module: 'json'
-      exclude group: 'javax.transaction', module: 'transaction-api'
-      exclude group: 'com.zaxxer', module: 'HikariCP'
-    }
+    compileOnly("org.apache.hive:hive-metastore", commonExcludes)
 
     // By default, hive-exec is a fat/uber jar and it exports a guava library
     // that's really old. We use the core classifier to be able to override our guava
@@ -654,21 +663,7 @@ project(':iceberg-hive-metastore') {
       exclude group: 'com.google.code.findbugs', module: 'jsr305'
     }
 
-    testImplementation("org.apache.hive:hive-metastore") {
-      exclude group: 'org.apache.avro', module: 'avro'
-      exclude group: 'org.slf4j', module: 'slf4j-log4j12'
-      exclude group: 'org.pentaho' // missing dependency
-      exclude group: 'org.apache.hbase'
-      exclude group: 'org.apache.logging.log4j'
-      exclude group: 'co.cask.tephra'
-      exclude group: 'com.google.code.findbugs', module: 'jsr305'
-      exclude group: 'org.eclipse.jetty.aggregate', module: 'jetty-all'
-      exclude group: 'org.eclipse.jetty.orbit', module: 'javax.servlet'
-      exclude group: 'org.apache.parquet', module: 'parquet-hadoop-bundle'
-      exclude group: 'com.tdunning', module: 'json'
-      exclude group: 'javax.transaction', module: 'transaction-api'
-      exclude group: 'com.zaxxer', module: 'HikariCP'
-    }
+    testImplementation("org.apache.hive:hive-metastore", commonExcludes)
 
     compileOnly("org.apache.hadoop:hadoop-client") {
       exclude group: 'org.apache.avro', module: 'avro'
@@ -676,6 +671,34 @@ project(':iceberg-hive-metastore') {
     }
 
     testImplementation project(path: ':iceberg-api', configuration: 'testArtifacts')
+
+    fatJarPackagedDependencies("org.apache.hive:hive-common:" + shadedHiveVersion) {
+      transitive = false
+    }
+    fatJarPackagedDependencies("org.apache.hive:hive-serde:" + shadedHiveVersion) {
+      transitive = false
+    }
+    fatJarPackagedDependencies("org.apache.hive:hive-storage-api:2.4.0") {
+      transitive = false
+    }
+  }
+
+  shadowJar {
+    archiveClassifier.set('shaded')
+    configurations = [project.configurations.fatJarPackagedDependencies]
+    zip64 true
+
+    // include the LICENSE and NOTICE files for the shaded Jar
+    from(projectDir) {
+      include 'LICENSE'
+      include 'NOTICE'
+    }
+
+    relocate('org.apache.hadoop.hive', 'iceberghive.relocated.org.apache.hadoop.hive') {
+      exclude 'org.apache.iceberg.**'
+      exclude 'org.apache.hadoop.hive.metastore.api.**'
+    }
+    relocate('org.apache.hive', 'iceberghive.relocated.org.apache.hive')
   }
 }
 
@@ -866,45 +889,54 @@ project(':iceberg-snowflake') {
   }
 }
 
-@Memoized
-boolean versionFileExists() {
-  return file('version.txt').exists()
-}
-
-@Memoized
-String getVersionFromFile() {
-  return file('version.txt').text.trim()
-}
-
+/**
+ * @return the project version (e.g., 1.2.0.4)
+ */
 String getProjectVersion() {
-  if (versionFileExists()) {
-    String version = getVersionFromFile()
+  if (project.hasProperty('ciVersion')) {
+    String version = project.property('ciVersion')
+    println "Version: ${version.padRight(27)}"
     return version
   }
 
   try {
-    String version = gitVersion()
-    Pattern pattern = Pattern.compile("([0-9]+)\\.([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:\\..*)?")
-    Matcher matcher = pattern.matcher(version)
-    if (matcher.matches()) {
-      return matcher.group(1) + "." + matcher.group(2) + "." + matcher.group(3) + "."  + matcher.group(4)
+    def stdout = new ByteArrayOutputStream()
+    exec {
+      commandLine 'git', 'describe', '--tags', '--abbrev=0'
+      standardOutput = stdout
     }
+    String version = stdout.toString().trim()
+
+    // Remove 'v' prefix if present
+    if (version.startsWith('v')) {
+      version = version.substring(1)
+    }
+
+    println "Version from git tag: ${version.padRight(30)}"
+
     return version
   } catch (Exception e) {
-    throw new Exception("Neither version.txt nor git version exists: " + e.getMessage(), e)
+    logger.warn("Could not determine version from git: ${e.message}")
+    return "0.0.0-SNAPSHOT"
   }
 }
 
+/**
+ * Get version string for Javadoc using the current branch name.
+ *
+ * @return branch name for Javadoc version
+ */
 String getJavadocVersion() {
-  if (versionFileExists()) {
-    return getVersionFromFile()
-  }
-
   try {
-    // use the branch name in place of version in Javadoc
-    return versionDetails().branchName
-  } catch (NullPointerException e) {
-    throw new Exception("Neither version.txt nor git version exists")
+    def stdout = new ByteArrayOutputStream()
+    exec {
+      commandLine 'git', 'rev-parse', '--abbrev-ref', 'HEAD'
+      standardOutput = stdout
+    }
+    return stdout.toString().trim()
+  } catch (Exception e) {
+    logger.warn("Failed to get branch name from git: ${e.message}")
+    return "main"
   }
 }
 

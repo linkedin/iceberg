@@ -52,4 +52,8 @@ public class SparkWriteOptions {
       "handle-timestamp-without-timezone";
 
   public static final String OVERWRITE_MODE = "overwrite-mode";
+
+  public static final String MERGE_SCHEMA = "merge-schema";
+  public static final String SPARK_MERGE_SCHEMA = "mergeSchema";
+  public static final boolean MERGE_SCHEMA_DEFAULT = false;
 }
