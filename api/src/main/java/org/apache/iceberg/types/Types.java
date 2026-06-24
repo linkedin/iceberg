@@ -582,8 +582,8 @@ public class Types {
     }
 
     /**
-     * Returns the default value used when reading a row that was written before this field was added
-     * to the schema. May be {@code null}.
+     * Returns the default value used when reading a row that was written before this field was
+     * added to the schema. May be {@code null}.
      */
     public Object initialDefault() {
       return initialDefault;
