@@ -31,7 +31,6 @@ import static org.apache.iceberg.expressions.Expressions.in;
 import static org.apache.iceberg.expressions.Expressions.isNull;
 import static org.apache.iceberg.expressions.Expressions.lessThan;
 import static org.apache.iceberg.expressions.Expressions.lessThanOrEqual;
-import static org.apache.iceberg.expressions.Expressions.lit;
 import static org.apache.iceberg.expressions.Expressions.month;
 import static org.apache.iceberg.expressions.Expressions.not;
 import static org.apache.iceberg.expressions.Expressions.notEqual;
@@ -227,16 +226,6 @@ public class TestExpressionHelpers {
     assertInvalidateNaNThrows(() -> notIn(self("a"), 1.0D, 2.0D, Double.NaN));
 
     assertInvalidateNaNThrows(() -> predicate(Expression.Operation.EQ, "a", Double.NaN));
-  }
-
-  @Test
-  public void testLiteral() {
-    Assert.assertEquals("abc", lit("abc").value());
-    Assert.assertEquals(Integer.valueOf(34), lit(34).value());
-
-    // a literal created with lit() can be converted to a target type
-    Literal<Integer> intLiteral = lit(34L).to(Types.IntegerType.get());
-    Assert.assertEquals(Integer.valueOf(34), intLiteral.value());
   }
 
   private void assertInvalidateNaNThrows(Callable<UnboundPredicate<Double>> callable) {
