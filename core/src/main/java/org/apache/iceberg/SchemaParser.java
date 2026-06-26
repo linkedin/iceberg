@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Type;
@@ -55,6 +57,8 @@ public class SchemaParser {
   private static final String REQUIRED = "required";
   private static final String ELEMENT_REQUIRED = "element-required";
   private static final String VALUE_REQUIRED = "value-required";
+  private static final String INITIAL_DEFAULT = "initial-default";
+  private static final String WRITE_DEFAULT = "write-default";
 
   private static void toJson(Types.StructType struct, JsonGenerator generator) throws IOException {
     toJson(struct, null, null, generator);
@@ -88,6 +92,17 @@ public class SchemaParser {
       if (field.doc() != null) {
         generator.writeStringField(DOC, field.doc());
       }
+
+      if (field.initialDefault() != null) {
+        generator.writeFieldName(INITIAL_DEFAULT);
+        SingleValueParser.toJson(field.type(), field.initialDefault(), generator);
+      }
+
+      if (field.writeDefault() != null) {
+        generator.writeFieldName(WRITE_DEFAULT);
+        SingleValueParser.toJson(field.type(), field.writeDefault(), generator);
+      }
+
       generator.writeEndObject();
     }
     generator.writeEndArray();
@@ -200,16 +215,39 @@ public class SchemaParser {
       String name = JsonUtil.getString(NAME, field);
       Type type = typeFromJson(JsonUtil.get(TYPE, field));
 
+      Literal<?> initialDefault = defaultFromJson(INITIAL_DEFAULT, type, field);
+      Literal<?> writeDefault = defaultFromJson(WRITE_DEFAULT, type, field);
+
       String doc = JsonUtil.getStringOrNull(DOC, field);
       boolean isRequired = JsonUtil.getBool(REQUIRED, field);
-      if (isRequired) {
-        fields.add(Types.NestedField.required(id, name, type, doc));
-      } else {
-        fields.add(Types.NestedField.optional(id, name, type, doc));
-      }
+      fields.add(
+          fieldBuilder(isRequired, name)
+              .withId(id)
+              .ofType(type)
+              .withDoc(doc)
+              .withInitialDefault(initialDefault)
+              .withWriteDefault(writeDefault)
+              .build());
     }
 
     return Types.StructType.of(fields);
+  }
+
+  private static Literal<?> defaultFromJson(String defaultField, Type type, JsonNode json) {
+    if (json.has(defaultField)) {
+      Object value = SingleValueParser.fromJson(type, json.get(defaultField));
+      return Expressions.lit(value);
+    }
+
+    return null;
+  }
+
+  private static Types.NestedField.Builder fieldBuilder(boolean isRequired, String name) {
+    if (isRequired) {
+      return Types.NestedField.required(name);
+    } else {
+      return Types.NestedField.optional(name);
+    }
   }
 
   private static Types.ListType listFromJson(JsonNode json) {
