@@ -27,6 +27,8 @@ import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.Literal;
 import org.apache.iceberg.relocated.com.google.common.base.Joiner;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
@@ -414,27 +416,141 @@ public class Types {
 
   public static class NestedField implements Serializable {
     public static NestedField optional(int id, String name, Type type) {
-      return new NestedField(true, id, name, type, null);
+      return new NestedField(true, id, name, type, null, null, null);
     }
 
     public static NestedField optional(int id, String name, Type type, String doc) {
-      return new NestedField(true, id, name, type, doc);
+      return new NestedField(true, id, name, type, doc, null, null);
     }
 
     public static NestedField required(int id, String name, Type type) {
-      return new NestedField(false, id, name, type, null);
+      return new NestedField(false, id, name, type, null, null, null);
     }
 
     public static NestedField required(int id, String name, Type type, String doc) {
-      return new NestedField(false, id, name, type, doc);
+      return new NestedField(false, id, name, type, doc, null, null);
     }
 
     public static NestedField of(int id, boolean isOptional, String name, Type type) {
-      return new NestedField(isOptional, id, name, type, null);
+      return new NestedField(isOptional, id, name, type, null, null, null);
     }
 
     public static NestedField of(int id, boolean isOptional, String name, Type type, String doc) {
-      return new NestedField(isOptional, id, name, type, doc);
+      return new NestedField(isOptional, id, name, type, doc, null, null);
+    }
+
+    public static Builder from(NestedField field) {
+      return new Builder(field);
+    }
+
+    public static Builder required(String name) {
+      return new Builder(false, name);
+    }
+
+    public static Builder optional(String name) {
+      return new Builder(true, name);
+    }
+
+    public static Builder builder() {
+      return new Builder();
+    }
+
+    public static class Builder {
+      private boolean isOptional = true;
+      private String name = null;
+      private Integer id = null;
+      private Type type = null;
+      private String doc = null;
+      private Literal<?> initialDefault = null;
+      private Literal<?> writeDefault = null;
+
+      private Builder() {}
+
+      private Builder(boolean isFieldOptional, String fieldName) {
+        isOptional = isFieldOptional;
+        name = fieldName;
+      }
+
+      private Builder(NestedField toCopy) {
+        this.isOptional = toCopy.isOptional;
+        this.name = toCopy.name;
+        this.id = toCopy.id;
+        this.type = toCopy.type;
+        this.doc = toCopy.doc;
+        this.initialDefault = toCopy.initialDefault;
+        this.writeDefault = toCopy.writeDefault;
+      }
+
+      public Builder asRequired() {
+        this.isOptional = false;
+        return this;
+      }
+
+      public Builder asOptional() {
+        this.isOptional = true;
+        return this;
+      }
+
+      public Builder isOptional(boolean fieldIsOptional) {
+        this.isOptional = fieldIsOptional;
+        return this;
+      }
+
+      public Builder withName(String fieldName) {
+        this.name = fieldName;
+        return this;
+      }
+
+      public Builder withId(int fieldId) {
+        id = fieldId;
+        return this;
+      }
+
+      public Builder ofType(Type fieldType) {
+        type = fieldType;
+        return this;
+      }
+
+      public Builder withDoc(String fieldDoc) {
+        doc = fieldDoc;
+        return this;
+      }
+
+      /**
+       * Set the initial default using an Object.
+       *
+       * @deprecated will be removed in 2.0.0; use {@link #withInitialDefault(Literal)} instead.
+       */
+      @Deprecated
+      public Builder withInitialDefault(Object fieldInitialDefault) {
+        return withInitialDefault(Expressions.lit(fieldInitialDefault));
+      }
+
+      public Builder withInitialDefault(Literal<?> fieldInitialDefault) {
+        initialDefault = fieldInitialDefault;
+        return this;
+      }
+
+      /**
+       * Set the write default using an Object.
+       *
+       * @deprecated will be removed in 2.0.0; use {@link #withWriteDefault(Literal)} instead.
+       */
+      @Deprecated
+      public Builder withWriteDefault(Object fieldWriteDefault) {
+        return withWriteDefault(Expressions.lit(fieldWriteDefault));
+      }
+
+      public Builder withWriteDefault(Literal<?> fieldWriteDefault) {
+        writeDefault = fieldWriteDefault;
+        return this;
+      }
+
+      public NestedField build() {
+        Preconditions.checkNotNull(id, "Id cannot be null");
+        // the constructor validates the other fields
+        return new NestedField(isOptional, id, name, type, doc, initialDefault, writeDefault);
+      }
     }
 
     private final boolean isOptional;
@@ -442,8 +558,17 @@ public class Types {
     private final String name;
     private final Type type;
     private final String doc;
+    private final Literal<?> initialDefault;
+    private final Literal<?> writeDefault;
 
-    private NestedField(boolean isOptional, int id, String name, Type type, String doc) {
+    private NestedField(
+        boolean isOptional,
+        int id,
+        String name,
+        Type type,
+        String doc,
+        Literal<?> initialDefault,
+        Literal<?> writeDefault) {
       Preconditions.checkNotNull(name, "Name cannot be null");
       Preconditions.checkNotNull(type, "Type cannot be null");
       this.isOptional = isOptional;
@@ -451,6 +576,22 @@ public class Types {
       this.name = name;
       this.type = type;
       this.doc = doc;
+      this.initialDefault = castDefault(initialDefault, type);
+      this.writeDefault = castDefault(writeDefault, type);
+    }
+
+    private static Literal<?> castDefault(Literal<?> defaultValue, Type type) {
+      if (type.isNestedType() && defaultValue != null) {
+        throw new IllegalArgumentException(
+            String.format("Invalid default value for %s: %s (must be null)", type, defaultValue));
+      } else if (defaultValue != null) {
+        Literal<?> typedDefault = defaultValue.to(type);
+        Preconditions.checkArgument(
+            typedDefault != null, "Cannot cast default value to %s: %s", type, defaultValue);
+        return typedDefault;
+      }
+
+      return null;
     }
 
     public boolean isOptional() {
@@ -461,7 +602,7 @@ public class Types {
       if (isOptional) {
         return this;
       }
-      return new NestedField(true, id, name, type, doc);
+      return new NestedField(true, id, name, type, doc, initialDefault, writeDefault);
     }
 
     public boolean isRequired() {
@@ -472,7 +613,7 @@ public class Types {
       if (!isOptional) {
         return this;
       }
-      return new NestedField(false, id, name, type, doc);
+      return new NestedField(false, id, name, type, doc, initialDefault, writeDefault);
     }
 
     public int fieldId() {
@@ -491,9 +632,26 @@ public class Types {
       return doc;
     }
 
+    public Literal<?> initialDefaultLiteral() {
+      return initialDefault;
+    }
+
+    public Object initialDefault() {
+      return initialDefault != null ? initialDefault.value() : null;
+    }
+
+    public Literal<?> writeDefaultLiteral() {
+      return writeDefault;
+    }
+
+    public Object writeDefault() {
+      return writeDefault != null ? writeDefault.value() : null;
+    }
+
     @Override
     public String toString() {
-      return String.format("%d: %s: %s %s", id, name, isOptional ? "optional" : "required", type)
+      return String.format(
+              Locale.ROOT, "%d: %s: %s %s", id, name, isOptional ? "optional" : "required", type)
           + (doc != null ? " (" + doc + ")" : "");
     }
 
@@ -514,8 +672,14 @@ public class Types {
         return false;
       } else if (!Objects.equals(doc, that.doc)) {
         return false;
+      } else if (!type.equals(that.type)) {
+        return false;
+      } else if (!Objects.equals(initialDefault, that.initialDefault)) {
+        return false;
+      } else if (!Objects.equals(writeDefault, that.writeDefault)) {
+        return false;
       }
-      return type.equals(that.type);
+      return true;
     }
 
     @Override
