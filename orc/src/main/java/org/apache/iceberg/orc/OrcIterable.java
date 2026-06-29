@@ -92,7 +92,9 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
         nameMapping = MappingUtil.create(schema);
       }
       TypeDescription typeWithIds = ORCSchemaUtil.applyNameMapping(fileSchema, nameMapping);
-      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, typeWithIds);
+      // Id-less (legacy/migrated) files are resolved by name mapping; do not apply column defaults
+      // so an initial-default is never name-matched onto a file that lacks embedded field ids.
+      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, typeWithIds, false);
     }
 
     SearchArgument sarg = null;

@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.stream.IntStream;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.orc.ORCSchemaUtil;
 import org.apache.iceberg.orc.OrcBatchReader;
 import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
 import org.apache.iceberg.orc.OrcValueReader;
@@ -30,6 +31,7 @@ import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.iceberg.spark.data.SparkOrcValueReaders;
+import org.apache.iceberg.spark.source.BaseReader;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
@@ -98,7 +100,11 @@ public class VectorizedSparkOrcReaders {
         TypeDescription record,
         List<String> names,
         List<Converter> fields) {
-      return new StructConverter(iStruct, fields, idToConstant);
+      return new StructConverter(
+          iStruct,
+          fields,
+          ORCSchemaUtil.idToConstantWithDefaults(
+              iStruct, record, idToConstant, BaseReader::convertConstant));
     }
 
     @Override

@@ -22,7 +22,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.data.IdentityPartitionConverters;
 import org.apache.iceberg.data.Record;
+import org.apache.iceberg.orc.ORCSchemaUtil;
 import org.apache.iceberg.orc.OrcRowReader;
 import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
 import org.apache.iceberg.orc.OrcValueReader;
@@ -76,7 +78,11 @@ public class GenericOrcReader implements OrcRowReader<Record> {
         TypeDescription record,
         List<String> names,
         List<OrcValueReader<?>> fields) {
-      return GenericOrcReaders.struct(fields, expected, idToConstant);
+      return GenericOrcReaders.struct(
+          fields,
+          expected,
+          ORCSchemaUtil.idToConstantWithDefaults(
+              expected, record, idToConstant, IdentityPartitionConverters::convertConstant));
     }
 
     @Override

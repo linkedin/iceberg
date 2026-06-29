@@ -22,12 +22,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.mapping.NameMapping;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMultimap;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
+import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
@@ -261,18 +264,50 @@ public final class ORCSchemaUtil {
    */
   public static TypeDescription buildOrcProjection(
       Schema schema, TypeDescription originalOrcSchema) {
+    return buildOrcProjection(schema, originalOrcSchema, true);
+  }
+
+  /**
+   * Builds the ORC read schema for an Iceberg schema, optionally applying top-level column
+   * defaults.
+   *
+   * <p>When {@code applyDefaults} is true, a top-level scalar field that is absent from the data
+   * file but declares an {@code initial-default} is <em>omitted</em> from the read projection. The
+   * ORC readers then fill it as a per-file constant through their existing {@code idToConstant}
+   * path (see {@link #idToConstantWithDefaults}). When false (e.g. for name-mapped, id-less files),
+   * the field is synthesized as a null column instead, so a default is never name-matched onto a
+   * legacy/migrated file (where it could mask real data after a rename).
+   */
+  public static TypeDescription buildOrcProjection(
+      Schema schema, TypeDescription originalOrcSchema, boolean applyDefaults) {
     final Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
-    return buildOrcProjection(Integer.MIN_VALUE, schema.asStruct(), true, icebergToOrc);
+    return buildOrcProjection(
+        Integer.MIN_VALUE, schema.asStruct(), true, true, applyDefaults, icebergToOrc);
   }
 
   private static TypeDescription buildOrcProjection(
-      Integer fieldId, Type type, boolean isRequired, Map<Integer, OrcField> mapping) {
+      Integer fieldId,
+      Type type,
+      boolean isRequired,
+      boolean topLevel,
+      boolean applyDefaults,
+      Map<Integer, OrcField> mapping) {
     final TypeDescription orcType;
 
     switch (type.typeId()) {
       case STRUCT:
         orcType = TypeDescription.createStruct();
         for (Types.NestedField nestedField : type.asStructType().fields()) {
+          if (topLevel
+              && applyDefaults
+              && !mapping.containsKey(nestedField.fieldId())
+              && nestedField.initialDefault() != null) {
+            // Top-level scalar field absent from the data file but declaring an initial-default:
+            // omit it from the ORC read projection so the reader fills the default as a constant
+            // for every row via idToConstant (absent-only fill). Nested defaults and id-less files
+            // (applyDefaults=false) fall through and are synthesized as null columns instead.
+            continue;
+          }
           // Using suffix _r to avoid potential underlying issues in ORC reader
           // with reused column names between ORC and Iceberg;
           // e.g. renaming column c -> d and adding new column d
@@ -285,6 +320,8 @@ public final class ORCSchemaUtil {
                   nestedField.fieldId(),
                   nestedField.type(),
                   isRequired && nestedField.isRequired(),
+                  false,
+                  applyDefaults,
                   mapping);
           orcType.addField(name, childType);
         }
@@ -296,16 +333,24 @@ public final class ORCSchemaUtil {
                 list.elementId(),
                 list.elementType(),
                 isRequired && list.isElementRequired(),
+                false,
+                applyDefaults,
                 mapping);
         orcType = TypeDescription.createList(elementType);
         break;
       case MAP:
         Types.MapType map = (Types.MapType) type;
         TypeDescription keyType =
-            buildOrcProjection(map.keyId(), map.keyType(), isRequired, mapping);
+            buildOrcProjection(
+                map.keyId(), map.keyType(), isRequired, false, applyDefaults, mapping);
         TypeDescription valueType =
             buildOrcProjection(
-                map.valueId(), map.valueType(), isRequired && map.isValueRequired(), mapping);
+                map.valueId(),
+                map.valueType(),
+                isRequired && map.isValueRequired(),
+                false,
+                applyDefaults,
+                mapping);
         orcType = TypeDescription.createMap(keyType, valueType);
         break;
       default:
@@ -430,6 +475,51 @@ public final class ORCSchemaUtil {
 
   static boolean hasIds(TypeDescription orcSchema) {
     return OrcSchemaVisitor.visit(orcSchema, new HasIds());
+  }
+
+  /**
+   * Augments an {@code idToConstant} map with column initial-defaults for expected fields that are
+   * absent from the ORC read projection.
+   *
+   * <p>Used by the ORC readers' {@code record} visitor step: a field that {@link
+   * #buildOrcProjection(Schema, TypeDescription, boolean)} omitted (a top-level scalar declaring an
+   * {@code initial-default} that is absent from the data file) is not present in {@code record}, so
+   * its converted default is injected as a constant. The reader then fills it for every row via its
+   * existing partition-constant path, consuming no column vector. Fields that were synthesized as
+   * null columns (nested defaults, or any field on an id-less/name-mapped read where {@code
+   * applyDefaults} was false) are present in {@code record} and therefore read NULL.
+   *
+   * @param expected the expected Iceberg struct for this record level
+   * @param record the ORC read projection for this record level
+   * @param idToConstant existing constants (e.g. partition values); not modified
+   * @param convertConstant converts an internal default value to the engine's in-memory form
+   * @return {@code idToConstant} unchanged when no defaults apply, otherwise a new merged map
+   */
+  public static Map<Integer, ?> idToConstantWithDefaults(
+      Types.StructType expected,
+      TypeDescription record,
+      Map<Integer, ?> idToConstant,
+      BiFunction<Type, Object, Object> convertConstant) {
+    Set<Integer> presentIds = Sets.newHashSet();
+    for (TypeDescription child : record.getChildren()) {
+      presentIds.add(fieldId(child));
+    }
+
+    Map<Integer, Object> withDefaults = null;
+    for (Types.NestedField field : expected.fields()) {
+      if (field.initialDefault() != null
+          && !presentIds.contains(field.fieldId())
+          && !idToConstant.containsKey(field.fieldId())) {
+        if (withDefaults == null) {
+          withDefaults = Maps.newHashMap();
+          withDefaults.putAll(idToConstant);
+        }
+        withDefaults.put(
+            field.fieldId(), convertConstant.apply(field.type(), field.initialDefault()));
+      }
+    }
+
+    return withDefaults == null ? idToConstant : withDefaults;
   }
 
   static TypeDescription applyNameMapping(TypeDescription orcSchema, NameMapping nameMapping) {
