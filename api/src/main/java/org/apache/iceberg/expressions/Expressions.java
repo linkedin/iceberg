@@ -233,6 +233,18 @@ public class Expressions {
     return predicate(Operation.NOT_IN, expr, values);
   }
 
+  /**
+   * Create a {@link Literal} from an Object.
+   *
+   * @param value a value
+   * @param <T> Java type of value
+   * @return a Literal for the given value
+   * @throws IllegalArgumentException if the value has no literal implementation
+   */
+  public static <T> Literal<T> lit(T value) {
+    return Literals.from(value);
+  }
+
   public static <T> UnboundPredicate<T> predicate(Operation op, String name, T value) {
     return predicate(op, name, Literals.from(value));
   }
