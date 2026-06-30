@@ -343,6 +343,38 @@ public class TestOrcDefaultValues {
     Assertions.assertThat(readElement.getField("e_int")).isEqualTo(34);
   }
 
+  @Test
+  public void testNestedStructAllSubfieldsDefaulted() throws IOException {
+    // File: nested { a }. Read projects only a new defaulted subfield nested { b default 'x' }
+    // (a dropped), so the nested read struct is empty. The default must still fill.
+    Schema writeSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(3, "nested", Types.StructType.of(required(4, "a", Types.LongType.get()))));
+    Types.StructType writeNested = writeSchema.findField("nested").type().asStructType();
+
+    Record nested = GenericRecord.create(writeNested);
+    nested.setField("a", 9L);
+    Record rec = GenericRecord.create(writeSchema);
+    rec.setField("id", 1L);
+    rec.setField("nested", nested);
+    OutputFile file = writeRecords(writeSchema, Lists.newArrayList(rec));
+
+    Schema readSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                3,
+                "nested",
+                Types.StructType.of(
+                    defaulted(5, "b", Types.StringType.get(), Expressions.lit("x")))));
+
+    List<Record> read = read(file, readSchema);
+    Assertions.assertThat(read).hasSize(1);
+    Record readNested = (Record) read.get(0).getField("nested");
+    Assertions.assertThat(readNested.getField("b")).isEqualTo("x");
+  }
+
   private OutputFile writeRecords(Schema schema, List<Record> recs) throws IOException {
     OutputFile file = Files.localOutput(temp.newFile());
     DataWriter<Record> writer =

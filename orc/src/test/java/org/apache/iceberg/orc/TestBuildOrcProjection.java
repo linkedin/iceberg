@@ -265,10 +265,10 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testNestedStructEmptyAfterOmitKeepsPlaceholder() {
-    // Base file: s { a }. Evolve to project only a new defaulted subfield s { b default 'x' } and
-    // drop a. Every projected subfield of s is absent + defaulted, which would empty the nested
-    // struct; the safeguard keeps one synthesized null column so the non-root struct is non-empty.
+  public void testNestedStructEmptiedByOmit() {
+    // Base file: s { a }. Project only a new defaulted subfield s { b default 'x' } (drop a). Every
+    // projected subfield of s is absent + defaulted, so the nested read struct is omitted down to
+    // empty; the reader fills b via idToConstant (see TestOrcDefaultValues end-to-end coverage).
     Schema baseSchema =
         new Schema(
             required(1, "id", Types.LongType.get()),
@@ -290,6 +290,6 @@ public class TestBuildOrcProjection {
 
     TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
     TypeDescription nested = projection.findSubtype("s");
-    assertEquals("non-root struct must keep at least one field", 1, nested.getChildren().size());
+    assertEquals(0, nested.getChildren().size());
   }
 }

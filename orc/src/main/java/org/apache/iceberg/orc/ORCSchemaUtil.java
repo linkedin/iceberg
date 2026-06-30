@@ -282,7 +282,7 @@ public final class ORCSchemaUtil {
       Schema schema, TypeDescription originalOrcSchema, boolean applyDefaults) {
     final Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
     return buildOrcProjection(
-        Integer.MIN_VALUE, schema.asStruct(), true, true, applyDefaults, icebergToOrc);
+        Integer.MIN_VALUE, schema.asStruct(), true, applyDefaults, icebergToOrc);
   }
 
   private static boolean isOmittableDefault(
@@ -294,7 +294,6 @@ public final class ORCSchemaUtil {
       Integer fieldId,
       Type type,
       boolean isRequired,
-      boolean topLevel,
       boolean applyDefaults,
       Map<Integer, OrcField> mapping) {
     final TypeDescription orcType;
@@ -302,18 +301,7 @@ public final class ORCSchemaUtil {
     switch (type.typeId()) {
       case STRUCT:
         orcType = TypeDescription.createStruct();
-        List<Types.NestedField> structFields = type.asStructType().fields();
-        // Number of fields that will actually be read from the file (not omitted as absent +
-        // defaulted). Used to avoid emitting an empty *non-root* struct below.
-        int retained = 0;
-        for (Types.NestedField field : structFields) {
-          if (!isOmittableDefault(field, applyDefaults, mapping)) {
-            retained++;
-          }
-        }
-
-        boolean keptPlaceholder = false;
-        for (Types.NestedField nestedField : structFields) {
+        for (Types.NestedField nestedField : type.asStructType().fields()) {
           if (isOmittableDefault(nestedField, applyDefaults, mapping)) {
             // Field absent from the data file but declaring an initial-default: omit it from the
             // ORC
@@ -321,16 +309,7 @@ public final class ORCSchemaUtil {
             // for every row via idToConstant (absent-only fill). id-less files
             // (applyDefaults=false)
             // and present fields are read/synthesized normally.
-            boolean wouldEmptyNonRootStruct = !topLevel && retained == 0 && !keptPlaceholder;
-            if (!wouldEmptyNonRootStruct) {
-              continue;
-            }
-            // Safeguard: never emit an empty non-root struct (ORC can reject it). Keep exactly one
-            // field synthesized as a null column so the struct has >= 1 column; that field reads
-            // NULL instead of its default. Only triggers when *every* subfield of a nested struct
-            // is absent + defaulted (e.g. all original fields were dropped). The root struct is
-            // allowed to be empty (select-only-default), so this never applies there.
-            keptPlaceholder = true;
+            continue;
           }
           // Using suffix _r to avoid potential underlying issues in ORC reader
           // with reused column names between ORC and Iceberg;
@@ -344,7 +323,6 @@ public final class ORCSchemaUtil {
                   nestedField.fieldId(),
                   nestedField.type(),
                   isRequired && nestedField.isRequired(),
-                  false,
                   applyDefaults,
                   mapping);
           orcType.addField(name, childType);
@@ -357,7 +335,6 @@ public final class ORCSchemaUtil {
                 list.elementId(),
                 list.elementType(),
                 isRequired && list.isElementRequired(),
-                false,
                 applyDefaults,
                 mapping);
         orcType = TypeDescription.createList(elementType);
@@ -365,14 +342,12 @@ public final class ORCSchemaUtil {
       case MAP:
         Types.MapType map = (Types.MapType) type;
         TypeDescription keyType =
-            buildOrcProjection(
-                map.keyId(), map.keyType(), isRequired, false, applyDefaults, mapping);
+            buildOrcProjection(map.keyId(), map.keyType(), isRequired, applyDefaults, mapping);
         TypeDescription valueType =
             buildOrcProjection(
                 map.valueId(),
                 map.valueType(),
                 isRequired && map.isValueRequired(),
-                false,
                 applyDefaults,
                 mapping);
         orcType = TypeDescription.createMap(keyType, valueType);
