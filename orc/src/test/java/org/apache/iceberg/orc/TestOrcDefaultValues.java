@@ -235,6 +235,13 @@ public class TestOrcDefaultValues {
       rec.setField("nested", nested);
       recs.add(rec);
     }
+    // Row with a null nested struct: a default must not be fabricated when the parent struct is
+    // null (the struct stays null; the absent-only fill applies to present structs).
+    Record nullNested = GenericRecord.create(writeSchema);
+    nullNested.setField("id", 3L);
+    nullNested.setField("nested", null);
+    recs.add(nullNested);
+
     OutputFile file = writeRecords(writeSchema, recs);
 
     Schema readSchema =
@@ -249,11 +256,12 @@ public class TestOrcDefaultValues {
 
     List<Record> read = read(file, readSchema);
     Assertions.assertThat(read).hasSize(recs.size());
-    for (int i = 0; i < read.size(); i += 1) {
+    for (int i = 0; i < 3; i += 1) {
       Record nested = (Record) read.get(i).getField("nested");
       Assertions.assertThat(nested.getField("inner")).isEqualTo("v" + i);
       Assertions.assertThat(nested.getField("missing")).isEqualTo(-0.0F);
     }
+    Assertions.assertThat(read.get(3).getField("nested")).isNull();
   }
 
   @Test
