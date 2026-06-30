@@ -22,6 +22,7 @@ import static org.apache.iceberg.types.Types.NestedField.optional;
 import static org.apache.iceberg.types.Types.NestedField.required;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.List;
 import org.apache.iceberg.Files;
 import org.apache.iceberg.PartitionSpec;
@@ -143,5 +144,86 @@ public class TestOrcDefaultValues {
     for (Record record : read) {
       Assertions.assertThat(record.getField("country")).isEqualTo("US");
     }
+  }
+
+  @Test
+  public void testReadFillsScalarDefaultsAllTypes() throws IOException {
+    OutputFile file = writeFile();
+
+    Schema typed =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            defaulted(10, "b", Types.BooleanType.get(), Expressions.lit(true)),
+            defaulted(11, "i", Types.IntegerType.get(), Expressions.lit(42)),
+            defaulted(12, "l", Types.LongType.get(), Expressions.lit(100L)),
+            defaulted(13, "f", Types.FloatType.get(), Expressions.lit(1.5f)),
+            defaulted(14, "d", Types.DoubleType.get(), Expressions.lit(2.5d)),
+            defaulted(15, "s", Types.StringType.get(), Expressions.lit("x")),
+            defaulted(
+                16, "dec", Types.DecimalType.of(9, 2), Expressions.lit(new BigDecimal("1.50"))));
+
+    List<Record> read;
+    try (CloseableIterable<Record> reader =
+        ORC.read(file.toInputFile())
+            .project(typed)
+            .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(typed, fileSchema))
+            .applyColumnDefaults(true)
+            .build()) {
+      read = Lists.newArrayList(reader);
+    }
+
+    Assertions.assertThat(read).hasSize(records.size());
+    for (Record record : read) {
+      Assertions.assertThat(record.getField("b")).isEqualTo(true);
+      Assertions.assertThat(record.getField("i")).isEqualTo(42);
+      Assertions.assertThat(record.getField("l")).isEqualTo(100L);
+      Assertions.assertThat(record.getField("f")).isEqualTo(1.5f);
+      Assertions.assertThat(record.getField("d")).isEqualTo(2.5d);
+      Assertions.assertThat(record.getField("s")).isEqualTo("x");
+      Assertions.assertThat(record.getField("dec")).isEqualTo(new BigDecimal("1.50"));
+    }
+  }
+
+  @Test
+  public void testReadFillsRequiredScalarDefault() throws IOException {
+    OutputFile file = writeFile();
+
+    // A required field absent from the file but declaring a default must be filled, not rejected.
+    Schema requiredDefault =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.required("code")
+                .withId(20)
+                .ofType(Types.IntegerType.get())
+                .withInitialDefault(Expressions.lit(7))
+                .build());
+
+    List<Record> read;
+    try (CloseableIterable<Record> reader =
+        ORC.read(file.toInputFile())
+            .project(requiredDefault)
+            .createReaderFunc(
+                fileSchema -> GenericOrcReader.buildReader(requiredDefault, fileSchema))
+            .applyColumnDefaults(true)
+            .build()) {
+      read = Lists.newArrayList(reader);
+    }
+
+    Assertions.assertThat(read).hasSize(records.size());
+    for (Record record : read) {
+      Assertions.assertThat(record.getField("code")).isEqualTo(7);
+    }
+  }
+
+  private static Types.NestedField defaulted(
+      int id,
+      String name,
+      org.apache.iceberg.types.Type type,
+      org.apache.iceberg.expressions.Literal<?> initial) {
+    return Types.NestedField.optional(name)
+        .withId(id)
+        .ofType(type)
+        .withInitialDefault(initial)
+        .build();
   }
 }

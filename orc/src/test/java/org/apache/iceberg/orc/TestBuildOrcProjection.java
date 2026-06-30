@@ -212,6 +212,29 @@ public class TestBuildOrcProjection {
   }
 
   @Test
+  public void testTopLevelRequiredScalarDefaultOmitted() {
+    Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
+    TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
+
+    // A required top-level field that is absent from the file but declares a default must be
+    // omitted (then filled), not rejected by the required-missing check.
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.required("code")
+                .withId(2)
+                .ofType(Types.IntegerType.get())
+                .withInitialDefault(Expressions.lit(7))
+                .build());
+
+    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
+    assertEquals(1, projection.getChildren().size());
+    assertFalse(
+        "required defaulted column must be omitted, not throw",
+        projection.getFieldNames().contains("code_r2"));
+  }
+
+  @Test
   public void testNestedScalarDefaultSynthesizedNotOmitted() {
     Schema baseSchema =
         new Schema(
