@@ -50,6 +50,7 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
   private final boolean caseSensitive;
   private final Function<TypeDescription, OrcBatchReader<?>> batchReaderFunction;
   private final int recordsPerBatch;
+  private final boolean applyColumnDefaults;
   private NameMapping nameMapping;
 
   OrcIterable(
@@ -63,7 +64,8 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
       boolean caseSensitive,
       Expression filter,
       Function<TypeDescription, OrcBatchReader<?>> batchReaderFunction,
-      int recordsPerBatch) {
+      int recordsPerBatch,
+      boolean applyColumnDefaults) {
     this.schema = schema;
     this.readerFunction = readerFunction;
     this.file = file;
@@ -75,6 +77,7 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     this.filter = (filter == Expressions.alwaysTrue()) ? null : filter;
     this.batchReaderFunction = batchReaderFunction;
     this.recordsPerBatch = recordsPerBatch;
+    this.applyColumnDefaults = applyColumnDefaults;
   }
 
   @SuppressWarnings("unchecked")
@@ -86,13 +89,17 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     TypeDescription fileSchema = orcFileReader.getSchema();
     final TypeDescription readOrcSchema;
     if (ORCSchemaUtil.hasIds(fileSchema)) {
-      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchema);
+      // applyColumnDefaults is opt-in (set by the row SparkOrcReader / generic GenericOrcReader
+      // read
+      // paths). Other readers leave it false, so an absent top-level scalar default is synthesized
+      // as a null column (reads NULL) rather than omitted, which keeps those readers aligned.
+      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchema, applyColumnDefaults);
     } else {
       if (nameMapping == null) {
         nameMapping = MappingUtil.create(schema);
       }
       TypeDescription typeWithIds = ORCSchemaUtil.applyNameMapping(fileSchema, nameMapping);
-      // Id-less (legacy/migrated) files are resolved by name mapping; do not apply column defaults
+      // Id-less (legacy/migrated) files are resolved by name mapping; never apply column defaults
       // so an initial-default is never name-matched onto a file that lacks embedded field ids.
       readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, typeWithIds, false);
     }

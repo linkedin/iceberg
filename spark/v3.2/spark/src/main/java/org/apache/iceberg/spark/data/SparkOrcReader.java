@@ -20,13 +20,11 @@ package org.apache.iceberg.spark.data;
 
 import java.util.List;
 import java.util.Map;
-import org.apache.iceberg.orc.ORCSchemaUtil;
 import org.apache.iceberg.orc.OrcRowReader;
 import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
 import org.apache.iceberg.orc.OrcValueReader;
 import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
-import org.apache.iceberg.spark.source.BaseReader;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
@@ -79,11 +77,7 @@ public class SparkOrcReader implements OrcRowReader<InternalRow> {
         TypeDescription record,
         List<String> names,
         List<OrcValueReader<?>> fields) {
-      return SparkOrcValueReaders.struct(
-          fields,
-          expected,
-          ORCSchemaUtil.idToConstantWithDefaults(
-              expected, record, idToConstant, BaseReader::convertConstant));
+      return SparkOrcValueReaders.struct(fields, expected, idToConstant);
     }
 
     @Override

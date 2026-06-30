@@ -673,6 +673,7 @@ public class ORC {
     private Function<TypeDescription, OrcRowReader<?>> readerFunc;
     private Function<TypeDescription, OrcBatchReader<?>> batchedReaderFunc;
     private int recordsPerBatch = VectorizedRowBatch.DEFAULT_SIZE;
+    private boolean applyColumnDefaults = false;
 
     private ReadBuilder(InputFile file) {
       Preconditions.checkNotNull(file, "Input file cannot be null");
@@ -749,6 +750,21 @@ public class ORC {
       return this;
     }
 
+    /**
+     * Opt in to filling column {@code initial-default}s for fields absent from the data file.
+     *
+     * <p>Off by default. Only read paths whose reader fills absent-defaulted fields via {@code
+     * idToConstant} (the row {@code SparkOrcReader} and the generic {@code GenericOrcReader})
+     * should enable this. When enabled, {@link ORCSchemaUtil#buildOrcProjection(Schema,
+     * TypeDescription, boolean)} omits an absent top-level scalar default from the read projection
+     * so the reader can inject it; when disabled, the field is synthesized as a null column and
+     * reads NULL. The omit is additionally gated on the file carrying embedded field ids.
+     */
+    public ReadBuilder applyColumnDefaults(boolean newApplyColumnDefaults) {
+      this.applyColumnDefaults = newApplyColumnDefaults;
+      return this;
+    }
+
     public <D> CloseableIterable<D> build() {
       Preconditions.checkNotNull(schema, "Schema is required");
       return new OrcIterable<>(
@@ -762,7 +778,8 @@ public class ORC {
           caseSensitive,
           filter,
           batchedReaderFunc,
-          recordsPerBatch);
+          recordsPerBatch,
+          applyColumnDefaults);
     }
   }
 

@@ -69,7 +69,7 @@ import org.slf4j.LoggerFactory;
  *
  * @param <T> is the Java class returned by this reader whose objects contain one or more rows.
  */
-public abstract class BaseReader<T, TaskT extends ScanTask> implements Closeable {
+abstract class BaseReader<T, TaskT extends ScanTask> implements Closeable {
   private static final Logger LOG = LoggerFactory.getLogger(BaseReader.class);
 
   private final Table table;
@@ -201,7 +201,7 @@ public abstract class BaseReader<T, TaskT extends ScanTask> implements Closeable
     }
   }
 
-  public static Object convertConstant(Type type, Object value) {
+  protected static Object convertConstant(Type type, Object value) {
     if (value == null) {
       return null;
     }

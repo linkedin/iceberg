@@ -59,7 +59,7 @@ import org.slf4j.LoggerFactory;
  *
  * @param <T> is the Java class returned by this reader whose objects contain one or more rows.
  */
-public abstract class BaseDataReader<T> implements Closeable {
+abstract class BaseDataReader<T> implements Closeable {
   private static final Logger LOG = LoggerFactory.getLogger(BaseDataReader.class);
 
   private final Table table;
@@ -156,7 +156,7 @@ public abstract class BaseDataReader<T> implements Closeable {
     }
   }
 
-  public static Object convertConstant(Type type, Object value) {
+  protected static Object convertConstant(Type type, Object value) {
     if (value == null) {
       return null;
     }

@@ -23,7 +23,6 @@ import static org.apache.iceberg.types.Types.NestedField.required;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.List;
 import org.apache.iceberg.Files;
 import org.apache.iceberg.Schema;
@@ -31,14 +30,10 @@ import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileAppender;
 import org.apache.iceberg.orc.ORC;
-import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
-import org.apache.iceberg.relocated.com.google.common.collect.Iterators;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
-import org.apache.iceberg.spark.data.vectorized.VectorizedSparkOrcReaders;
 import org.apache.iceberg.types.Types;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.assertj.core.api.Assertions;
 import org.junit.Rule;
@@ -46,9 +41,9 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 /**
- * Verifies that a top-level scalar {@code initial-default} is filled on ORC read, for both the row
- * and vectorized Spark readers (the 1.2.x positional readers both inject from {@code
- * idToConstant}).
+ * Verifies that a top-level scalar {@code initial-default} is filled by the row {@code
+ * SparkOrcReader} only when the read opts in via {@code applyColumnDefaults} (the gate is off by
+ * default, so non-opted reads continue to read NULL). Vectorized ORC defaults are a follow-up.
  */
 public class TestSparkOrcReaderDefaults {
 
@@ -90,13 +85,14 @@ public class TestSparkOrcReaderDefaults {
   }
 
   @Test
-  public void testRowReadFillsDefault() throws IOException {
+  public void testRowReadFillsDefaultWhenOptedIn() throws IOException {
     File testFile = writeFile();
 
     try (CloseableIterable<InternalRow> reader =
         ORC.read(Files.localInput(testFile))
             .project(READ_SCHEMA)
             .createReaderFunc(readOrcSchema -> new SparkOrcReader(READ_SCHEMA, readOrcSchema))
+            .applyColumnDefaults(true)
             .build()) {
       int count = 0;
       for (InternalRow row : reader) {
@@ -108,28 +104,20 @@ public class TestSparkOrcReaderDefaults {
   }
 
   @Test
-  public void testVectorizedReadFillsDefault() throws IOException {
+  public void testRowReadReadsNullWhenNotOptedIn() throws IOException {
     File testFile = writeFile();
 
-    try (CloseableIterable<ColumnarBatch> reader =
+    try (CloseableIterable<InternalRow> reader =
         ORC.read(Files.localInput(testFile))
             .project(READ_SCHEMA)
-            .createBatchedReaderFunc(
-                readOrcSchema ->
-                    VectorizedSparkOrcReaders.buildReader(
-                        READ_SCHEMA, readOrcSchema, ImmutableMap.of()))
+            .createReaderFunc(readOrcSchema -> new SparkOrcReader(READ_SCHEMA, readOrcSchema))
             .build()) {
-      Iterator<InternalRow> rows = batchesToRows(reader.iterator());
       int count = 0;
-      while (rows.hasNext()) {
-        Assertions.assertThat(rows.next().getUTF8String(2)).isEqualTo(EXPECTED_DEFAULT);
+      for (InternalRow row : reader) {
+        Assertions.assertThat(row.isNullAt(2)).isTrue();
         count += 1;
       }
       Assertions.assertThat(count).isEqualTo(3);
     }
-  }
-
-  private Iterator<InternalRow> batchesToRows(Iterator<ColumnarBatch> batches) {
-    return Iterators.concat(Iterators.transform(batches, ColumnarBatch::rowIterator));
   }
 }

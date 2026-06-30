@@ -24,7 +24,6 @@ import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.RowData;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.orc.ORCSchemaUtil;
 import org.apache.iceberg.orc.OrcRowReader;
 import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
 import org.apache.iceberg.orc.OrcValueReader;
@@ -71,11 +70,7 @@ public class FlinkOrcReader implements OrcRowReader<RowData> {
         TypeDescription record,
         List<String> names,
         List<OrcValueReader<?>> fields) {
-      return FlinkOrcReaders.struct(
-          fields,
-          iStruct,
-          ORCSchemaUtil.idToConstantWithDefaults(
-              iStruct, record, idToConstant, RowDataUtil::convertConstant));
+      return FlinkOrcReaders.struct(fields, iStruct, idToConstant);
     }
 
     @Override

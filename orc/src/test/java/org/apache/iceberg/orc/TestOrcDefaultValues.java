@@ -103,6 +103,7 @@ public class TestOrcDefaultValues {
         ORC.read(file.toInputFile())
             .project(READ_SCHEMA)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(READ_SCHEMA, fileSchema))
+            .applyColumnDefaults(true)
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -133,6 +134,7 @@ public class TestOrcDefaultValues {
         ORC.read(file.toInputFile())
             .project(onlyDefault)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(onlyDefault, fileSchema))
+            .applyColumnDefaults(true)
             .build()) {
       read = Lists.newArrayList(reader);
     }
