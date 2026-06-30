@@ -235,15 +235,15 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testNestedScalarDefaultSynthesizedNotOmitted() {
+  public void testNestedScalarDefaultOmitted() {
     Schema baseSchema =
         new Schema(
             required(1, "id", Types.LongType.get()),
             required(2, "s", Types.StructType.of(required(3, "a", Types.LongType.get()))));
     TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
 
-    // A scalar default on a field nested inside a struct (case B) is not omitted; it is synthesized
-    // as a null column and reads NULL until nested-default support lands as a follow-up.
+    // A scalar default on a field nested inside a struct is omitted (then filled via idToConstant),
+    // at any nesting level. The present sibling "a" keeps the struct non-empty.
     Schema evolvedSchema =
         new Schema(
             required(1, "id", Types.LongType.get()),
@@ -260,7 +260,36 @@ public class TestBuildOrcProjection {
 
     TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
     TypeDescription nested = projection.findSubtype("s");
-    assertEquals(2, nested.getChildren().size());
-    assertEquals(4, nested.findSubtype("b_r4").getId());
+    assertEquals(1, nested.getChildren().size());
+    assertFalse("nested defaulted column must be omitted", nested.getFieldNames().contains("b_r4"));
+  }
+
+  @Test
+  public void testNestedStructEmptyAfterOmitKeepsPlaceholder() {
+    // Base file: s { a }. Evolve to project only a new defaulted subfield s { b default 'x' } and
+    // drop a. Every projected subfield of s is absent + defaulted, which would empty the nested
+    // struct; the safeguard keeps one synthesized null column so the non-root struct is non-empty.
+    Schema baseSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            required(2, "s", Types.StructType.of(required(3, "a", Types.LongType.get()))));
+    TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
+
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                2,
+                "s",
+                Types.StructType.of(
+                    Types.NestedField.optional("b")
+                        .withId(4)
+                        .ofType(Types.StringType.get())
+                        .withInitialDefault(Expressions.lit("x"))
+                        .build())));
+
+    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
+    TypeDescription nested = projection.findSubtype("s");
+    assertEquals("non-root struct must keep at least one field", 1, nested.getChildren().size());
   }
 }

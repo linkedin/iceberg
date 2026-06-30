@@ -285,6 +285,11 @@ public final class ORCSchemaUtil {
         Integer.MIN_VALUE, schema.asStruct(), true, true, applyDefaults, icebergToOrc);
   }
 
+  private static boolean isOmittableDefault(
+      Types.NestedField field, boolean applyDefaults, Map<Integer, OrcField> mapping) {
+    return applyDefaults && !mapping.containsKey(field.fieldId()) && field.initialDefault() != null;
+  }
+
   private static TypeDescription buildOrcProjection(
       Integer fieldId,
       Type type,
@@ -297,16 +302,35 @@ public final class ORCSchemaUtil {
     switch (type.typeId()) {
       case STRUCT:
         orcType = TypeDescription.createStruct();
-        for (Types.NestedField nestedField : type.asStructType().fields()) {
-          if (topLevel
-              && applyDefaults
-              && !mapping.containsKey(nestedField.fieldId())
-              && nestedField.initialDefault() != null) {
-            // Top-level scalar field absent from the data file but declaring an initial-default:
-            // omit it from the ORC read projection so the reader fills the default as a constant
-            // for every row via idToConstant (absent-only fill). Nested defaults and id-less files
-            // (applyDefaults=false) fall through and are synthesized as null columns instead.
-            continue;
+        List<Types.NestedField> structFields = type.asStructType().fields();
+        // Number of fields that will actually be read from the file (not omitted as absent +
+        // defaulted). Used to avoid emitting an empty *non-root* struct below.
+        int retained = 0;
+        for (Types.NestedField field : structFields) {
+          if (!isOmittableDefault(field, applyDefaults, mapping)) {
+            retained++;
+          }
+        }
+
+        boolean keptPlaceholder = false;
+        for (Types.NestedField nestedField : structFields) {
+          if (isOmittableDefault(nestedField, applyDefaults, mapping)) {
+            // Field absent from the data file but declaring an initial-default: omit it from the
+            // ORC
+            // read projection (at any nesting level) so the reader fills the default as a constant
+            // for every row via idToConstant (absent-only fill). id-less files
+            // (applyDefaults=false)
+            // and present fields are read/synthesized normally.
+            boolean wouldEmptyNonRootStruct = !topLevel && retained == 0 && !keptPlaceholder;
+            if (!wouldEmptyNonRootStruct) {
+              continue;
+            }
+            // Safeguard: never emit an empty non-root struct (ORC can reject it). Keep exactly one
+            // field synthesized as a null column so the struct has >= 1 column; that field reads
+            // NULL instead of its default. Only triggers when *every* subfield of a nested struct
+            // is absent + defaulted (e.g. all original fields were dropped). The root struct is
+            // allowed to be empty (select-only-default), so this never applies there.
+            keptPlaceholder = true;
           }
           // Using suffix _r to avoid potential underlying issues in ORC reader
           // with reused column names between ORC and Iceberg;

@@ -23,7 +23,9 @@ import static org.apache.iceberg.types.Types.NestedField.required;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import org.apache.iceberg.Files;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -212,6 +214,162 @@ public class TestOrcDefaultValues {
     Assertions.assertThat(read).hasSize(records.size());
     for (Record record : read) {
       Assertions.assertThat(record.getField("code")).isEqualTo(7);
+    }
+  }
+
+  @Test
+  public void testNestedStructScalarDefault() throws IOException {
+    Schema writeSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                3, "nested", Types.StructType.of(required(4, "inner", Types.StringType.get()))));
+    Types.StructType writeNested = writeSchema.findField("nested").type().asStructType();
+
+    List<Record> recs = Lists.newArrayList();
+    for (int i = 0; i < 3; i += 1) {
+      Record nested = GenericRecord.create(writeNested);
+      nested.setField("inner", "v" + i);
+      Record rec = GenericRecord.create(writeSchema);
+      rec.setField("id", (long) i);
+      rec.setField("nested", nested);
+      recs.add(rec);
+    }
+    OutputFile file = writeRecords(writeSchema, recs);
+
+    Schema readSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                3,
+                "nested",
+                Types.StructType.of(
+                    required(4, "inner", Types.StringType.get()),
+                    defaulted(5, "missing", Types.FloatType.get(), Expressions.lit(-0.0F)))));
+
+    List<Record> read = read(file, readSchema);
+    Assertions.assertThat(read).hasSize(recs.size());
+    for (int i = 0; i < read.size(); i += 1) {
+      Record nested = (Record) read.get(i).getField("nested");
+      Assertions.assertThat(nested.getField("inner")).isEqualTo("v" + i);
+      Assertions.assertThat(nested.getField("missing")).isEqualTo(-0.0F);
+    }
+  }
+
+  @Test
+  public void testMapNestedScalarDefault() throws IOException {
+    Schema writeSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                3,
+                "m",
+                Types.MapType.ofOptional(
+                    4,
+                    5,
+                    Types.StringType.get(),
+                    Types.StructType.of(required(6, "v_str", Types.StringType.get())))));
+    Types.StructType writeValue =
+        writeSchema.findField("m").type().asMapType().valueType().asStructType();
+
+    Record value = GenericRecord.create(writeValue);
+    value.setField("v_str", "s");
+    Record rec = GenericRecord.create(writeSchema);
+    rec.setField("id", 1L);
+    rec.setField("m", Collections.singletonMap("k", value));
+    OutputFile file = writeRecords(writeSchema, Lists.newArrayList(rec));
+
+    Schema readSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                3,
+                "m",
+                Types.MapType.ofOptional(
+                    4,
+                    5,
+                    Types.StringType.get(),
+                    Types.StructType.of(
+                        required(6, "v_str", Types.StringType.get()),
+                        defaulted(7, "v_int", Types.IntegerType.get(), Expressions.lit(34))))));
+
+    List<Record> read = read(file, readSchema);
+    Assertions.assertThat(read).hasSize(1);
+    Map<?, ?> m = (Map<?, ?>) read.get(0).getField("m");
+    Assertions.assertThat(m).hasSize(1);
+    Record readValue = (Record) m.values().iterator().next();
+    Assertions.assertThat(readValue.getField("v_str")).isEqualTo("s");
+    Assertions.assertThat(readValue.getField("v_int")).isEqualTo(34);
+  }
+
+  @Test
+  public void testListNestedScalarDefault() throws IOException {
+    Schema writeSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                3,
+                "l",
+                Types.ListType.ofOptional(
+                    4, Types.StructType.of(required(5, "e_str", Types.StringType.get())))));
+    Types.StructType writeElement =
+        writeSchema.findField("l").type().asListType().elementType().asStructType();
+
+    Record element = GenericRecord.create(writeElement);
+    element.setField("e_str", "e");
+    Record rec = GenericRecord.create(writeSchema);
+    rec.setField("id", 1L);
+    rec.setField("l", Collections.singletonList(element));
+    OutputFile file = writeRecords(writeSchema, Lists.newArrayList(rec));
+
+    Schema readSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                3,
+                "l",
+                Types.ListType.ofOptional(
+                    4,
+                    Types.StructType.of(
+                        required(5, "e_str", Types.StringType.get()),
+                        defaulted(7, "e_int", Types.IntegerType.get(), Expressions.lit(34))))));
+
+    List<Record> read = read(file, readSchema);
+    Assertions.assertThat(read).hasSize(1);
+    List<?> l = (List<?>) read.get(0).getField("l");
+    Assertions.assertThat(l).hasSize(1);
+    Record readElement = (Record) l.get(0);
+    Assertions.assertThat(readElement.getField("e_str")).isEqualTo("e");
+    Assertions.assertThat(readElement.getField("e_int")).isEqualTo(34);
+  }
+
+  private OutputFile writeRecords(Schema schema, List<Record> recs) throws IOException {
+    OutputFile file = Files.localOutput(temp.newFile());
+    DataWriter<Record> writer =
+        ORC.writeData(file)
+            .schema(schema)
+            .createWriterFunc(GenericOrcWriter::buildWriter)
+            .overwrite()
+            .withSpec(PartitionSpec.unpartitioned())
+            .build();
+    try {
+      for (Record rec : recs) {
+        writer.write(rec);
+      }
+    } finally {
+      writer.close();
+    }
+    return file;
+  }
+
+  private List<Record> read(OutputFile file, Schema readSchema) throws IOException {
+    try (CloseableIterable<Record> reader =
+        ORC.read(file.toInputFile())
+            .project(readSchema)
+            .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(readSchema, fileSchema))
+            .applyColumnDefaults(true)
+            .build()) {
+      return Lists.newArrayList(reader);
     }
   }
 
