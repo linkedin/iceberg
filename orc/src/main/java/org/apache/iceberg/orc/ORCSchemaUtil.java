@@ -264,37 +264,35 @@ public final class ORCSchemaUtil {
    */
   public static TypeDescription buildOrcProjection(
       Schema schema, TypeDescription originalOrcSchema) {
-    return buildOrcProjection(schema, originalOrcSchema, true);
+    return buildOrcProjection(schema, originalOrcSchema, false);
   }
 
   /**
-   * Builds the ORC read schema for an Iceberg schema, optionally applying top-level column
-   * defaults.
+   * Builds the ORC read schema for a file whose embedded field IDs are known to be trustworthy.
    *
-   * <p>When {@code applyDefaults} is true, a top-level scalar field that is absent from the data
-   * file but declares an {@code initial-default} is <em>omitted</em> from the read projection. The
-   * ORC readers then fill it as a per-file constant through their existing {@code idToConstant}
-   * path (see {@link #idToConstantWithDefaults}). When false (e.g. for name-mapped, id-less files),
-   * the field is synthesized as a null column instead, so a default is never name-matched onto a
-   * legacy/migrated file (where it could mask real data after a rename).
+   * <p>When {@code hasTrustedIds} is true, a scalar field at any nesting level that is absent from
+   * the data file and declares an {@code initial-default} is <em>omitted</em> from the read
+   * projection. A default-aware reader then fills it as a per-file constant through its existing
+   * {@code idToConstant} path (see {@link #idToConstantWithDefaults}). When false, the field is
+   * synthesized as a null column so a default is never name-matched onto an id-less file.
    */
-  public static TypeDescription buildOrcProjection(
-      Schema schema, TypeDescription originalOrcSchema, boolean applyDefaults) {
+  static TypeDescription buildOrcProjection(
+      Schema schema, TypeDescription originalOrcSchema, boolean hasTrustedIds) {
     final Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
     return buildOrcProjection(
-        Integer.MIN_VALUE, schema.asStruct(), true, applyDefaults, icebergToOrc);
+        Integer.MIN_VALUE, schema.asStruct(), true, hasTrustedIds, icebergToOrc);
   }
 
   private static boolean isOmittableDefault(
-      Types.NestedField field, boolean applyDefaults, Map<Integer, OrcField> mapping) {
-    return applyDefaults && !mapping.containsKey(field.fieldId()) && field.initialDefault() != null;
+      Types.NestedField field, boolean hasTrustedIds, Map<Integer, OrcField> mapping) {
+    return field.initialDefault() != null && !mapping.containsKey(field.fieldId()) && hasTrustedIds;
   }
 
   private static TypeDescription buildOrcProjection(
       Integer fieldId,
       Type type,
       boolean isRequired,
-      boolean applyDefaults,
+      boolean hasTrustedIds,
       Map<Integer, OrcField> mapping) {
     final TypeDescription orcType;
 
@@ -302,13 +300,9 @@ public final class ORCSchemaUtil {
       case STRUCT:
         orcType = TypeDescription.createStruct();
         for (Types.NestedField nestedField : type.asStructType().fields()) {
-          if (isOmittableDefault(nestedField, applyDefaults, mapping)) {
-            // Field absent from the data file but declaring an initial-default: omit it from the
-            // ORC
-            // read projection (at any nesting level) so the reader fills the default as a constant
-            // for every row via idToConstant (absent-only fill). id-less files
-            // (applyDefaults=false)
-            // and present fields are read/synthesized normally.
+          if (isOmittableDefault(nestedField, hasTrustedIds, mapping)) {
+            // The field declares a default, is absent, and the file carries trustworthy IDs. Omit
+            // it so a default-aware reader fills it through the existing constant path.
             continue;
           }
           // Using suffix _r to avoid potential underlying issues in ORC reader
@@ -323,7 +317,7 @@ public final class ORCSchemaUtil {
                   nestedField.fieldId(),
                   nestedField.type(),
                   isRequired && nestedField.isRequired(),
-                  applyDefaults,
+                  hasTrustedIds,
                   mapping);
           orcType.addField(name, childType);
         }
@@ -335,20 +329,20 @@ public final class ORCSchemaUtil {
                 list.elementId(),
                 list.elementType(),
                 isRequired && list.isElementRequired(),
-                applyDefaults,
+                hasTrustedIds,
                 mapping);
         orcType = TypeDescription.createList(elementType);
         break;
       case MAP:
         Types.MapType map = (Types.MapType) type;
         TypeDescription keyType =
-            buildOrcProjection(map.keyId(), map.keyType(), isRequired, applyDefaults, mapping);
+            buildOrcProjection(map.keyId(), map.keyType(), isRequired, hasTrustedIds, mapping);
         TypeDescription valueType =
             buildOrcProjection(
                 map.valueId(),
                 map.valueType(),
                 isRequired && map.isValueRequired(),
-                applyDefaults,
+                hasTrustedIds,
                 mapping);
         orcType = TypeDescription.createMap(keyType, valueType);
         break;
@@ -481,12 +475,12 @@ public final class ORCSchemaUtil {
    * absent from the ORC read projection.
    *
    * <p>Used by the ORC readers' {@code record} visitor step: a field that {@link
-   * #buildOrcProjection(Schema, TypeDescription, boolean)} omitted (a top-level scalar declaring an
-   * {@code initial-default} that is absent from the data file) is not present in {@code record}, so
-   * its converted default is injected as a constant. The reader then fills it for every row via its
-   * existing partition-constant path, consuming no column vector. Fields that were synthesized as
-   * null columns (nested defaults, or any field on an id-less/name-mapped read where {@code
-   * applyDefaults} was false) are present in {@code record} and therefore read NULL.
+   * #buildOrcProjection(Schema, TypeDescription, boolean)} omitted (a scalar at any nesting level
+   * declaring an {@code initial-default} that is absent from a file with trustworthy IDs) is not
+   * present in {@code record}, so its converted default is injected as a constant. The reader then
+   * fills it for every row via its existing partition-constant path, consuming no column vector.
+   * Fields synthesized for id-less/name-mapped reads are present in {@code record} and therefore
+   * read NULL.
    *
    * @param expected the expected Iceberg struct for this record level
    * @param record the ORC read projection for this record level

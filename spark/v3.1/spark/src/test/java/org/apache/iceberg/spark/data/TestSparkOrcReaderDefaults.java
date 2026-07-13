@@ -41,9 +41,9 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 /**
- * Verifies that a top-level scalar {@code initial-default} is filled by the row {@code
- * SparkOrcReader} only when the read opts in via {@code applyColumnDefaults} (the gate is off by
- * default, so non-opted reads continue to read NULL). Vectorized ORC defaults are a follow-up.
+ * Verifies that the row {@code SparkOrcReader} fills a scalar {@code initial-default} only when the
+ * field declares one and is absent from a file with embedded field IDs. Vectorized ORC defaults are
+ * a follow-up.
  */
 public class TestSparkOrcReaderDefaults {
 
@@ -71,13 +71,16 @@ public class TestSparkOrcReaderDefaults {
             new GenericInternalRow(new Object[] {1L, UTF8String.fromString("a")}),
             new GenericInternalRow(new Object[] {2L, UTF8String.fromString("b")}),
             new GenericInternalRow(new Object[] {3L, UTF8String.fromString("c")}));
+    return writeFile(WRITE_SCHEMA, rows);
+  }
 
+  private File writeFile(Schema schema, List<InternalRow> rows) throws IOException {
     File testFile = temp.newFile();
     Assertions.assertThat(testFile.delete()).isTrue();
     try (FileAppender<InternalRow> writer =
         ORC.write(Files.localOutput(testFile))
             .createWriterFunc(SparkOrcWriter::new)
-            .schema(WRITE_SCHEMA)
+            .schema(schema)
             .build()) {
       writer.addAll(rows);
     }
@@ -85,14 +88,13 @@ public class TestSparkOrcReaderDefaults {
   }
 
   @Test
-  public void testRowReadFillsDefaultWhenOptedIn() throws IOException {
+  public void testRowReadFillsDeclaredDefault() throws IOException {
     File testFile = writeFile();
 
     try (CloseableIterable<InternalRow> reader =
         ORC.read(Files.localInput(testFile))
             .project(READ_SCHEMA)
             .createReaderFunc(readOrcSchema -> new SparkOrcReader(READ_SCHEMA, readOrcSchema))
-            .applyColumnDefaults(true)
             .build()) {
       int count = 0;
       for (InternalRow row : reader) {
@@ -104,13 +106,19 @@ public class TestSparkOrcReaderDefaults {
   }
 
   @Test
-  public void testRowReadReadsNullWhenNotOptedIn() throws IOException {
+  public void testRowReadReadsNullWhenFieldHasNoDefault() throws IOException {
     File testFile = writeFile();
+    Schema schemaWithoutDefault =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(2, "data", Types.StringType.get()),
+            optional(3, "country", Types.StringType.get()));
 
     try (CloseableIterable<InternalRow> reader =
         ORC.read(Files.localInput(testFile))
-            .project(READ_SCHEMA)
-            .createReaderFunc(readOrcSchema -> new SparkOrcReader(READ_SCHEMA, readOrcSchema))
+            .project(schemaWithoutDefault)
+            .createReaderFunc(
+                readOrcSchema -> new SparkOrcReader(schemaWithoutDefault, readOrcSchema))
             .build()) {
       int count = 0;
       for (InternalRow row : reader) {
@@ -118,6 +126,45 @@ public class TestSparkOrcReaderDefaults {
         count += 1;
       }
       Assertions.assertThat(count).isEqualTo(3);
+    }
+  }
+
+  @Test
+  public void testRowReadFillsNestedDeclaredDefault() throws IOException {
+    Schema writeSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                2, "nested", Types.StructType.of(required(3, "value", Types.StringType.get()))));
+    Schema readSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                2,
+                "nested",
+                Types.StructType.of(
+                    required(3, "value", Types.StringType.get()),
+                    Types.NestedField.optional("missing")
+                        .withId(4)
+                        .ofType(Types.StringType.get())
+                        .withInitialDefault(Expressions.lit("filled"))
+                        .build())));
+    InternalRow nested = new GenericInternalRow(new Object[] {UTF8String.fromString("present")});
+    File testFile =
+        writeFile(
+            writeSchema, Lists.newArrayList(new GenericInternalRow(new Object[] {1L, nested})));
+
+    try (CloseableIterable<InternalRow> reader =
+        ORC.read(Files.localInput(testFile))
+            .project(readSchema)
+            .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema))
+            .build()) {
+      List<InternalRow> rows = Lists.newArrayList(reader);
+      Assertions.assertThat(rows).hasSize(1);
+      InternalRow readNested = rows.get(0).getStruct(1, 2);
+      Assertions.assertThat(readNested.getUTF8String(0))
+          .isEqualTo(UTF8String.fromString("present"));
+      Assertions.assertThat(readNested.getUTF8String(1)).isEqualTo(UTF8String.fromString("filled"));
     }
   }
 }

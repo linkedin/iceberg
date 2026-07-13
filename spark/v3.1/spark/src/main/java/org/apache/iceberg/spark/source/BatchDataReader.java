@@ -114,6 +114,8 @@ class BatchDataReader extends BaseDataReader<ColumnarBatch> {
           Sets.union(constantFieldIds, metadataFieldIds);
       Schema schemaWithoutConstantAndMetadataFields =
           TypeUtil.selectNot(expectedSchema, constantAndMetadataFieldIds);
+      // Follow-up: wire initial-default constants into VectorizedSparkOrcReaders. Tables whose
+      // in-memory schema declares defaults must remain on the row reader until this path is wired.
       ORC.ReadBuilder builder =
           ORC.read(location)
               .project(schemaWithoutConstantAndMetadataFields)

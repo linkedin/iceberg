@@ -50,7 +50,6 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
   private final boolean caseSensitive;
   private final Function<TypeDescription, OrcBatchReader<?>> batchReaderFunction;
   private final int recordsPerBatch;
-  private final boolean applyColumnDefaults;
   private NameMapping nameMapping;
 
   OrcIterable(
@@ -64,8 +63,7 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
       boolean caseSensitive,
       Expression filter,
       Function<TypeDescription, OrcBatchReader<?>> batchReaderFunction,
-      int recordsPerBatch,
-      boolean applyColumnDefaults) {
+      int recordsPerBatch) {
     this.schema = schema;
     this.readerFunction = readerFunction;
     this.file = file;
@@ -77,7 +75,6 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     this.filter = (filter == Expressions.alwaysTrue()) ? null : filter;
     this.batchReaderFunction = batchReaderFunction;
     this.recordsPerBatch = recordsPerBatch;
-    this.applyColumnDefaults = applyColumnDefaults;
   }
 
   @SuppressWarnings("unchecked")
@@ -87,13 +84,12 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     addCloseable(orcFileReader);
 
     TypeDescription fileSchema = orcFileReader.getSchema();
+    boolean hasTrustedIds = ORCSchemaUtil.hasIds(fileSchema);
     final TypeDescription readOrcSchema;
-    if (ORCSchemaUtil.hasIds(fileSchema)) {
-      // applyColumnDefaults is opt-in (set by the row SparkOrcReader / generic GenericOrcReader
-      // read
-      // paths). Other readers leave it false, so an absent top-level scalar default is synthesized
-      // as a null column (reads NULL) rather than omitted, which keeps those readers aligned.
-      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchema, applyColumnDefaults);
+    if (hasTrustedIds) {
+      // Embedded IDs make field identity trustworthy, so absent fields that declare an initial
+      // default can be omitted from the projection and filled by a default-aware reader.
+      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchema, hasTrustedIds);
     } else {
       if (nameMapping == null) {
         nameMapping = MappingUtil.create(schema);
@@ -106,6 +102,8 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
 
     SearchArgument sarg = null;
     if (filter != null) {
+      // Follow-up: predicates that reference absent defaulted fields need default-aware pushdown.
+      // Those fields are omitted when defaults are enabled and must be evaluated after read-fill.
       Expression boundFilter = Binder.bind(schema.asStruct(), filter, caseSensitive);
       sarg = ExpressionToSearchArgument.convert(boundFilter, readOrcSchema);
     }

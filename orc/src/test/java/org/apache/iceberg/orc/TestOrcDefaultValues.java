@@ -21,11 +21,15 @@ package org.apache.iceberg.orc;
 import static org.apache.iceberg.types.Types.NestedField.optional;
 import static org.apache.iceberg.types.Types.NestedField.required;
 
+import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.Files;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
@@ -40,13 +44,18 @@ import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Types;
+import org.apache.orc.OrcFile;
+import org.apache.orc.TypeDescription;
+import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
+import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
+import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.assertj.core.api.Assertions;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-/** Verifies that a top-level scalar {@code initial-default} is filled on ORC read. */
+/** Verifies that scalar {@code initial-default}s are filled on ORC read. */
 public class TestOrcDefaultValues {
 
   private static final Schema WRITE_SCHEMA =
@@ -106,7 +115,6 @@ public class TestOrcDefaultValues {
         ORC.read(file.toInputFile())
             .project(READ_SCHEMA)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(READ_SCHEMA, fileSchema))
-            .applyColumnDefaults(true)
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -137,7 +145,6 @@ public class TestOrcDefaultValues {
         ORC.read(file.toInputFile())
             .project(onlyDefault)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(onlyDefault, fileSchema))
-            .applyColumnDefaults(true)
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -169,7 +176,6 @@ public class TestOrcDefaultValues {
         ORC.read(file.toInputFile())
             .project(typed)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(typed, fileSchema))
-            .applyColumnDefaults(true)
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -206,7 +212,6 @@ public class TestOrcDefaultValues {
             .project(requiredDefault)
             .createReaderFunc(
                 fileSchema -> GenericOrcReader.buildReader(requiredDefault, fileSchema))
-            .applyColumnDefaults(true)
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -215,6 +220,52 @@ public class TestOrcDefaultValues {
     for (Record record : read) {
       Assertions.assertThat(record.getField("code")).isEqualTo(7);
     }
+  }
+
+  @Test
+  public void testReadDoesNotApplyDefaultToIdLessFile() throws IOException {
+    File file = writeIdLessFile();
+
+    List<Record> read;
+    try (CloseableIterable<Record> reader =
+        ORC.read(Files.localInput(file))
+            .project(READ_SCHEMA)
+            .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(READ_SCHEMA, fileSchema))
+            .build()) {
+      read = Lists.newArrayList(reader);
+    }
+
+    Assertions.assertThat(read).hasSize(records.size());
+    for (int i = 0; i < read.size(); i += 1) {
+      Assertions.assertThat(read.get(i).getField("id")).isEqualTo(records.get(i).getField("id"));
+      Assertions.assertThat(read.get(i).getField("data"))
+          .isEqualTo(records.get(i).getField("data"));
+      Assertions.assertThat(read.get(i).getField("country")).isNull();
+    }
+  }
+
+  @Test
+  public void testReadDoesNotOverridePresentColumn() throws IOException {
+    Schema writeSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(2, "data", Types.StringType.get()),
+            optional(3, "country", Types.StringType.get()));
+    Record present = GenericRecord.create(writeSchema);
+    present.setField("id", 1L);
+    present.setField("data", "a");
+    present.setField("country", "CA");
+    Record presentNull = GenericRecord.create(writeSchema);
+    presentNull.setField("id", 2L);
+    presentNull.setField("data", "b");
+    presentNull.setField("country", null);
+
+    OutputFile file = writeRecords(writeSchema, Lists.newArrayList(present, presentNull));
+    List<Record> read = read(file, READ_SCHEMA);
+
+    Assertions.assertThat(read).hasSize(2);
+    Assertions.assertThat(read.get(0).getField("country")).isEqualTo("CA");
+    Assertions.assertThat(read.get(1).getField("country")).isNull();
   }
 
   @Test
@@ -402,12 +453,32 @@ public class TestOrcDefaultValues {
     return file;
   }
 
+  private File writeIdLessFile() throws IOException {
+    File file = temp.newFile();
+    Assertions.assertThat(file.delete()).isTrue();
+    TypeDescription writerSchema = TypeDescription.fromString("struct<id:bigint,data:string>");
+    try (org.apache.orc.Writer writer =
+        OrcFile.createWriter(
+            new Path(file.toString()),
+            OrcFile.writerOptions(new Configuration()).setSchema(writerSchema))) {
+      VectorizedRowBatch batch = writerSchema.createRowBatch();
+      LongColumnVector ids = (LongColumnVector) batch.cols[0];
+      BytesColumnVector data = (BytesColumnVector) batch.cols[1];
+      for (Record record : records) {
+        int row = batch.size++;
+        ids.vector[row] = (Long) record.getField("id");
+        data.setVal(row, record.getField("data").toString().getBytes(StandardCharsets.UTF_8));
+      }
+      writer.addRowBatch(batch);
+    }
+    return file;
+  }
+
   private List<Record> read(OutputFile file, Schema readSchema) throws IOException {
     try (CloseableIterable<Record> reader =
         ORC.read(file.toInputFile())
             .project(readSchema)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(readSchema, fileSchema))
-            .applyColumnDefaults(true)
             .build()) {
       return Lists.newArrayList(reader);
     }

@@ -164,7 +164,7 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testTopLevelScalarDefaultOmittedWhenApplyDefaults() {
+  public void testTopLevelScalarDefaultOmittedWhenFileIdentityIsTrustworthy() {
     Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
     TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
 
@@ -177,9 +177,10 @@ public class TestBuildOrcProjection {
                 .withInitialDefault(Expressions.lit("US"))
                 .build());
 
-    // applyDefaults defaults to true: the absent top-level scalar default is omitted from the read
-    // projection so the reader fills it as a constant via idToConstant.
-    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
+    // The file carries embedded field IDs, so the absent field can be identified safely.
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.hasIds(baseOrcSchema));
     assertEquals(1, projection.getChildren().size());
     assertNotNull(projection.findSubtype("id"));
     assertFalse(
@@ -188,7 +189,7 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testTopLevelScalarDefaultSynthesizedWhenApplyDefaultsFalse() {
+  public void testTopLevelScalarDefaultSynthesizedWithoutTrustedFileIdentity() {
     Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
     TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
 
@@ -201,8 +202,8 @@ public class TestBuildOrcProjection {
                 .withInitialDefault(Expressions.lit("US"))
                 .build());
 
-    // applyDefaults=false (id-less / name-mapped read): the column is synthesized as a null column
-    // instead of being omitted, so the default is never applied and the column reads NULL.
+    // Without trustworthy file identity, synthesize NULL rather than guessing that the field is
+    // absent and applying its default.
     TypeDescription projection =
         ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema, false);
     assertEquals(2, projection.getChildren().size());
@@ -227,7 +228,9 @@ public class TestBuildOrcProjection {
                 .withInitialDefault(Expressions.lit(7))
                 .build());
 
-    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.hasIds(baseOrcSchema));
     assertEquals(1, projection.getChildren().size());
     assertFalse(
         "required defaulted column must be omitted, not throw",
@@ -258,7 +261,9 @@ public class TestBuildOrcProjection {
                         .withInitialDefault(Expressions.lit("x"))
                         .build())));
 
-    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.hasIds(baseOrcSchema));
     TypeDescription nested = projection.findSubtype("s");
     assertEquals(1, nested.getChildren().size());
     assertFalse("nested defaulted column must be omitted", nested.getFieldNames().contains("b_r4"));
@@ -288,7 +293,9 @@ public class TestBuildOrcProjection {
                         .withInitialDefault(Expressions.lit("x"))
                         .build())));
 
-    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.hasIds(baseOrcSchema));
     TypeDescription nested = projection.findSubtype("s");
     assertEquals(0, nested.getChildren().size());
   }

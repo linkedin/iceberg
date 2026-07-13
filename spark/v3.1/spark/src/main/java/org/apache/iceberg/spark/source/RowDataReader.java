@@ -160,8 +160,7 @@ class RowDataReader extends BaseDataReader<InternalRow> {
             .createReaderFunc(
                 readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema, idToConstant))
             .filter(task.residual())
-            .caseSensitive(caseSensitive)
-            .applyColumnDefaults(true);
+            .caseSensitive(caseSensitive);
 
     if (nameMapping != null) {
       builder.withNameMapping(NameMappingParser.fromJson(nameMapping));
