@@ -178,9 +178,7 @@ public class TestBuildOrcProjection {
                 .build());
 
     // The file carries embedded field IDs, so the absent field can be identified safely.
-    TypeDescription projection =
-        ORCSchemaUtil.buildOrcProjection(
-            evolvedSchema, baseOrcSchema, ORCSchemaUtil.hasIds(baseOrcSchema));
+    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
     assertEquals(1, projection.getChildren().size());
     assertNotNull(projection.findSubtype("id"));
     assertFalse(
@@ -228,9 +226,7 @@ public class TestBuildOrcProjection {
                 .withInitialDefault(Expressions.lit(7))
                 .build());
 
-    TypeDescription projection =
-        ORCSchemaUtil.buildOrcProjection(
-            evolvedSchema, baseOrcSchema, ORCSchemaUtil.hasIds(baseOrcSchema));
+    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
     assertEquals(1, projection.getChildren().size());
     assertFalse(
         "required defaulted column must be omitted, not throw",
@@ -261,9 +257,7 @@ public class TestBuildOrcProjection {
                         .withInitialDefault(Expressions.lit("x"))
                         .build())));
 
-    TypeDescription projection =
-        ORCSchemaUtil.buildOrcProjection(
-            evolvedSchema, baseOrcSchema, ORCSchemaUtil.hasIds(baseOrcSchema));
+    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
     TypeDescription nested = projection.findSubtype("s");
     assertEquals(1, nested.getChildren().size());
     assertFalse("nested defaulted column must be omitted", nested.getFieldNames().contains("b_r4"));
@@ -293,9 +287,7 @@ public class TestBuildOrcProjection {
                         .withInitialDefault(Expressions.lit("x"))
                         .build())));
 
-    TypeDescription projection =
-        ORCSchemaUtil.buildOrcProjection(
-            evolvedSchema, baseOrcSchema, ORCSchemaUtil.hasIds(baseOrcSchema));
+    TypeDescription projection = ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema);
     TypeDescription nested = projection.findSubtype("s");
     assertEquals(0, nested.getChildren().size());
   }

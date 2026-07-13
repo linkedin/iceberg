@@ -264,7 +264,7 @@ public final class ORCSchemaUtil {
    */
   public static TypeDescription buildOrcProjection(
       Schema schema, TypeDescription originalOrcSchema) {
-    return buildOrcProjection(schema, originalOrcSchema, false);
+    return buildOrcProjection(schema, originalOrcSchema, true);
   }
 
   /**
