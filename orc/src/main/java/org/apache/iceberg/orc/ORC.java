@@ -809,7 +809,10 @@ public class ORC {
 
   static Writer newFileWriter(
       OutputFile file, OrcFile.WriterOptions options, Map<String, byte[]> metadata) {
-    if (file instanceof HadoopOutputFile) {
+    // the raw Hadoop filesystem opens its own stream with the filesystem default replication,
+    // so it cannot be used when a custom replication factor is configured; OutputFileSystem
+    // routes stream creation back through the Iceberg output file, which applies it
+    if (file instanceof HadoopOutputFile && ((HadoopOutputFile) file).replication() <= 0) {
       options.fileSystem(((HadoopOutputFile) file).getFileSystem());
     } else {
       options.fileSystem(new FileIOFSUtil.OutputFileSystem(file));

@@ -82,7 +82,9 @@ class OrcFileAppender<D> implements FileAppender<D> {
     this.batch = orcSchema.createRowBatch(this.batchSize);
 
     OrcFile.WriterOptions options = OrcFile.writerOptions(conf).useUTCTimestamp(true);
-    if (file instanceof HadoopOutputFile) {
+    // ORC.newFileWriter picks the filesystem; the raw Hadoop shortcut is only valid when no
+    // custom replication factor is configured on the output file
+    if (file instanceof HadoopOutputFile && ((HadoopOutputFile) file).replication() <= 0) {
       options.fileSystem(((HadoopOutputFile) file).getFileSystem());
     }
     options.setSchema(orcSchema);
