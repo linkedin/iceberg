@@ -86,17 +86,13 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     TypeDescription fileSchema = orcFileReader.getSchema();
     final TypeDescription readOrcSchema;
     if (ORCSchemaUtil.hasIds(fileSchema)) {
-      // Embedded IDs make field identity trustworthy, so absent fields that declare an initial
-      // default can be omitted from the projection and filled by a default-aware reader.
-      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchema);
+      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchema, true);
     } else {
       if (nameMapping == null) {
         nameMapping = MappingUtil.create(schema);
       }
       TypeDescription typeWithIds = ORCSchemaUtil.applyNameMapping(fileSchema, nameMapping);
-      // Id-less (legacy/migrated) files are resolved by name mapping; never apply column defaults
-      // so an initial-default is never name-matched onto a file that lacks embedded field ids.
-      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, typeWithIds, false);
+      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, typeWithIds);
     }
 
     SearchArgument sarg = null;
