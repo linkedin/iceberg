@@ -97,8 +97,6 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
 
     SearchArgument sarg = null;
     if (filter != null) {
-      // Follow-up: predicates that reference absent defaulted fields need default-aware pushdown.
-      // Those fields are omitted when defaults are enabled and must be evaluated after read-fill.
       Expression boundFilter = Binder.bind(schema.asStruct(), filter, caseSensitive);
       sarg = ExpressionToSearchArgument.convert(boundFilter, readOrcSchema);
     }
