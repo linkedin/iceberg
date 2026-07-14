@@ -157,6 +157,11 @@ public class HadoopOutputFile implements OutputFile, NativelyEncryptedFile {
     return fs;
   }
 
+  /** Returns the configured replication factor, or a non-positive value when not set. */
+  public short replication() {
+    return replication;
+  }
+
   @Override
   public String location() {
     return path.toString();
