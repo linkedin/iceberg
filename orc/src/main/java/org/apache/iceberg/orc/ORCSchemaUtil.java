@@ -261,18 +261,47 @@ public final class ORCSchemaUtil {
    */
   public static TypeDescription buildOrcProjection(
       Schema schema, TypeDescription originalOrcSchema) {
+    return buildOrcProjection(schema, originalOrcSchema, false);
+  }
+
+  /**
+   * Builds the ORC read schema for a file whose embedded field IDs are known to be trustworthy.
+   *
+   * <p>When {@code hasTrustedIds} is true, a scalar field at any nesting level that is absent from
+   * the data file and declares an {@code initial-default} is <em>omitted</em> from the read
+   * projection. An id-binding reader sees no column for that field and fills the declared default
+   * as a per-file constant. When false, the field is synthesized as a null column instead, so a
+   * default is never name-matched onto an id-less file.
+   */
+  static TypeDescription buildOrcProjection(
+      Schema schema, TypeDescription originalOrcSchema, boolean hasTrustedIds) {
     final Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
-    return buildOrcProjection(Integer.MIN_VALUE, schema.asStruct(), true, icebergToOrc);
+    return buildOrcProjection(
+        Integer.MIN_VALUE, schema.asStruct(), true, hasTrustedIds, icebergToOrc);
+  }
+
+  private static boolean isOmittableDefault(
+      Types.NestedField field, boolean hasTrustedIds, Map<Integer, OrcField> mapping) {
+    return field.initialDefault() != null && !mapping.containsKey(field.fieldId()) && hasTrustedIds;
   }
 
   private static TypeDescription buildOrcProjection(
-      Integer fieldId, Type type, boolean isRequired, Map<Integer, OrcField> mapping) {
+      Integer fieldId,
+      Type type,
+      boolean isRequired,
+      boolean hasTrustedIds,
+      Map<Integer, OrcField> mapping) {
     final TypeDescription orcType;
 
     switch (type.typeId()) {
       case STRUCT:
         orcType = TypeDescription.createStruct();
         for (Types.NestedField nestedField : type.asStructType().fields()) {
+          if (isOmittableDefault(nestedField, hasTrustedIds, mapping)) {
+            // The field declares a default, is absent, and the file carries trustworthy IDs. Omit
+            // it so a default-aware reader fills it through the existing constant path.
+            continue;
+          }
           // Using suffix _r to avoid potential underlying issues in ORC reader
           // with reused column names between ORC and Iceberg;
           // e.g. renaming column c -> d and adding new column d
@@ -285,6 +314,7 @@ public final class ORCSchemaUtil {
                   nestedField.fieldId(),
                   nestedField.type(),
                   isRequired && nestedField.isRequired(),
+                  hasTrustedIds,
                   mapping);
           orcType.addField(name, childType);
         }
@@ -296,16 +326,21 @@ public final class ORCSchemaUtil {
                 list.elementId(),
                 list.elementType(),
                 isRequired && list.isElementRequired(),
+                hasTrustedIds,
                 mapping);
         orcType = TypeDescription.createList(elementType);
         break;
       case MAP:
         Types.MapType map = (Types.MapType) type;
         TypeDescription keyType =
-            buildOrcProjection(map.keyId(), map.keyType(), isRequired, mapping);
+            buildOrcProjection(map.keyId(), map.keyType(), isRequired, hasTrustedIds, mapping);
         TypeDescription valueType =
             buildOrcProjection(
-                map.valueId(), map.valueType(), isRequired && map.isValueRequired(), mapping);
+                map.valueId(),
+                map.valueType(),
+                isRequired && map.isValueRequired(),
+                hasTrustedIds,
+                mapping);
         orcType = TypeDescription.createMap(keyType, valueType);
         break;
       default:

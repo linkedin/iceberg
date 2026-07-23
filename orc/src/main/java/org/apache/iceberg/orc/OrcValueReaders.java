@@ -21,9 +21,12 @@ package org.apache.iceberg.orc;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 import org.apache.iceberg.MetadataColumns;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
@@ -183,6 +186,28 @@ public class OrcValueReaders {
         List<OrcValueReader<?>> readers,
         Types.StructType struct,
         Map<Integer, ?> idToConstant) {
+      this(orcType, readers, struct, idToConstant, null);
+    }
+
+    /**
+     * Binds struct fields by Iceberg field id, filling a field's {@code initial-default} when the
+     * file has no column for it.
+     *
+     * <p>A field reaches the default only when the read projection omitted it, which {@link
+     * ORCSchemaUtil#buildOrcProjection(Schema, TypeDescription, boolean)} does only for an absent
+     * field that declares a default in a file whose ids are trustworthy. The default is
+     * materialized as a per-file constant and consumes no column vector, so a present column --
+     * including one holding an explicit null -- always wins.
+     *
+     * @param convertConstant converts a default to the engine's in-memory representation, or null
+     *     to disable default filling and keep the strict missing-reader failure
+     */
+    protected StructReader(
+        TypeDescription orcType,
+        List<OrcValueReader<?>> readers,
+        Types.StructType struct,
+        Map<Integer, ?> idToConstant,
+        BiFunction<Type, Object, Object> convertConstant) {
       List<Types.NestedField> fields = struct.fields();
       this.readers = new OrcValueReader[fields.size()];
       this.isConstantOrMetadataField = new boolean[fields.size()];
@@ -208,6 +233,10 @@ public class OrcValueReaders {
           this.isConstantOrMetadataField[pos] = false;
           this.orcFieldIndex[pos] = fieldIdToOrcIndex.getOrDefault(field.fieldId(), -1);
           this.readers[pos] = fileReader;
+        } else if (convertConstant != null && field.initialDefault() != null) {
+          this.isConstantOrMetadataField[pos] = true;
+          this.readers[pos] =
+              constants(convertConstant.apply(field.type(), field.initialDefault()));
         } else if (MetadataColumns.isMetadataColumn(field.name())) {
           this.isConstantOrMetadataField[pos] = true;
           this.readers[pos] = constants(null);
