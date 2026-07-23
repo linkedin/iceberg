@@ -21,9 +21,11 @@ package org.apache.iceberg.orc;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
@@ -183,6 +185,15 @@ public class OrcValueReaders {
         List<OrcValueReader<?>> readers,
         Types.StructType struct,
         Map<Integer, ?> idToConstant) {
+      this(orcType, readers, struct, idToConstant, null);
+    }
+
+    protected StructReader(
+        TypeDescription orcType,
+        List<OrcValueReader<?>> readers,
+        Types.StructType struct,
+        Map<Integer, ?> idToConstant,
+        BiFunction<Type, Object, Object> convertConstant) {
       List<Types.NestedField> fields = struct.fields();
       this.readers = new OrcValueReader[fields.size()];
       this.isConstantOrMetadataField = new boolean[fields.size()];
@@ -208,6 +219,10 @@ public class OrcValueReaders {
           this.isConstantOrMetadataField[pos] = false;
           this.orcFieldIndex[pos] = fieldIdToOrcIndex.getOrDefault(field.fieldId(), -1);
           this.readers[pos] = fileReader;
+        } else if (field.initialDefault() != null && convertConstant != null) {
+          this.isConstantOrMetadataField[pos] = true;
+          this.readers[pos] =
+              constants(convertConstant.apply(field.type(), field.initialDefault()));
         } else if (MetadataColumns.isMetadataColumn(field.name())) {
           this.isConstantOrMetadataField[pos] = true;
           this.readers[pos] = constants(null);
