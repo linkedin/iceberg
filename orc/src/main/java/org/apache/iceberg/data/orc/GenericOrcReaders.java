@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.apache.iceberg.data.GenericRecord;
+import org.apache.iceberg.data.IdentityPartitionConverters;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.orc.OrcValueReader;
 import org.apache.iceberg.orc.OrcValueReaders;
@@ -238,7 +239,8 @@ public class GenericOrcReaders {
         List<OrcValueReader<?>> readers,
         Types.StructType structType,
         Map<Integer, ?> idToConstant) {
-      super(orcType, readers, structType, idToConstant);
+      super(
+          orcType, readers, structType, idToConstant, IdentityPartitionConverters::convertConstant);
       this.template = GenericRecord.create(structType);
     }
 

@@ -25,6 +25,7 @@ import org.apache.iceberg.orc.OrcValueReader;
 import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.spark.source.BaseDataReader;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
@@ -168,7 +169,7 @@ public class SparkOrcValueReaders {
         List<OrcValueReader<?>> readers,
         Types.StructType struct,
         Map<Integer, ?> idToConstant) {
-      super(orcType, readers, struct, idToConstant);
+      super(orcType, readers, struct, idToConstant, BaseDataReader::convertConstant);
       this.numFields = struct.fields().size();
     }
 

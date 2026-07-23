@@ -261,18 +261,37 @@ public final class ORCSchemaUtil {
    */
   public static TypeDescription buildOrcProjection(
       Schema schema, TypeDescription originalOrcSchema) {
+    return buildOrcProjection(schema, originalOrcSchema, false);
+  }
+
+  static TypeDescription buildOrcProjection(
+      Schema schema, TypeDescription originalOrcSchema, boolean applyDefaults) {
     final Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
-    return buildOrcProjection(Integer.MIN_VALUE, schema.asStruct(), true, icebergToOrc);
+    return buildOrcProjection(
+        Integer.MIN_VALUE, schema.asStruct(), true, applyDefaults, icebergToOrc);
+  }
+
+  private static boolean isOmittableDefault(
+      Types.NestedField field, boolean applyDefaults, Map<Integer, OrcField> mapping) {
+    return applyDefaults && field.initialDefault() != null && !mapping.containsKey(field.fieldId());
   }
 
   private static TypeDescription buildOrcProjection(
-      Integer fieldId, Type type, boolean isRequired, Map<Integer, OrcField> mapping) {
+      Integer fieldId,
+      Type type,
+      boolean isRequired,
+      boolean applyDefaults,
+      Map<Integer, OrcField> mapping) {
     final TypeDescription orcType;
 
     switch (type.typeId()) {
       case STRUCT:
         orcType = TypeDescription.createStruct();
         for (Types.NestedField nestedField : type.asStructType().fields()) {
+          if (isOmittableDefault(nestedField, applyDefaults, mapping)) {
+            continue;
+          }
+
           // Using suffix _r to avoid potential underlying issues in ORC reader
           // with reused column names between ORC and Iceberg;
           // e.g. renaming column c -> d and adding new column d
@@ -285,6 +304,7 @@ public final class ORCSchemaUtil {
                   nestedField.fieldId(),
                   nestedField.type(),
                   isRequired && nestedField.isRequired(),
+                  applyDefaults,
                   mapping);
           orcType.addField(name, childType);
         }
@@ -296,16 +316,21 @@ public final class ORCSchemaUtil {
                 list.elementId(),
                 list.elementType(),
                 isRequired && list.isElementRequired(),
+                applyDefaults,
                 mapping);
         orcType = TypeDescription.createList(elementType);
         break;
       case MAP:
         Types.MapType map = (Types.MapType) type;
         TypeDescription keyType =
-            buildOrcProjection(map.keyId(), map.keyType(), isRequired, mapping);
+            buildOrcProjection(map.keyId(), map.keyType(), isRequired, applyDefaults, mapping);
         TypeDescription valueType =
             buildOrcProjection(
-                map.valueId(), map.valueType(), isRequired && map.isValueRequired(), mapping);
+                map.valueId(),
+                map.valueType(),
+                isRequired && map.isValueRequired(),
+                applyDefaults,
+                mapping);
         orcType = TypeDescription.createMap(keyType, valueType);
         break;
       default:
