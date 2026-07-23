@@ -168,7 +168,7 @@ public class SparkOrcValueReaders {
         List<OrcValueReader<?>> readers,
         Types.StructType struct,
         Map<Integer, ?> idToConstant) {
-      super(orcType, readers, struct, idToConstant);
+      super(orcType, readers, struct, idToConstant, SparkValueConverters::convertConstant);
       this.numFields = struct.fields().size();
     }
 

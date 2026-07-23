@@ -20,20 +20,15 @@ package org.apache.iceberg.spark.source;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
-import org.apache.avro.generic.GenericData;
-import org.apache.avro.util.Utf8;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.encryption.EncryptedFiles;
 import org.apache.iceberg.encryption.EncryptedInputFile;
@@ -42,15 +37,10 @@ import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
-import org.apache.iceberg.types.Type;
-import org.apache.iceberg.types.Types.NestedField;
+import org.apache.iceberg.spark.data.SparkValueConverters;
 import org.apache.iceberg.types.Types.StructType;
-import org.apache.iceberg.util.ByteBuffers;
 import org.apache.iceberg.util.PartitionUtil;
 import org.apache.spark.rdd.InputFileBlockHolder;
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.unsafe.types.UTF8String;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -154,56 +144,9 @@ abstract class BaseDataReader<T> implements Closeable {
   protected Map<Integer, ?> constantsMap(FileScanTask task, Schema readSchema) {
     if (readSchema.findField(MetadataColumns.PARTITION_COLUMN_ID) != null) {
       StructType partitionType = Partitioning.partitionType(table);
-      return PartitionUtil.constantsMap(task, partitionType, BaseDataReader::convertConstant);
+      return PartitionUtil.constantsMap(task, partitionType, SparkValueConverters::convertConstant);
     } else {
-      return PartitionUtil.constantsMap(task, BaseDataReader::convertConstant);
+      return PartitionUtil.constantsMap(task, SparkValueConverters::convertConstant);
     }
-  }
-
-  protected static Object convertConstant(Type type, Object value) {
-    if (value == null) {
-      return null;
-    }
-
-    switch (type.typeId()) {
-      case DECIMAL:
-        return Decimal.apply((BigDecimal) value);
-      case STRING:
-        if (value instanceof Utf8) {
-          Utf8 utf8 = (Utf8) value;
-          return UTF8String.fromBytes(utf8.getBytes(), 0, utf8.getByteLength());
-        }
-        return UTF8String.fromString(value.toString());
-      case FIXED:
-        if (value instanceof byte[]) {
-          return value;
-        } else if (value instanceof GenericData.Fixed) {
-          return ((GenericData.Fixed) value).bytes();
-        }
-        return ByteBuffers.toByteArray((ByteBuffer) value);
-      case BINARY:
-        return ByteBuffers.toByteArray((ByteBuffer) value);
-      case STRUCT:
-        StructType structType = (StructType) type;
-
-        if (structType.fields().isEmpty()) {
-          return new GenericInternalRow();
-        }
-
-        List<NestedField> fields = structType.fields();
-        Object[] values = new Object[fields.size()];
-        StructLike struct = (StructLike) value;
-
-        for (int index = 0; index < fields.size(); index++) {
-          NestedField field = fields.get(index);
-          Type fieldType = field.type();
-          values[index] =
-              convertConstant(fieldType, struct.get(index, fieldType.typeId().javaClass()));
-        }
-
-        return new GenericInternalRow(values);
-      default:
-    }
-    return value;
   }
 }
