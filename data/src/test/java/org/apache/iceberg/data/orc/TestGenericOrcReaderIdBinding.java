@@ -24,8 +24,11 @@ import static org.apache.iceberg.types.Types.NestedField.required;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.Files;
 import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.Schema;
@@ -34,10 +37,21 @@ import org.apache.iceberg.data.Record;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileAppender;
 import org.apache.iceberg.orc.ORC;
+import org.apache.iceberg.orc.ORCSchemaUtil;
+import org.apache.iceberg.orc.OrcValueReader;
+import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
+import org.apache.orc.OrcFile;
+import org.apache.orc.Reader;
+import org.apache.orc.TypeDescription;
+import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
+import org.apache.orc.storage.ql.exec.vector.ColumnVector;
+import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
+import org.apache.orc.storage.ql.exec.vector.StructColumnVector;
+import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -148,6 +162,35 @@ public class TestGenericOrcReaderIdBinding {
   }
 
   @Test
+  public void testNonIdentityFieldIdMapping() {
+    Schema expectedSchema =
+        new Schema(
+            required(10, "first", Types.LongType.get()),
+            required(20, "second", Types.StringType.get()));
+    Schema orcSchema =
+        new Schema(
+            required(20, "second", Types.StringType.get()),
+            required(10, "first", Types.LongType.get()));
+    TypeDescription orcType = ORCSchemaUtil.convert(orcSchema);
+
+    List<OrcValueReader<?>> readers =
+        Lists.newArrayList(GenericOrcReaders.strings(), OrcValueReaders.longs());
+    OrcValueReader<Record> reader =
+        GenericOrcReaders.struct(orcType, readers, expectedSchema.asStruct(), ImmutableMap.of());
+
+    BytesColumnVector second = new BytesColumnVector(1);
+    byte[] secondValue = "value".getBytes(StandardCharsets.UTF_8);
+    second.setRef(0, secondValue, 0, secondValue.length);
+    LongColumnVector first = new LongColumnVector(1);
+    first.vector[0] = 34L;
+    StructColumnVector vector = new StructColumnVector(1, new ColumnVector[] {second, first});
+
+    Record actual = reader.read(vector, 0);
+    Assert.assertEquals("first should bind from ORC index 1", 34L, actual.get(0));
+    Assert.assertEquals("second should bind from ORC index 0", "value", actual.get(1));
+  }
+
+  @Test
   public void testMetadataColumns() throws IOException {
     Schema writeSchema =
         new Schema(
@@ -216,5 +259,76 @@ public class TestGenericOrcReaderIdBinding {
         "data should read from file", "value", projected.getField("data").toString());
     Assert.assertEquals(
         "part should resolve from idToConstant", "constant-partition", projected.getField("part"));
+  }
+
+  @Test
+  public void testIdLessFileBindsThroughNameMapping() throws IOException {
+    // Files migrated from Hive carry no Iceberg field ids. They are resolved by name mapping, which
+    // stamps ids onto the projection before the reader binds, so id-binding must still produce the
+    // values positional binding produced. A field absent from such a file must read null.
+    File file = writeIdLessFile("id_less");
+
+    Schema readSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(2, "data", Types.StringType.get()),
+            optional(3, "added_after_migration", Types.StringType.get()));
+
+    List<Record> projected;
+    try (CloseableIterable<Record> reader =
+        ORC.read(Files.localInput(file))
+            .project(readSchema)
+            .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(readSchema, fileSchema))
+            .build()) {
+      projected = Lists.newArrayList(reader);
+    }
+
+    Assert.assertEquals(3, projected.size());
+    for (int i = 0; i < projected.size(); i++) {
+      Record record = projected.get(i);
+      Assert.assertEquals("id should bind by name mapping", (long) i, record.getField("id"));
+      Assert.assertEquals(
+          "data should bind by name mapping", "row" + i, record.getField("data").toString());
+      Assert.assertNull(
+          "field absent from an id-less file should read null",
+          record.getField("added_after_migration"));
+    }
+  }
+
+  /**
+   * Writes an ORC file directly, without the Iceberg writer, so it carries no field id attributes.
+   */
+  private File writeIdLessFile(String desc) throws IOException {
+    File file = temp.newFile(desc + ".orc");
+    Assert.assertTrue("Delete should succeed", file.delete());
+
+    TypeDescription writerSchema = TypeDescription.fromString("struct<id:bigint,data:string>");
+    try (org.apache.orc.Writer writer =
+        OrcFile.createWriter(
+            new Path(file.toString()),
+            OrcFile.writerOptions(new Configuration()).setSchema(writerSchema))) {
+      VectorizedRowBatch batch = writerSchema.createRowBatch();
+      LongColumnVector ids = (LongColumnVector) batch.cols[0];
+      BytesColumnVector data = (BytesColumnVector) batch.cols[1];
+      for (long i = 0; i < 3; i++) {
+        int row = batch.size++;
+        ids.vector[row] = i;
+        data.setVal(row, ("row" + i).getBytes(StandardCharsets.UTF_8));
+      }
+      writer.addRowBatch(batch);
+    }
+
+    // Without this the test could silently exercise the id-bearing path it is meant to avoid.
+    try (Reader orcReader =
+        OrcFile.createReader(
+            new Path(file.toString()), OrcFile.readerOptions(new Configuration()))) {
+      for (TypeDescription child : orcReader.getSchema().getChildren()) {
+        Assert.assertNull(
+            "migrated file should carry no iceberg field ids",
+            child.getAttributeValue("iceberg.id"));
+      }
+    }
+
+    return file;
   }
 }
