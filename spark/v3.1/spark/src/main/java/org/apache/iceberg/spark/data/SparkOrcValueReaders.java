@@ -26,6 +26,7 @@ import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.Types;
+import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
 import org.apache.orc.storage.ql.exec.vector.ColumnVector;
 import org.apache.orc.storage.ql.exec.vector.DecimalColumnVector;
@@ -63,9 +64,23 @@ public class SparkOrcValueReaders {
     }
   }
 
+  /**
+   * @deprecated Use {@link #struct(TypeDescription, List, Types.StructType, Map)} instead. This
+   *     method uses position-based binding which may cause field misalignment in MOR and lineage
+   *     scenarios.
+   */
+  @Deprecated
   static OrcValueReader<?> struct(
       List<OrcValueReader<?>> readers, Types.StructType struct, Map<Integer, ?> idToConstant) {
     return new StructReader(readers, struct, idToConstant);
+  }
+
+  static OrcValueReader<?> struct(
+      TypeDescription orcType,
+      List<OrcValueReader<?>> readers,
+      Types.StructType struct,
+      Map<Integer, ?> idToConstant) {
+    return new StructReader(orcType, readers, struct, idToConstant);
   }
 
   static OrcValueReader<?> array(OrcValueReader<?> elementReader) {
@@ -136,9 +151,24 @@ public class SparkOrcValueReaders {
   static class StructReader extends OrcValueReaders.StructReader<InternalRow> {
     private final int numFields;
 
+    /**
+     * @deprecated Use {@link #StructReader(TypeDescription, List, Types.StructType, Map)} instead.
+     *     This constructor uses position-based binding which may cause field misalignment in MOR
+     *     and lineage scenarios.
+     */
+    @Deprecated
     protected StructReader(
         List<OrcValueReader<?>> readers, Types.StructType struct, Map<Integer, ?> idToConstant) {
       super(readers, struct, idToConstant);
+      this.numFields = struct.fields().size();
+    }
+
+    protected StructReader(
+        TypeDescription orcType,
+        List<OrcValueReader<?>> readers,
+        Types.StructType struct,
+        Map<Integer, ?> idToConstant) {
+      super(orcType, readers, struct, idToConstant);
       this.numFields = struct.fields().size();
     }
 
