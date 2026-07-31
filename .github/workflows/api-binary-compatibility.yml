@@ -38,7 +38,7 @@ jobs:
   revapi:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # fetch-depth of zero ensures that the tags are pulled in and we're not in a detached HEAD state
           # revapi depends on the tags, specifically the tag from git describe, to find the relevant override
@@ -46,14 +46,14 @@ jobs:
           #
           # See https://github.com/actions/checkout/issues/124
           fetch-depth: 0
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: 11
       - run: |
           echo "Using the old version tag, as per git describe, of $(git describe)";
       - run: ./gradlew :iceberg-api:revapi --rerun-tasks
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: test logs

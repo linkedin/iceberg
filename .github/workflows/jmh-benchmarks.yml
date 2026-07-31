@@ -42,7 +42,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       foundlabel: ${{ steps.set-matrix.outputs.foundlabel }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: ${{ github.event.inputs.repo }}
           ref: ${{ github.event.inputs.ref }}
@@ -84,15 +84,15 @@ jobs:
       SPARK_LOCAL_IP: localhost
       SPARK_VERSION: ${{ github.event.inputs.spark_version }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         repository: ${{ github.event.inputs.repo }}
         ref: ${{ github.event.inputs.ref }}
-    - uses: actions/setup-java@v4
+    - uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: 11
-    - uses: actions/cache@v4
+    - uses: actions/cache@v5
       with:
         path: |
           ~/.gradle/caches
@@ -106,7 +106,7 @@ jobs:
         BENCHMARK: ${{ matrix.benchmark }}
       run: ./gradlew ":iceberg-spark:${SPARK_VERSION}:jmh" "-PjmhIncludeRegex=${BENCHMARK}" "-PjmhOutputPath=benchmark/${BENCHMARK}.txt"
 
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v6
       if: ${{ always() }}
       with:
         name: benchmark-results
