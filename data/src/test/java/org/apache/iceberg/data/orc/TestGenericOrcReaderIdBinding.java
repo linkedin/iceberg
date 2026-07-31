@@ -37,6 +37,9 @@ import org.apache.iceberg.data.Record;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileAppender;
 import org.apache.iceberg.orc.ORC;
+import org.apache.iceberg.orc.ORCSchemaUtil;
+import org.apache.iceberg.orc.OrcValueReader;
+import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.types.TypeUtil;
@@ -45,7 +48,9 @@ import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
+import org.apache.orc.storage.ql.exec.vector.ColumnVector;
 import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
+import org.apache.orc.storage.ql.exec.vector.StructColumnVector;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.junit.Assert;
 import org.junit.Rule;
@@ -154,6 +159,35 @@ public class TestGenericOrcReaderIdBinding {
     Assert.assertEquals("c should bind by id", 7, projected.getField("c"));
     Assert.assertEquals("a should bind by id", 10L, projected.getField("a"));
     Assert.assertEquals("b should bind by id", "hello", projected.getField("b").toString());
+  }
+
+  @Test
+  public void testNonIdentityFieldIdMapping() {
+    Schema expectedSchema =
+        new Schema(
+            required(10, "first", Types.LongType.get()),
+            required(20, "second", Types.StringType.get()));
+    Schema orcSchema =
+        new Schema(
+            required(20, "second", Types.StringType.get()),
+            required(10, "first", Types.LongType.get()));
+    TypeDescription orcType = ORCSchemaUtil.convert(orcSchema);
+
+    List<OrcValueReader<?>> readers =
+        Lists.newArrayList(GenericOrcReaders.strings(), OrcValueReaders.longs());
+    OrcValueReader<Record> reader =
+        GenericOrcReaders.struct(orcType, readers, expectedSchema.asStruct(), ImmutableMap.of());
+
+    BytesColumnVector second = new BytesColumnVector(1);
+    byte[] secondValue = "value".getBytes(StandardCharsets.UTF_8);
+    second.setRef(0, secondValue, 0, secondValue.length);
+    LongColumnVector first = new LongColumnVector(1);
+    first.vector[0] = 34L;
+    StructColumnVector vector = new StructColumnVector(1, new ColumnVector[] {second, first});
+
+    Record actual = reader.read(vector, 0);
+    Assert.assertEquals("first should bind from ORC index 1", 34L, actual.get(0));
+    Assert.assertEquals("second should bind from ORC index 0", "value", actual.get(1));
   }
 
   @Test
