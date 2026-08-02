@@ -137,6 +137,7 @@ class GenericReader implements Serializable {
                 .createReaderFunc(
                     fileSchema ->
                         GenericOrcReader.buildReader(fileProjection, fileSchema, partition))
+                .supportsInitialDefaults()
                 .split(task.start(), task.length())
                 .filter(task.residual());
 

@@ -180,12 +180,33 @@ public class TestBuildOrcProjection {
     // The file carries embedded field IDs, so the absent field can be identified safely.
     TypeDescription projection =
         ORCSchemaUtil.buildOrcProjection(
-            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED);
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, true);
     assertEquals(1, projection.getChildren().size());
     assertNotNull(projection.findSubtype("id"));
     assertFalse(
         "defaulted column must be omitted from the read projection",
         projection.getFieldNames().contains("country_r2"));
+  }
+
+  @Test
+  public void testTopLevelScalarDefaultSynthesizedWhenReaderDoesNotSupportDefaults() {
+    Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
+    TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("country")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("US"))
+                .build());
+
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, false);
+
+    assertEquals(2, projection.getChildren().size());
+    assertNotNull(projection.findSubtype("country_r2"));
   }
 
   @Test
@@ -229,7 +250,7 @@ public class TestBuildOrcProjection {
 
     TypeDescription projection =
         ORCSchemaUtil.buildOrcProjection(
-            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED);
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, true);
     assertEquals(1, projection.getChildren().size());
     assertFalse(
         "required defaulted column must be omitted, not throw",
@@ -262,7 +283,7 @@ public class TestBuildOrcProjection {
 
     TypeDescription projection =
         ORCSchemaUtil.buildOrcProjection(
-            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED);
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, true);
     TypeDescription nested = projection.findSubtype("s");
     assertEquals(1, nested.getChildren().size());
     assertFalse("nested defaulted column must be omitted", nested.getFieldNames().contains("b_r4"));
@@ -294,7 +315,7 @@ public class TestBuildOrcProjection {
 
     TypeDescription projection =
         ORCSchemaUtil.buildOrcProjection(
-            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED);
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, true);
     TypeDescription nested = projection.findSubtype("s");
     assertEquals(0, nested.getChildren().size());
   }

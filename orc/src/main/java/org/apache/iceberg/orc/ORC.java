@@ -672,6 +672,7 @@ public class ORC {
 
     private Function<TypeDescription, OrcRowReader<?>> readerFunc;
     private Function<TypeDescription, OrcBatchReader<?>> batchedReaderFunc;
+    private boolean supportsInitialDefaults = false;
     private int recordsPerBatch = VectorizedRowBatch.DEFAULT_SIZE;
 
     private ReadBuilder(InputFile file) {
@@ -725,6 +726,19 @@ public class ORC {
       return this;
     }
 
+    /**
+     * Signals that the configured row reader can fill initial defaults for fields omitted from an
+     * ORC file. Disabled by default so existing positional and vectorized readers retain their
+     * previous null-synthesizing projection behavior.
+     */
+    public ReadBuilder supportsInitialDefaults() {
+      Preconditions.checkState(
+          this.readerFunc != null,
+          "A row reader function must be configured before enabling initial defaults");
+      this.supportsInitialDefaults = true;
+      return this;
+    }
+
     public ReadBuilder filter(Expression newFilter) {
       this.filter = newFilter;
       return this;
@@ -733,7 +747,7 @@ public class ORC {
     public ReadBuilder createBatchedReaderFunc(
         Function<TypeDescription, OrcBatchReader<?>> batchReaderFunction) {
       Preconditions.checkArgument(
-          this.readerFunc == null,
+          this.readerFunc == null && !this.supportsInitialDefaults,
           "Batched reader function cannot be set since the non-batched version is already set");
       this.batchedReaderFunc = batchReaderFunction;
       return this;
@@ -759,6 +773,7 @@ public class ORC {
           start,
           length,
           readerFunc,
+          supportsInitialDefaults,
           caseSensitive,
           filter,
           batchedReaderFunc,

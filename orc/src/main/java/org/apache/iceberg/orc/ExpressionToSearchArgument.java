@@ -270,7 +270,8 @@ class ExpressionToSearchArgument
 
   @Override
   public <T> Action predicate(BoundPredicate<T> pred) {
-    if (UNSUPPORTED_TYPES.contains(pred.ref().type().typeId())) {
+    if (!idToColumnName.containsKey(pred.ref().fieldId())
+        || UNSUPPORTED_TYPES.contains(pred.ref().type().typeId())) {
       // Cannot push down predicates for types which cannot be represented in PredicateLeaf.Type, so
       // return
       // TruthValue.YES_NO_NULL which signifies that this predicate cannot help with filtering

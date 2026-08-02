@@ -289,7 +289,7 @@ public final class ORCSchemaUtil {
       Schema schema, TypeDescription originalOrcSchema) {
     // Callers that cannot establish ID provenance get the conservative behavior: never fill
     // defaults, matching this method's behavior before defaults were supported.
-    return buildOrcProjection(schema, originalOrcSchema, FieldIdSource.NAME_MAPPED);
+    return buildOrcProjection(schema, originalOrcSchema, FieldIdSource.NAME_MAPPED, false);
   }
 
   /**
@@ -297,27 +297,41 @@ public final class ORCSchemaUtil {
    * default-aware reader can fill them.
    *
    * <p>A scalar field at any nesting level is <em>omitted</em> from the read projection when it
-   * declares an {@code initial-default}, is absent from the data file, and {@code fieldIdSource} is
-   * {@link FieldIdSource#EMBEDDED}. An id-binding reader then sees no column for that field and
-   * fills the declared default as a per-file constant. Under {@link FieldIdSource#NAME_MAPPED} the
-   * field is synthesized as a null column instead, so a default is never name-matched onto a file
-   * that carries no IDs of its own.
+   * declares an {@code initial-default}, is absent from the data file, {@code fieldIdSource} is
+   * {@link FieldIdSource#EMBEDDED}, and the configured reader supports initial defaults. An
+   * id-binding reader then sees no column for that field and fills the declared default as a
+   * per-file constant. Otherwise the field is synthesized as a null column, preserving the behavior
+   * of readers that have not opted in.
    *
    * @param fieldIdSource where the IDs in {@code originalOrcSchema} came from; see {@link
    *     FieldIdSource}
+   * @param supportsInitialDefaults whether the configured reader can fill an omitted field's
+   *     initial default
    */
   static TypeDescription buildOrcProjection(
-      Schema schema, TypeDescription originalOrcSchema, FieldIdSource fieldIdSource) {
+      Schema schema,
+      TypeDescription originalOrcSchema,
+      FieldIdSource fieldIdSource,
+      boolean supportsInitialDefaults) {
     final Map<Integer, OrcField> icebergToOrc = icebergToOrcMapping("root", originalOrcSchema);
     return buildOrcProjection(
-        Integer.MIN_VALUE, schema.asStruct(), true, fieldIdSource, icebergToOrc);
+        Integer.MIN_VALUE,
+        schema.asStruct(),
+        true,
+        fieldIdSource,
+        supportsInitialDefaults,
+        icebergToOrc);
   }
 
   private static boolean isOmittableDefault(
-      Types.NestedField field, FieldIdSource fieldIdSource, Map<Integer, OrcField> mapping) {
+      Types.NestedField field,
+      FieldIdSource fieldIdSource,
+      boolean supportsInitialDefaults,
+      Map<Integer, OrcField> mapping) {
     // Only scalars reach here with a non-null default: Types.NestedField#castDefault rejects a
     // default on any nested type at construction time.
-    return field.initialDefault() != null
+    return supportsInitialDefaults
+        && field.initialDefault() != null
         && !mapping.containsKey(field.fieldId())
         && fieldIdSource == FieldIdSource.EMBEDDED;
   }
@@ -327,6 +341,7 @@ public final class ORCSchemaUtil {
       Type type,
       boolean isRequired,
       FieldIdSource fieldIdSource,
+      boolean supportsInitialDefaults,
       Map<Integer, OrcField> mapping) {
     final TypeDescription orcType;
 
@@ -334,7 +349,7 @@ public final class ORCSchemaUtil {
       case STRUCT:
         orcType = TypeDescription.createStruct();
         for (Types.NestedField nestedField : type.asStructType().fields()) {
-          if (isOmittableDefault(nestedField, fieldIdSource, mapping)) {
+          if (isOmittableDefault(nestedField, fieldIdSource, supportsInitialDefaults, mapping)) {
             // The field declares a default, is absent, and the file carries its own Iceberg field
             // IDs. Omit it so a default-aware reader fills it through the existing constant path.
             continue;
@@ -352,6 +367,7 @@ public final class ORCSchemaUtil {
                   nestedField.type(),
                   isRequired && nestedField.isRequired(),
                   fieldIdSource,
+                  supportsInitialDefaults,
                   mapping);
           orcType.addField(name, childType);
         }
@@ -364,19 +380,27 @@ public final class ORCSchemaUtil {
                 list.elementType(),
                 isRequired && list.isElementRequired(),
                 fieldIdSource,
+                supportsInitialDefaults,
                 mapping);
         orcType = TypeDescription.createList(elementType);
         break;
       case MAP:
         Types.MapType map = (Types.MapType) type;
         TypeDescription keyType =
-            buildOrcProjection(map.keyId(), map.keyType(), isRequired, fieldIdSource, mapping);
+            buildOrcProjection(
+                map.keyId(),
+                map.keyType(),
+                isRequired,
+                fieldIdSource,
+                supportsInitialDefaults,
+                mapping);
         TypeDescription valueType =
             buildOrcProjection(
                 map.valueId(),
                 map.valueType(),
                 isRequired && map.isValueRequired(),
                 fieldIdSource,
+                supportsInitialDefaults,
                 mapping);
         orcType = TypeDescription.createMap(keyType, valueType);
         break;

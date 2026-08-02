@@ -115,6 +115,7 @@ public class TestOrcDefaultValues {
         ORC.read(file.toInputFile())
             .project(READ_SCHEMA)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(READ_SCHEMA, fileSchema))
+            .supportsInitialDefaults()
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -145,6 +146,7 @@ public class TestOrcDefaultValues {
         ORC.read(file.toInputFile())
             .project(onlyDefault)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(onlyDefault, fileSchema))
+            .supportsInitialDefaults()
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -176,6 +178,7 @@ public class TestOrcDefaultValues {
         ORC.read(file.toInputFile())
             .project(typed)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(typed, fileSchema))
+            .supportsInitialDefaults()
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -212,6 +215,7 @@ public class TestOrcDefaultValues {
             .project(requiredDefault)
             .createReaderFunc(
                 fileSchema -> GenericOrcReader.buildReader(requiredDefault, fileSchema))
+            .supportsInitialDefaults()
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -231,6 +235,7 @@ public class TestOrcDefaultValues {
         ORC.read(Files.localInput(file))
             .project(READ_SCHEMA)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(READ_SCHEMA, fileSchema))
+            .supportsInitialDefaults()
             .build()) {
       read = Lists.newArrayList(reader);
     }
@@ -479,6 +484,7 @@ public class TestOrcDefaultValues {
         ORC.read(file.toInputFile())
             .project(readSchema)
             .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(readSchema, fileSchema))
+            .supportsInitialDefaults()
             .build()) {
       return Lists.newArrayList(reader);
     }
