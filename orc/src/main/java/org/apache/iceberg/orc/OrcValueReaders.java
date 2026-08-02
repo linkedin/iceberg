@@ -194,10 +194,10 @@ public class OrcValueReaders {
      * file has no column for it.
      *
      * <p>A field reaches the default only when the read projection omitted it, which {@link
-     * ORCSchemaUtil#buildOrcProjection(Schema, TypeDescription, boolean)} does only for an absent
-     * field that declares a default in a file whose ids are trustworthy. The default is
-     * materialized as a per-file constant and consumes no column vector, so a present column --
-     * including one holding an explicit null -- always wins.
+     * ORCSchemaUtil#buildOrcProjection(Schema, TypeDescription, ORCSchemaUtil.FieldIdSource)} does
+     * only for an absent field that declares a default in a file carrying its own Iceberg field
+     * ids. The default is materialized as a per-file constant and consumes no column vector, so a
+     * present column -- including one holding an explicit null -- always wins.
      *
      * @param convertConstant converts a default to the engine's in-memory representation, or null
      *     to disable default filling and keep the strict missing-reader failure
