@@ -49,6 +49,7 @@ import java.util.UUID;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.mapping.MappingUtil;
 import org.apache.iceberg.mapping.NameMapping;
 import org.apache.iceberg.types.Types;
@@ -326,6 +327,32 @@ public class TestExpressionToSearchArgument {
         SearchArgumentFactory.newBuilder().equals("`float_added_r3`", Type.FLOAT, 1.0).build();
 
     actual = ExpressionToSearchArgument.convert(boundFilter, readSchema);
+    Assert.assertEquals(expected.toString(), actual.toString());
+  }
+
+  @Test
+  public void testDisablesPushdownWhenDefaultedFieldIsOmitted() {
+    Schema fileSchema = new Schema(required(1, "id", Types.LongType.get()));
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("country")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("US"))
+                .build());
+    TypeDescription readSchema =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema,
+            ORCSchemaUtil.convert(fileSchema),
+            ORCSchemaUtil.FieldIdSource.EMBEDDED,
+            true);
+    Expression boundFilter = Binder.bind(evolvedSchema.asStruct(), equal("country", "US"), true);
+    SearchArgument expected =
+        SearchArgumentFactory.newBuilder().literal(TruthValue.YES_NO_NULL).build();
+
+    SearchArgument actual = ExpressionToSearchArgument.convert(boundFilter, readSchema);
+
     Assert.assertEquals(expected.toString(), actual.toString());
   }
 

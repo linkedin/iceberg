@@ -172,6 +172,24 @@ public class TestInclusiveMetricsEvaluator {
           ImmutableMap.of(3, toByteBuffer(StringType.get(), "イロハニホヘト")));
 
   @Test
+  public void testRetainsFileWhenDefaultedFieldIsMissingFromMetrics() {
+    List<Types.NestedField> fields = Lists.newArrayList(SCHEMA.columns());
+    fields.add(
+        Types.NestedField.optional("country")
+            .withId(15)
+            .ofType(StringType.get())
+            .withInitialDefault(Expressions.lit("US"))
+            .build());
+    Schema evolvedSchema = new Schema(fields);
+
+    boolean mightMatch =
+        new InclusiveMetricsEvaluator(evolvedSchema, equal("country", "US")).eval(FILE);
+
+    Assert.assertTrue(
+        "Missing field stats must not prune rows that read as the default", mightMatch);
+  }
+
+  @Test
   public void testAllNulls() {
     boolean shouldRead = new InclusiveMetricsEvaluator(SCHEMA, notNull("all_nulls")).eval(FILE);
     Assert.assertFalse("Should skip: no non-null value in all null column", shouldRead);

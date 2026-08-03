@@ -36,6 +36,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.data.orc.GenericOrcReader;
+import org.apache.iceberg.data.orc.GenericOrcReaders;
 import org.apache.iceberg.data.orc.GenericOrcWriter;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
@@ -43,11 +44,13 @@ import org.apache.iceberg.io.DataWriter;
 import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.OrcFile;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
 import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
+import org.apache.orc.storage.ql.exec.vector.StructColumnVector;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.assertj.core.api.Assertions;
 import org.junit.Before;
@@ -107,7 +110,7 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testReadFillsTopLevelScalarDefault() throws IOException {
+  public void testFillsTopLevelScalarDefaultWhenFieldIsAbsent() throws IOException {
     OutputFile file = writeFile();
 
     List<Record> read;
@@ -130,7 +133,22 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testReadSelectsOnlyDefaultColumn() throws IOException {
+  public void testSynthesizesNullWhenReaderDoesNotSupportDefaults() throws IOException {
+    OutputFile file = writeFile();
+
+    try (CloseableIterable<Record> reader =
+        ORC.read(file.toInputFile())
+            .project(READ_SCHEMA)
+            .createReaderFunc(fileSchema -> GenericOrcReader.buildReader(READ_SCHEMA, fileSchema))
+            .build()) {
+      List<Record> read = Lists.newArrayList(reader);
+      Assertions.assertThat(read).hasSize(records.size());
+      Assertions.assertThat(read).allMatch(record -> record.getField("country") == null);
+    }
+  }
+
+  @Test
+  public void testFillsDefaultWhenOnlyDefaultedFieldIsProjected() throws IOException {
     OutputFile file = writeFile();
 
     Schema onlyDefault =
@@ -158,7 +176,55 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testReadFillsScalarDefaultsAllTypes() throws IOException {
+  public void testFillsMiddleDefaultWithoutShiftingTrailingPhysicalField() throws IOException {
+    Schema writeSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()), optional(3, "data", Types.StringType.get()));
+    Schema readSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            defaulted(2, "country", Types.StringType.get(), Expressions.lit("US")),
+            optional(3, "data", Types.StringType.get()));
+    Record record = GenericRecord.create(writeSchema);
+    record.setField("id", 1L);
+    record.setField("data", "trailing");
+    OutputFile file = writeRecords(writeSchema, Lists.newArrayList(record));
+
+    Record readRecord = read(file, readSchema).get(0);
+
+    Assertions.assertThat(readRecord.getField("country")).isEqualTo("US");
+    Assertions.assertThat(readRecord.getField("data")).isEqualTo("trailing");
+  }
+
+  @Test
+  public void testPositionalReaderRetainsNullForMiddleDefaultWithoutShiftingTrailingField()
+      throws IOException {
+    Schema writeSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()), optional(3, "data", Types.StringType.get()));
+    Schema readSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            defaulted(2, "country", Types.StringType.get(), Expressions.lit("US")),
+            optional(3, "data", Types.StringType.get()));
+    Record record = GenericRecord.create(writeSchema);
+    record.setField("id", 1L);
+    record.setField("data", "trailing");
+    OutputFile file = writeRecords(writeSchema, Lists.newArrayList(record));
+
+    try (CloseableIterable<Object[]> reader =
+        ORC.read(file.toInputFile())
+            .project(readSchema)
+            .createReaderFunc(readOrcSchema -> new PositionalOrcReader(readSchema, readOrcSchema))
+            .build()) {
+      Object[] readRecord = Lists.newArrayList(reader).get(0);
+      Assertions.assertThat(readRecord[1]).isNull();
+      Assertions.assertThat(readRecord[2]).isEqualTo("trailing");
+    }
+  }
+
+  @Test
+  public void testFillsDefaultsForBooleanNumericStringAndDecimalTypes() throws IOException {
     OutputFile file = writeFile();
 
     Schema typed =
@@ -196,7 +262,7 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testReadFillsRequiredScalarDefault() throws IOException {
+  public void testFillsRequiredDefaultWhenFieldIsAbsent() throws IOException {
     OutputFile file = writeFile();
 
     // A required field absent from the file but declaring a default must be filled, not rejected.
@@ -227,7 +293,7 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testReadDoesNotApplyDefaultToIdLessFile() throws IOException {
+  public void testSynthesizesNullWhenFileHasNoEmbeddedIds() throws IOException {
     File file = writeIdLessFile();
 
     List<Record> read;
@@ -250,7 +316,7 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testReadDoesNotOverridePresentColumn() throws IOException {
+  public void testPreservesPhysicalValueAndNullWhenFieldIsPresent() throws IOException {
     Schema writeSchema =
         new Schema(
             required(1, "id", Types.LongType.get()),
@@ -274,7 +340,7 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testNestedStructScalarDefault() throws IOException {
+  public void testFillsNestedStructDefaultWhenFieldIsAbsent() throws IOException {
     Schema writeSchema =
         new Schema(
             required(1, "id", Types.LongType.get()),
@@ -321,7 +387,7 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testMapNestedScalarDefault() throws IOException {
+  public void testFillsMapValueStructDefaultWhenFieldIsAbsent() throws IOException {
     Schema writeSchema =
         new Schema(
             required(1, "id", Types.LongType.get()),
@@ -367,7 +433,7 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testListNestedScalarDefault() throws IOException {
+  public void testFillsListElementStructDefaultWhenFieldIsAbsent() throws IOException {
     Schema writeSchema =
         new Schema(
             required(1, "id", Types.LongType.get()),
@@ -408,7 +474,7 @@ public class TestOrcDefaultValues {
   }
 
   @Test
-  public void testNestedStructAllSubfieldsDefaulted() throws IOException {
+  public void testFillsDefaultsWhenAllProjectedStructFieldsAreAbsent() throws IOException {
     // File: nested { a }. Read projects only a new defaulted subfield nested { b default 'x' }
     // (a dropped), so the nested read struct is empty. The default must still fill.
     Schema writeSchema =
@@ -487,6 +553,71 @@ public class TestOrcDefaultValues {
             .supportsInitialDefaults()
             .build()) {
       return Lists.newArrayList(reader);
+    }
+  }
+
+  private static class PositionalOrcReader implements OrcRowReader<Object[]> {
+    private final OrcValueReader<?> reader;
+
+    private PositionalOrcReader(Schema expectedSchema, TypeDescription readSchema) {
+      this.reader =
+          OrcSchemaWithTypeVisitor.visit(
+              expectedSchema,
+              readSchema,
+              new OrcSchemaWithTypeVisitor<OrcValueReader<?>>() {
+                @Override
+                public OrcValueReader<?> record(
+                    Types.StructType expected,
+                    TypeDescription record,
+                    List<String> names,
+                    List<OrcValueReader<?>> fields) {
+                  return new PositionalStructReader(fields, expected);
+                }
+
+                @Override
+                public OrcValueReader<?> primitive(
+                    Type.PrimitiveType expected, TypeDescription primitive) {
+                  switch (expected.typeId()) {
+                    case LONG:
+                      return OrcValueReaders.longs();
+                    case STRING:
+                      return GenericOrcReaders.strings();
+                    default:
+                      throw new IllegalArgumentException("Unsupported test type: " + expected);
+                  }
+                }
+              });
+    }
+
+    @Override
+    public Object[] read(VectorizedRowBatch batch, int row) {
+      return (Object[]) reader.read(new StructColumnVector(batch.size, batch.cols), row);
+    }
+
+    @Override
+    public void setBatchContext(long batchOffsetInFile) {
+      reader.setBatchContext(batchOffsetInFile);
+    }
+  }
+
+  @SuppressWarnings("deprecation")
+  private static class PositionalStructReader extends OrcValueReaders.StructReader<Object[]> {
+    private final int size;
+
+    private PositionalStructReader(
+        List<OrcValueReader<?>> readers, Types.StructType expectedStruct) {
+      super(readers, expectedStruct, Collections.emptyMap());
+      this.size = expectedStruct.fields().size();
+    }
+
+    @Override
+    protected Object[] create() {
+      return new Object[size];
+    }
+
+    @Override
+    protected void set(Object[] struct, int pos, Object value) {
+      struct[pos] = value;
     }
   }
 

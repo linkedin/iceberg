@@ -164,7 +164,7 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testTopLevelScalarDefaultOmittedWhenFileHasEmbeddedFieldIds() {
+  public void testOmitsTopLevelScalarDefaultWhenReaderSupportsDefaultsAndIdsAreEmbedded() {
     Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
     TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
 
@@ -189,7 +189,7 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testTopLevelScalarDefaultSynthesizedWhenReaderDoesNotSupportDefaults() {
+  public void testSynthesizesNullForTopLevelScalarDefaultWhenReaderDoesNotSupportDefaults() {
     Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
     TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
     Schema evolvedSchema =
@@ -210,7 +210,7 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testTopLevelScalarDefaultSynthesizedWhenFieldIdsAreNameMapped() {
+  public void testSynthesizesNullForTopLevelScalarDefaultWhenIdsAreNameMapped() {
     Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
     TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
 
@@ -233,7 +233,7 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testTopLevelRequiredScalarDefaultOmitted() {
+  public void testOmitsRequiredTopLevelScalarDefaultWhenReaderSupportsDefaults() {
     Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
     TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
 
@@ -258,7 +258,7 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testNestedScalarDefaultOmitted() {
+  public void testOmitsNestedScalarDefaultWhenReaderSupportsDefaults() {
     Schema baseSchema =
         new Schema(
             required(1, "id", Types.LongType.get()),
@@ -290,7 +290,7 @@ public class TestBuildOrcProjection {
   }
 
   @Test
-  public void testNestedStructEmptiedByOmit() {
+  public void testPreservesNestedStructWhenAllProjectedFieldsAreOmitted() {
     // Base file: s { a }. Project only a new defaulted subfield s { b default 'x' } (drop a). Every
     // projected subfield of s is absent + defaulted, so the nested read struct is omitted down to
     // empty; the reader fills b via idToConstant (see TestOrcDefaultValues end-to-end coverage).
