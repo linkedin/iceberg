@@ -633,7 +633,14 @@ public class TestRequiredDistributionAndOrdering extends SparkExtensionsTestBase
         tableName);
     sql("ALTER TABLE %s WRITE ORDERED BY category, id", tableName);
 
-    unclusteredInput().write().mode("append").saveAsTable(tableName);
+    // format("iceberg") is required for the session catalog. DataFrameWriter#saveAsTable only
+    // takes the v2 path for a SessionCatalogAndIdentifier when lookupV2Provider() is defined, and
+    // that returns None for the default "parquet" source because ParquetDataSourceV2 is a
+    // FileDataSourceV2 (SPARK-28396). Without it the write falls through to the v1 path and
+    // PreprocessTableCreation rejects it against the Hive-registered table, so AppendData -- the
+    // plan node this rule matches -- is never produced. The non-session catalogs resolve as
+    // NonSessionCatalogAndIdentifier and reach v2 regardless.
+    unclusteredInput().write().format("iceberg").mode("append").saveAsTable(tableName);
 
     assertEquals(
         "Row count must match",
