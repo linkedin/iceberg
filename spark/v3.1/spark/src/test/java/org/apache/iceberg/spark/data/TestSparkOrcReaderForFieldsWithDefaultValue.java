@@ -1,0 +1,226 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.iceberg.spark.data;
+
+import static org.apache.iceberg.spark.data.TestHelpers.assertEquals;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.Iterator;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.iceberg.Files;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.orc.ORC;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.Iterators;
+import org.apache.iceberg.spark.data.vectorized.VectorizedSparkOrcReaders;
+import org.apache.iceberg.types.Types;
+import org.apache.orc.OrcFile;
+import org.apache.orc.TypeDescription;
+import org.apache.orc.Writer;
+import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
+import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.vectorized.ColumnarBatch;
+import org.apache.spark.unsafe.types.UTF8String;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+
+/**
+ * Forward-port of LI #76 ({@code f20062316}) Spark ORC default-value reads, adapted to the upstream
+ * {@code initial-default} API.
+ *
+ * <p>Nested-typed column defaults (list/map/struct values) from Raymond's original test are deferred
+ * until PR7 (API lift of {@code castDefault}) and PR8 (re-enable ConstantArray path). Filter-on-
+ * defaulted-column coverage is deferred to PR3 (SARG).
+ */
+public class TestSparkOrcReaderForFieldsWithDefaultValue {
+
+  @Rule public TemporaryFolder temp = new TemporaryFolder();
+
+  @Test
+  public void testOrcScalarDefaultValuesRowAndVectorized() throws IOException {
+    final int numRows = 10;
+
+    final InternalRow expectedFirstRow = new GenericInternalRow(2);
+    expectedFirstRow.update(0, 0);
+    expectedFirstRow.update(1, UTF8String.fromString("foo"));
+
+    TypeDescription orcSchema = TypeDescription.fromString("struct<col1:int>");
+
+    Schema readSchema =
+        new Schema(
+            Types.NestedField.required(1, "col1", Types.IntegerType.get()),
+            Types.NestedField.optional("col2")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("foo"))
+                .build());
+
+    File orcFile = writeOrcWithIntColumn(orcSchema, numRows);
+
+    try (CloseableIterable<InternalRow> reader =
+        ORC.read(Files.localInput(orcFile))
+            .project(readSchema)
+            .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema))
+            .supportsInitialDefaults()
+            .build()) {
+      InternalRow actualFirstRow = reader.iterator().next();
+      assertEquals(readSchema, expectedFirstRow, actualFirstRow);
+    }
+
+    try (CloseableIterable<ColumnarBatch> reader =
+        ORC.read(Files.localInput(orcFile))
+            .project(readSchema)
+            .createBatchedReaderFunc(
+                readOrcSchema ->
+                    VectorizedSparkOrcReaders.buildReader(
+                        readSchema, readOrcSchema, ImmutableMap.of()))
+            .supportsInitialDefaults()
+            .build()) {
+      InternalRow actualFirstRow = batchesToRows(reader.iterator()).next();
+      assertEquals(readSchema, expectedFirstRow, actualFirstRow);
+    }
+  }
+
+  @Test
+  public void testOrcNestedScalarDefaultValuesRowAndVectorized() throws IOException {
+    // Parent struct `loc` is present in the file; child `country` is new with an initial-default.
+    // (If the parent itself is absent, the synthetic null parent short-circuits child constants —
+    // same as Raymond/Option B: nested scalars assume the ancestor struct column exists.)
+    final int numRows = 10;
+
+    final InternalRow expectedLoc = new GenericInternalRow(1);
+    expectedLoc.update(0, UTF8String.fromString("US"));
+    final InternalRow expectedFirstRow = new GenericInternalRow(2);
+    expectedFirstRow.update(0, 0L);
+    expectedFirstRow.update(1, expectedLoc);
+
+    // Empty loc struct in the file: country is absent and will be filled from initial-default.
+    TypeDescription orcSchema = TypeDescription.fromString("struct<id:bigint,loc:struct<>>");
+
+    Schema readSchema =
+        new Schema(
+            Types.NestedField.required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("loc")
+                .withId(2)
+                .ofType(
+                    Types.StructType.of(
+                        Types.NestedField.optional("country")
+                            .withId(3)
+                            .ofType(Types.StringType.get())
+                            .withInitialDefault(Expressions.lit("US"))
+                            .build()))
+                .build());
+
+    File orcFile = writeOrcWithIdAndEmptyLoc(orcSchema, numRows);
+
+    try (CloseableIterable<InternalRow> reader =
+        ORC.read(Files.localInput(orcFile))
+            .project(readSchema)
+            .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema))
+            .supportsInitialDefaults()
+            .build()) {
+      InternalRow actualFirstRow = reader.iterator().next();
+      assertEquals(readSchema, expectedFirstRow, actualFirstRow);
+    }
+
+    try (CloseableIterable<ColumnarBatch> reader =
+        ORC.read(Files.localInput(orcFile))
+            .project(readSchema)
+            .createBatchedReaderFunc(
+                readOrcSchema ->
+                    VectorizedSparkOrcReaders.buildReader(
+                        readSchema, readOrcSchema, ImmutableMap.of()))
+            .supportsInitialDefaults()
+            .build()) {
+      InternalRow actualFirstRow = batchesToRows(reader.iterator()).next();
+      assertEquals(readSchema, expectedFirstRow, actualFirstRow);
+    }
+  }
+
+  private File writeOrcWithIntColumn(TypeDescription orcSchema, int numRows) throws IOException {
+    Configuration conf = new Configuration();
+    File orcFile = temp.newFile();
+    Path orcFilePath = new Path(orcFile.getPath());
+
+    Writer writer =
+        OrcFile.createWriter(
+            orcFilePath, OrcFile.writerOptions(conf).setSchema(orcSchema).overwrite(true));
+
+    VectorizedRowBatch batch = orcSchema.createRowBatch();
+    LongColumnVector firstCol = (LongColumnVector) batch.cols[0];
+    for (int r = 0; r < numRows; ++r) {
+      int row = batch.size++;
+      firstCol.vector[row] = r;
+      if (batch.size == batch.getMaxSize()) {
+        writer.addRowBatch(batch);
+        batch.reset();
+      }
+    }
+    if (batch.size != 0) {
+      writer.addRowBatch(batch);
+      batch.reset();
+    }
+    writer.close();
+    return orcFile;
+  }
+
+  private File writeOrcWithIdAndEmptyLoc(TypeDescription orcSchema, int numRows)
+      throws IOException {
+    Configuration conf = new Configuration();
+    File orcFile = temp.newFile();
+    Path orcFilePath = new Path(orcFile.getPath());
+
+    Writer writer =
+        OrcFile.createWriter(
+            orcFilePath, OrcFile.writerOptions(conf).setSchema(orcSchema).overwrite(true));
+
+    VectorizedRowBatch batch = orcSchema.createRowBatch();
+    LongColumnVector idCol = (LongColumnVector) batch.cols[0];
+    org.apache.orc.storage.ql.exec.vector.StructColumnVector locCol =
+        (org.apache.orc.storage.ql.exec.vector.StructColumnVector) batch.cols[1];
+    for (int r = 0; r < numRows; ++r) {
+      int row = batch.size++;
+      idCol.vector[row] = r;
+      // non-null empty loc struct
+      locCol.noNulls = true;
+      locCol.isNull[row] = false;
+      if (batch.size == batch.getMaxSize()) {
+        writer.addRowBatch(batch);
+        batch.reset();
+      }
+    }
+    if (batch.size != 0) {
+      writer.addRowBatch(batch);
+      batch.reset();
+    }
+    writer.close();
+    return orcFile;
+  }
+
+  private Iterator<InternalRow> batchesToRows(Iterator<ColumnarBatch> batches) {
+    return Iterators.concat(Iterators.transform(batches, ColumnarBatch::rowIterator));
+  }
+}

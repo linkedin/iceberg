@@ -46,6 +46,7 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
   private final Long start;
   private final Long length;
   private final Function<TypeDescription, OrcRowReader<?>> readerFunction;
+  private final boolean supportsInitialDefaults;
   private final Expression filter;
   private final boolean caseSensitive;
   private final Function<TypeDescription, OrcBatchReader<?>> batchReaderFunction;
@@ -60,12 +61,14 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
       Long start,
       Long length,
       Function<TypeDescription, OrcRowReader<?>> readerFunction,
+      boolean supportsInitialDefaults,
       boolean caseSensitive,
       Expression filter,
       Function<TypeDescription, OrcBatchReader<?>> batchReaderFunction,
       int recordsPerBatch) {
     this.schema = schema;
     this.readerFunction = readerFunction;
+    this.supportsInitialDefaults = supportsInitialDefaults;
     this.file = file;
     this.nameMapping = nameMapping;
     this.start = start;
@@ -86,13 +89,15 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     TypeDescription fileSchema = orcFileReader.getSchema();
     final TypeDescription readOrcSchema;
     if (ORCSchemaUtil.hasIds(fileSchema)) {
-      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchema);
+      readOrcSchema =
+          ORCSchemaUtil.buildOrcProjection(schema, fileSchema, supportsInitialDefaults);
     } else {
       if (nameMapping == null) {
         nameMapping = MappingUtil.create(schema);
       }
       TypeDescription typeWithIds = ORCSchemaUtil.applyNameMapping(fileSchema, nameMapping);
-      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, typeWithIds);
+      readOrcSchema =
+          ORCSchemaUtil.buildOrcProjection(schema, typeWithIds, supportsInitialDefaults);
     }
 
     SearchArgument sarg = null;
