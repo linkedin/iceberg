@@ -89,8 +89,7 @@ class OrcIterable<T> extends CloseableGroup implements CloseableIterable<T> {
     TypeDescription fileSchema = orcFileReader.getSchema();
     final TypeDescription readOrcSchema;
     if (ORCSchemaUtil.hasIds(fileSchema)) {
-      readOrcSchema =
-          ORCSchemaUtil.buildOrcProjection(schema, fileSchema, supportsInitialDefaults);
+      readOrcSchema = ORCSchemaUtil.buildOrcProjection(schema, fileSchema, supportsInitialDefaults);
     } else {
       if (nameMapping == null) {
         nameMapping = MappingUtil.create(schema);

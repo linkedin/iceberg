@@ -51,9 +51,9 @@ import org.junit.rules.TemporaryFolder;
  * Forward-port of LI #76 ({@code f20062316}) Spark ORC default-value reads, adapted to the upstream
  * {@code initial-default} API.
  *
- * <p>Nested-typed column defaults (list/map/struct values) from Raymond's original test are deferred
- * until PR7 (API lift of {@code castDefault}) and PR8 (re-enable ConstantArray path). Filter-on-
- * defaulted-column coverage is deferred to PR3 (SARG).
+ * <p>Nested-typed column defaults (list/map/struct values) from Raymond's original test are
+ * deferred until PR7 (API lift of {@code castDefault}) and PR8 (re-enable ConstantArray path).
+ * Filter-on- defaulted-column coverage is deferred to PR3 (SARG).
  */
 public class TestSparkOrcReaderForFieldsWithDefaultValue {
 
