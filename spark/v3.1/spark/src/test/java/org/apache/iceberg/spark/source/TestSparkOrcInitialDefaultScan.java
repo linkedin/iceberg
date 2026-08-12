@@ -40,12 +40,18 @@ import org.apache.iceberg.data.Record;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.hadoop.HadoopTables;
 import org.apache.iceberg.io.FileAppender;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.SparkReadOptions;
+import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.iceberg.types.Types;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.connector.read.Batch;
+import org.apache.spark.sql.connector.read.InputPartition;
+import org.apache.spark.sql.connector.read.PartitionReaderFactory;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.assertj.core.api.Assertions;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -56,8 +62,8 @@ import org.junit.rules.TemporaryFolder;
 
 /**
  * Spark SQL coverage for ORC initial-defaults: empty-projection filters (#118) and mixed
- * physical+defaulted predicates. Spark returns pushed filters to the engine for record-level
- * evaluation, so filled defaults are visible to {@code WHERE}.
+ * physical+defaulted predicates. Defaulted projections are forced onto the row reader even when
+ * ORC vectorization is enabled.
  */
 public class TestSparkOrcInitialDefaultScan {
   private static final Schema TABLE_SCHEMA =
@@ -127,6 +133,19 @@ public class TestSparkOrcInitialDefaultScan {
   }
 
   @Test
+  public void testDefaultedScansAreRoutedToTheRowReader() {
+    Assertions.assertThat(supportsColumnarReads(TABLE_SCHEMA)).isFalse();
+    Schema countryOnly =
+        new Schema(
+            Types.NestedField.optional("country")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("US"))
+                .build());
+    Assertions.assertThat(supportsColumnarReads(countryOnly)).isFalse();
+  }
+
+  @Test
   public void testMixedFilesApplyDefaultPerFile() {
     List<Row> rows = read().select("id", "country", "data").orderBy("id").collectAsList();
 
@@ -173,6 +192,19 @@ public class TestSparkOrcInitialDefaultScan {
         .format("iceberg")
         .option(SparkReadOptions.VECTORIZATION_ENABLED, "true")
         .load(tableLocation.toString());
+  }
+
+  private boolean supportsColumnarReads(Schema projection) {
+    CaseInsensitiveStringMap options =
+        new CaseInsensitiveStringMap(
+            ImmutableMap.of(
+                "path", tableLocation.toString(), SparkReadOptions.VECTORIZATION_ENABLED, "true"));
+    SparkScanBuilder builder = new SparkScanBuilder(spark, table, options);
+    builder.pruneColumns(SparkSchemaUtil.convert(projection));
+    Batch batch = builder.build().toBatch();
+    InputPartition partition = batch.planInputPartitions()[0];
+    PartitionReaderFactory factory = batch.createReaderFactory();
+    return factory.supportColumnarReads(partition);
   }
 
   private DataFile writeFile(Schema schema, List<Record> records, String name) throws IOException {
