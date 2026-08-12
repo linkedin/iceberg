@@ -22,7 +22,6 @@ import static org.apache.iceberg.spark.data.TestHelpers.assertEquals;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Iterator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.Files;
@@ -30,9 +29,6 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.orc.ORC;
-import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
-import org.apache.iceberg.relocated.com.google.common.collect.Iterators;
-import org.apache.iceberg.spark.data.vectorized.VectorizedSparkOrcReaders;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.OrcFile;
 import org.apache.orc.TypeDescription;
@@ -41,7 +37,6 @@ import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
 import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.Rule;
 import org.junit.Test;
@@ -49,7 +44,8 @@ import org.junit.rules.TemporaryFolder;
 
 /**
  * Forward-port of LI #76 ({@code f20062316}) Spark ORC default-value reads, adapted to the upstream
- * {@code initial-default} API.
+ * {@code initial-default} API. Spark scans that project a default stay on the row reader;
+ * vectorized ORC default-fill is out of scope.
  *
  * <p>Nested-typed column defaults (list/map/struct values) from Raymond's original test are
  * deferred until PR7 (API lift of {@code castDefault}) and PR8 (re-enable ConstantArray path).
@@ -60,7 +56,7 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
   @Rule public TemporaryFolder temp = new TemporaryFolder();
 
   @Test
-  public void testOrcScalarDefaultValuesRowAndVectorized() throws IOException {
+  public void testOrcScalarDefaultValues() throws IOException {
     final int numRows = 10;
 
     final InternalRow expectedFirstRow = new GenericInternalRow(2);
@@ -89,23 +85,10 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
       InternalRow actualFirstRow = reader.iterator().next();
       assertEquals(readSchema, expectedFirstRow, actualFirstRow);
     }
-
-    try (CloseableIterable<ColumnarBatch> reader =
-        ORC.read(Files.localInput(orcFile))
-            .project(readSchema)
-            .createBatchedReaderFunc(
-                readOrcSchema ->
-                    VectorizedSparkOrcReaders.buildReader(
-                        readSchema, readOrcSchema, ImmutableMap.of()))
-            .supportsInitialDefaults()
-            .build()) {
-      InternalRow actualFirstRow = batchesToRows(reader.iterator()).next();
-      assertEquals(readSchema, expectedFirstRow, actualFirstRow);
-    }
   }
 
   @Test
-  public void testOrcNestedScalarDefaultValuesRowAndVectorized() throws IOException {
+  public void testOrcNestedScalarDefaultValues() throws IOException {
     // Parent struct `loc` is present in the file; child `country` is new with an initial-default.
     // (If the parent itself is absent, the synthetic null parent short-circuits child constants —
     // same as Raymond/Option B: nested scalars assume the ancestor struct column exists.)
@@ -143,19 +126,6 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
             .supportsInitialDefaults()
             .build()) {
       InternalRow actualFirstRow = reader.iterator().next();
-      assertEquals(readSchema, expectedFirstRow, actualFirstRow);
-    }
-
-    try (CloseableIterable<ColumnarBatch> reader =
-        ORC.read(Files.localInput(orcFile))
-            .project(readSchema)
-            .createBatchedReaderFunc(
-                readOrcSchema ->
-                    VectorizedSparkOrcReaders.buildReader(
-                        readSchema, readOrcSchema, ImmutableMap.of()))
-            .supportsInitialDefaults()
-            .build()) {
-      InternalRow actualFirstRow = batchesToRows(reader.iterator()).next();
       assertEquals(readSchema, expectedFirstRow, actualFirstRow);
     }
   }
@@ -218,9 +188,5 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
     }
     writer.close();
     return orcFile;
-  }
-
-  private Iterator<InternalRow> batchesToRows(Iterator<ColumnarBatch> batches) {
-    return Iterators.concat(Iterators.transform(batches, ColumnarBatch::rowIterator));
   }
 }

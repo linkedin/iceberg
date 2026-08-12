@@ -35,10 +35,10 @@ import org.apache.orc.TypeDescription;
  * Spark ORC schema visitor that injects {@code initial-default} values into {@code idToConstant}
  * for fields omitted from the per-file ORC projection.
  *
- * <p>Forward-port of LI #76 ({@code f20062316} / Raymond Zhang). Both {@link
- * org.apache.iceberg.spark.data.SparkOrcReader} and {@link
- * org.apache.iceberg.spark.data.vectorized.VectorizedSparkOrcReaders} extend this so row and
- * vectorized paths share the same inject.
+ * <p>Forward-port of LI #76 ({@code f20062316} / Raymond Zhang). {@link
+ * org.apache.iceberg.spark.data.SparkOrcReader} uses this inject. Vectorized ORC default-fill is
+ * out of scope: Spark routes defaulted projections to the row reader, and the batched ORC reader
+ * does not opt into omission.
  *
  * <p>TODO(PR4): extract inject into {@code ORCSchemaUtil.withInitialDefaults} and delete this
  * visitor so Generic/other engines can reuse the same helper without a Spark subclass.

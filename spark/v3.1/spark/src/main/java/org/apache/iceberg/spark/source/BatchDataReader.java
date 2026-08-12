@@ -122,7 +122,6 @@ class BatchDataReader extends BaseDataReader<ColumnarBatch> {
                   fileSchema ->
                       VectorizedSparkOrcReaders.buildReader(
                           expectedSchema, fileSchema, idToConstant))
-              .supportsInitialDefaults()
               .recordsPerBatch(batchSize)
               .filter(task.residual())
               .caseSensitive(caseSensitive);
