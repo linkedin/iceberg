@@ -168,8 +168,8 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
 
   @Test
   public void testFilterOnOnlyOmittedDefaultDoesNotThrow() throws IOException {
-    // #118: projecting and filtering only a defaulted column yields an empty ORC schema. Convert
-    // must not throw; SARG is disabled (YES_NO_NULL). Row-level filtering is Spark's job.
+    // Projecting and filtering only a defaulted column yields an empty ORC schema. Convert must
+    // not throw; SARG is disabled (YES_NO_NULL). Row-level filtering is Spark's job.
     Schema writeSchema = new Schema(Types.NestedField.required(1, "col1", Types.IntegerType.get()));
     TypeDescription orcSchema = ORCSchemaUtil.convert(writeSchema);
     Schema readSchema =

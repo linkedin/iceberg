@@ -61,7 +61,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 /**
- * Spark SQL coverage for ORC initial-defaults: empty-projection filters (#118) and mixed
+ * Spark SQL coverage for ORC initial-defaults: empty-projection filters and mixed
  * physical+defaulted predicates. Defaulted projections are forced onto the row reader even when
  * ORC vectorization is enabled.
  */
@@ -158,7 +158,7 @@ public class TestSparkOrcInitialDefaultScan {
   @Test
   public void testFilterWhenOnlyOmittedDefaultColumnIsProjected() {
     // Projection+filter on only the defaulted column yields an empty ORC schema for the old file.
-    // SARG must disable pushdown (#118) so Spark can evaluate the filled default.
+    // SARG must disable pushdown so Spark can evaluate the filled default.
     Assertions.assertThat(
             read().select("country").filter("country = 'US'").collectAsList().stream()
                 .map(row -> row.getString(0))
