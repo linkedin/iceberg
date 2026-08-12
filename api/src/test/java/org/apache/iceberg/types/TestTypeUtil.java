@@ -24,6 +24,7 @@ import static org.apache.iceberg.types.Types.NestedField.required;
 import java.util.Set;
 import org.apache.iceberg.AssertHelpers;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.types.Types.IntegerType;
@@ -64,6 +65,24 @@ public class TestTypeUtil {
         "identifier field ID should change based on source schema",
         sourceSchema.identifierFieldIds(),
         actualSchema.identifierFieldIds());
+  }
+
+  @Test
+  public void testAssignFreshIdsPreservesDefaults() {
+    Types.NestedField field =
+        Types.NestedField.optional("country")
+            .withId(10)
+            .ofType(Types.StringType.get())
+            .withInitialDefault(Expressions.lit("US"))
+            .withWriteDefault(Expressions.lit("CA"))
+            .build();
+
+    Schema reassigned = TypeUtil.assignIncreasingFreshIds(new Schema(field));
+    Types.NestedField reassignedField = reassigned.findField("country");
+
+    Assert.assertEquals(1, reassignedField.fieldId());
+    Assert.assertEquals("US", reassignedField.initialDefault());
+    Assert.assertEquals("CA", reassignedField.writeDefault());
   }
 
   @Test

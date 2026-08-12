@@ -165,6 +165,32 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
     }
   }
 
+  @Test
+  public void testFilterOnOnlyOmittedDefaultDoesNotThrow() throws IOException {
+    // #118: projecting and filtering only a defaulted column yields an empty ORC schema. Convert
+    // must not throw; SARG is disabled (YES_NO_NULL). Row-level filtering is Spark's job.
+    Schema writeSchema = new Schema(Types.NestedField.required(1, "col1", Types.IntegerType.get()));
+    TypeDescription orcSchema = ORCSchemaUtil.convert(writeSchema);
+    Schema readSchema =
+        new Schema(
+            Types.NestedField.optional("col2")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("foo"))
+                .build());
+    File orcFile = writeOrcWithIntColumn(orcSchema, 10);
+
+    try (CloseableIterable<InternalRow> reader =
+        ORC.read(Files.localInput(orcFile))
+            .project(readSchema)
+            .filter(Expressions.equal("col2", "bar"))
+            .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema))
+            .supportsInitialDefaults()
+            .build()) {
+      Assert.assertEquals(10, Iterators.size(reader.iterator()));
+    }
+  }
+
   private File writeOrcWithIntColumn(TypeDescription orcSchema, int numRows) throws IOException {
     Configuration conf = new Configuration();
     File orcFile = temp.newFile();

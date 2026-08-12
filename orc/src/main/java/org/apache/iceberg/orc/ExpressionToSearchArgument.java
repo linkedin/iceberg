@@ -30,6 +30,7 @@ import org.apache.iceberg.expressions.BoundPredicate;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ExpressionVisitors;
 import org.apache.iceberg.expressions.Literal;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Type.TypeID;
@@ -45,8 +46,13 @@ class ExpressionToSearchArgument
     extends ExpressionVisitors.BoundVisitor<ExpressionToSearchArgument.Action> {
 
   static SearchArgument convert(Expression expr, TypeDescription readSchema) {
+    // Omitting every projected field leaves an empty read projection, which carries no Iceberg ids
+    // to bind against. Every predicate then resolves to YES_NO_NULL below, disabling pushdown so
+    // that defaults are still materialized for the file.
     Map<Integer, String> idToColumnName =
-        ORCSchemaUtil.idToOrcName(ORCSchemaUtil.convert(readSchema));
+        readSchema.getChildren().isEmpty()
+            ? ImmutableMap.of()
+            : ORCSchemaUtil.idToOrcName(ORCSchemaUtil.convert(readSchema));
     SearchArgument.Builder builder = SearchArgumentFactory.newBuilder();
     ExpressionVisitors.visit(expr, new ExpressionToSearchArgument(builder, idToColumnName))
         .invoke();
@@ -270,10 +276,12 @@ class ExpressionToSearchArgument
 
   @Override
   public <T> Action predicate(BoundPredicate<T> pred) {
-    if (UNSUPPORTED_TYPES.contains(pred.ref().type().typeId())) {
+    if (!idToColumnName.containsKey(pred.ref().fieldId())
+        || UNSUPPORTED_TYPES.contains(pred.ref().type().typeId())) {
       // Cannot push down predicates for types which cannot be represented in PredicateLeaf.Type, so
       // return
       // TruthValue.YES_NO_NULL which signifies that this predicate cannot help with filtering
+      // (including fields omitted from the read projection so defaults can be filled).
       return () -> this.builder.literal(TruthValue.YES_NO_NULL);
     } else {
       return super.predicate(pred);
