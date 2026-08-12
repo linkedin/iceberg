@@ -729,7 +729,7 @@ public class ORC {
     /**
      * Signals that the configured reader can fill {@code initial-default} values for fields omitted
      * from an ORC file. Disabled by default so existing readers retain null-synthesizing projection
-     * behavior. Spark ORC readers opt in (forward-port of LI #76).
+     * behavior.
      */
     public ReadBuilder supportsInitialDefaults() {
       Preconditions.checkState(

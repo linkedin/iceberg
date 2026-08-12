@@ -32,12 +32,7 @@ import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.UTF8String;
 
-/**
- * Constant array column vector from LI #76 ({@code f20062316}).
- *
- * <p>Unused until nested-typed defaults are legal in the API (TODO PR7/PR8). Kept so the
- * forward-port does not delete Raymond's nested vectorized path.
- */
+/** Constant array column vector. Unused until nested-typed defaults are legal in the API. */
 public class ConstantArrayColumnVector extends ConstantColumnVector {
 
   private final Object[] constantArray;

@@ -36,8 +36,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * Constant column vector for partition values and initial-defaults.
  *
- * <p>Nested getArray/getMap/getChild support is retained from LI #76 for nested-typed defaults
- * (TODO PR7/PR8: re-enable once {@code castDefault} allows non-null nested defaults).
+ * <p>Nested getArray/getMap/getChild support is unused until {@code castDefault} allows non-null
+ * nested defaults.
  */
 class ConstantColumnVector extends ColumnVector {
 

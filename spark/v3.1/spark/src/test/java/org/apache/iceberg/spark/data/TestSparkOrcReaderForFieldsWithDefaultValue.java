@@ -43,13 +43,8 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 /**
- * Forward-port of LI #76 ({@code f20062316}) Spark ORC default-value reads, adapted to the upstream
- * {@code initial-default} API. Spark scans that project a default stay on the row reader;
- * vectorized ORC default-fill is out of scope.
- *
- * <p>Nested-typed column defaults (list/map/struct values) from Raymond's original test are
- * deferred until PR7 (API lift of {@code castDefault}) and PR8 (re-enable ConstantArray path).
- * Filter-on- defaulted-column coverage is deferred to PR3 (SARG).
+ * Spark ORC reads of fields with {@code initial-default}. Defaulted projections use the row
+ * reader. Nested-typed column defaults are not covered: {@code castDefault} rejects them.
  */
 public class TestSparkOrcReaderForFieldsWithDefaultValue {
 
@@ -90,8 +85,7 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
   @Test
   public void testOrcNestedScalarDefaultValues() throws IOException {
     // Parent struct `loc` is present in the file; child `country` is new with an initial-default.
-    // (If the parent itself is absent, the synthetic null parent short-circuits child constants —
-    // same as Raymond/Option B: nested scalars assume the ancestor struct column exists.)
+    // If the parent itself is absent, the synthetic null parent short-circuits child constants.
     final int numRows = 10;
 
     final InternalRow expectedLoc = new GenericInternalRow(1);

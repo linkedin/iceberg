@@ -196,8 +196,7 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
 
     boolean hasNoInitialDefaults = hasNoInitialDefaults(expectedSchema);
 
-    // Vectorized ORC default-fill is out of scope for this stack. Defaulted projections stay on
-    // the row reader; the batched ORC path is unchanged for scans that do not project a default.
+    // Defaulted projections stay on the row reader; batched ORC does not fill initial-defaults.
     boolean batchReadOrc = hasNoDeleteFiles && allOrcFileScanTasks && hasNoInitialDefaults;
 
     boolean batchReadParquet =

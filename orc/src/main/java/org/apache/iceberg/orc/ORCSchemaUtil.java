@@ -268,12 +268,8 @@ public final class ORCSchemaUtil {
    * Builds the ORC read projection, optionally omitting absent fields that declare an {@code
    * initial-default} so a default-aware reader can fill them via {@code idToConstant}.
    *
-   * <p>Forward-port of LI #76 ({@code f20062316}): when {@code supportsInitialDefaults} is true and
-   * a field is absent from the file but declares {@code initialDefault()}, it is omitted from the
-   * projection instead of being synthesized as a null column.
-   *
-   * <p>TODO(PR2): tighten with EMBEDDED vs name-mapped provenance and complete-id checks before
-   * omitting.
+   * <p>When {@code supportsInitialDefaults} is true and a field is absent from the file but
+   * declares {@code initialDefault()}, it is omitted instead of being synthesized as a null column.
    */
   static TypeDescription buildOrcProjection(
       Schema schema, TypeDescription originalOrcSchema, boolean supportsInitialDefaults) {
@@ -294,8 +290,7 @@ public final class ORCSchemaUtil {
       case STRUCT:
         orcType = TypeDescription.createStruct();
         for (Types.NestedField nestedField : type.asStructType().fields()) {
-          // Forward-port of LI #76: omit absent defaulted fields so the reader fills via
-          // idToConstant instead of synthesizing a null column.
+          // Omit so the reader fills via idToConstant instead of a synthetic null column.
           if (supportsInitialDefaults
               && mapping.get(nestedField.fieldId()) == null
               && nestedField.initialDefault() != null) {

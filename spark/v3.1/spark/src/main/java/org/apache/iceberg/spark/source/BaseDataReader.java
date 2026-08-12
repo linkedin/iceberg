@@ -171,9 +171,8 @@ public abstract class BaseDataReader<T> implements Closeable {
   /**
    * Converts a constant (partition value or initial-default) to Spark's in-memory representation.
    *
-   * <p>List/map/struct branches are retained from LI #76 for nested-typed defaults; those defaults
-   * cannot be declared yet because {@code NestedField.castDefault} rejects non-null nested types
-   * (TODO PR7/PR8).
+   * <p>List/map/struct branches are unused until {@code NestedField.castDefault} allows non-null
+   * nested types.
    */
   public static Object convertConstant(Type type, Object value) {
     if (value == null) {

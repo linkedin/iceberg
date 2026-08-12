@@ -63,8 +63,7 @@ public abstract class OrcSchemaWithTypeVisitor<T> {
 
   /**
    * Visits a struct. Overridden by Spark to inject {@code initial-default} values into {@code
-   * idToConstant} for fields omitted from the ORC projection (forward-port of LI #76 / {@code
-   * f20062316}).
+   * idToConstant} for fields omitted from the ORC projection.
    */
   protected T visitRecord(
       Types.StructType struct, TypeDescription record, OrcSchemaWithTypeVisitor<T> visitor) {
