@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -32,10 +33,19 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileAppender;
 import org.apache.iceberg.orc.ORC;
+import org.apache.iceberg.orc.ORCSchemaUtil;
+import org.apache.iceberg.orc.OrcValueReader;
+import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterators;
+import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.spark.data.vectorized.VectorizedSparkOrcReaders;
 import org.apache.iceberg.types.Types;
+import org.apache.orc.TypeDescription;
+import org.apache.orc.storage.ql.exec.vector.BytesColumnVector;
+import org.apache.orc.storage.ql.exec.vector.ColumnVector;
+import org.apache.orc.storage.ql.exec.vector.LongColumnVector;
+import org.apache.orc.storage.ql.exec.vector.StructColumnVector;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.junit.jupiter.api.Test;
@@ -46,6 +56,37 @@ public class TestSparkOrcReader extends AvroDataTest {
     final Iterable<InternalRow> expected = RandomData.generateSpark(schema, 100, 0L);
 
     writeAndValidateRecords(schema, expected);
+  }
+
+  @Test
+  public void nonIdentityFieldIdMapping() {
+    Schema expectedSchema =
+        new Schema(
+            required(10, "first", Types.LongType.get()),
+            required(20, "second", Types.StringType.get()));
+    Schema orcSchema =
+        new Schema(
+            required(20, "second", Types.StringType.get()),
+            required(10, "first", Types.LongType.get()));
+    TypeDescription orcType = ORCSchemaUtil.convert(orcSchema);
+
+    List<OrcValueReader<?>> readers =
+        Lists.newArrayList(SparkOrcValueReaders.utf8String(), OrcValueReaders.longs());
+    OrcValueReader<?> reader =
+        SparkOrcValueReaders.struct(orcType, readers, expectedSchema.asStruct(), ImmutableMap.of());
+
+    BytesColumnVector second = new BytesColumnVector(1);
+    byte[] secondValue = "value".getBytes(StandardCharsets.UTF_8);
+    second.setRef(0, secondValue, 0, secondValue.length);
+    LongColumnVector first = new LongColumnVector(1);
+    first.vector[0] = 34L;
+    StructColumnVector vector = new StructColumnVector(1, new ColumnVector[] {second, first});
+
+    InternalRow actual = (InternalRow) reader.read(vector, 0);
+    assertThat(actual.getLong(0)).as("first should bind from ORC index 1").isEqualTo(34L);
+    assertThat(actual.getUTF8String(1).toString())
+        .as("second should bind from ORC index 0")
+        .isEqualTo("value");
   }
 
   @Test
