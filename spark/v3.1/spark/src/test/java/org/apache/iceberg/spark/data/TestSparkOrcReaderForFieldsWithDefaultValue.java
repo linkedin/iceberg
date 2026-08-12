@@ -43,8 +43,8 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 /**
- * Spark ORC reads of fields with {@code initial-default}. Defaulted projections use the row
- * reader. Nested-typed column defaults are not covered: {@code castDefault} rejects them.
+ * Spark ORC reads of fields with {@code initial-default}. Defaulted projections use the row reader.
+ * Nested-typed column defaults are not covered: {@code castDefault} rejects them.
  */
 public class TestSparkOrcReaderForFieldsWithDefaultValue {
 
