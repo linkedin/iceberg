@@ -62,8 +62,8 @@ import org.junit.rules.TemporaryFolder;
 
 /**
  * Spark SQL coverage for ORC initial-defaults: empty-projection filters and mixed
- * physical+defaulted predicates. Defaulted projections are forced onto the row reader even when
- * ORC vectorization is enabled.
+ * physical+defaulted predicates. Defaulted projections are forced onto the row reader even when ORC
+ * vectorization is enabled.
  */
 public class TestSparkOrcInitialDefaultScan {
   private static final Schema TABLE_SCHEMA =
