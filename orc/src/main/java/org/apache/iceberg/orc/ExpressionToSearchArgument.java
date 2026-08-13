@@ -46,13 +46,7 @@ class ExpressionToSearchArgument
     extends ExpressionVisitors.BoundVisitor<ExpressionToSearchArgument.Action> {
 
   static SearchArgument convert(Expression expr, TypeDescription readSchema) {
-    // Omitting every projected field leaves an empty read projection, which carries no Iceberg ids
-    // to bind against. Every predicate then resolves to YES_NO_NULL below, disabling pushdown so
-    // that defaults are still materialized for the file.
-    Map<Integer, String> idToColumnName =
-        readSchema.getChildren().isEmpty()
-            ? ImmutableMap.of()
-            : ORCSchemaUtil.idToOrcName(ORCSchemaUtil.convert(readSchema));
+    Map<Integer, String> idToColumnName = columnNamesForPushdown(readSchema);
     SearchArgument.Builder builder = SearchArgumentFactory.newBuilder();
     ExpressionVisitors.visit(expr, new ExpressionToSearchArgument(builder, idToColumnName))
         .invoke();
@@ -72,6 +66,17 @@ class ExpressionToSearchArgument
       SearchArgument.Builder builder, Map<Integer, String> idToColumnName) {
     this.builder = builder;
     this.idToColumnName = idToColumnName;
+  }
+
+  // convert() requires at least one Iceberg field. Omitting defaulted children can leave nested
+  // empty structs (struct<loc:struct<>>) that fail convert even when the root is non-empty.
+  // Treat that as no bindable columns so predicates become YES_NO_NULL and defaults can be filled.
+  private static Map<Integer, String> columnNamesForPushdown(TypeDescription readSchema) {
+    try {
+      return ORCSchemaUtil.idToOrcName(ORCSchemaUtil.convert(readSchema));
+    } catch (IllegalArgumentException e) {
+      return ImmutableMap.of();
+    }
   }
 
   @Override

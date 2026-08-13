@@ -532,6 +532,43 @@ public class TestExpressionToSearchArgument {
   }
 
   @Test
+  public void testDisablesPushdownWhenNestedReadProjectionIsEmpty() {
+    // File has loc as an empty struct. Projecting only loc.country (a new initial-default) omits
+    // that child and leaves struct<loc:struct<>>, which is non-empty at the root.
+    Schema fileSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()), optional(2, "loc", Types.StructType.of()));
+    Schema evolvedSchema =
+        new Schema(
+            optional(
+                2,
+                "loc",
+                Types.StructType.of(
+                    Types.NestedField.optional("country")
+                        .withId(3)
+                        .ofType(Types.StringType.get())
+                        .withInitialDefault(Expressions.lit("US"))
+                        .build())));
+    TypeDescription readSchema =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema,
+            ORCSchemaUtil.convert(fileSchema),
+            ORCSchemaUtil.FieldIdSource.EMBEDDED,
+            true);
+    Assert.assertEquals(1, readSchema.getChildren().size());
+    Assert.assertEquals(0, readSchema.findSubtype("loc").getChildren().size());
+
+    Expression boundFilter =
+        Binder.bind(evolvedSchema.asStruct(), equal("loc.country", "bar"), true);
+    SearchArgument expected =
+        SearchArgumentFactory.newBuilder().literal(TruthValue.YES_NO_NULL).build();
+
+    SearchArgument actual = ExpressionToSearchArgument.convert(boundFilter, readSchema);
+
+    Assert.assertEquals(expected.toString(), actual.toString());
+  }
+
+  @Test
   public void testMixedPhysicalAndOmittedDefaultPredicates() {
     Schema fileSchema = new Schema(required(1, "id", Types.LongType.get()));
     Schema evolvedSchema =

@@ -192,6 +192,40 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
     }
   }
 
+  @Test
+  public void testFilterOnOnlyOmittedNestedDefaultDoesNotThrow() throws IOException {
+    // Projecting and filtering only loc.country leaves struct<loc:struct<>>. Convert must not
+    // throw; SARG is disabled (YES_NO_NULL). Row-level filtering is Spark's job.
+    Schema writeSchema =
+        new Schema(
+            Types.NestedField.required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("loc").withId(2).ofType(Types.StructType.of()).build());
+    TypeDescription orcSchema = ORCSchemaUtil.convert(writeSchema);
+    Schema readSchema =
+        new Schema(
+            Types.NestedField.optional("loc")
+                .withId(2)
+                .ofType(
+                    Types.StructType.of(
+                        Types.NestedField.optional("country")
+                            .withId(3)
+                            .ofType(Types.StringType.get())
+                            .withInitialDefault(Expressions.lit("US"))
+                            .build()))
+                .build());
+    File orcFile = writeOrcWithIdAndEmptyLoc(orcSchema, 10);
+
+    try (CloseableIterable<InternalRow> reader =
+        ORC.read(Files.localInput(orcFile))
+            .project(readSchema)
+            .filter(Expressions.equal("loc.country", "bar"))
+            .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema))
+            .supportsInitialDefaults()
+            .build()) {
+      Assert.assertEquals(10, Iterators.size(reader.iterator()));
+    }
+  }
+
   private File writeOrcWithIntColumn(TypeDescription orcSchema, int numRows) throws IOException {
     Configuration conf = new Configuration();
     File orcFile = temp.newFile();

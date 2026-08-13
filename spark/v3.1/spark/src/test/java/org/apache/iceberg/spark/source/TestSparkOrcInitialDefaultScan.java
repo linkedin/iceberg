@@ -61,9 +61,9 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 /**
- * Spark SQL coverage for ORC initial-defaults: empty-projection filters and mixed
- * physical+defaulted predicates. Defaulted projections are forced onto the row reader even when ORC
- * vectorization is enabled.
+ * Spark SQL coverage for ORC initial-defaults: empty-projection filters, mixed physical+defaulted
+ * predicates, and nested defaults when the parent struct is null. Defaulted projections are forced
+ * onto the row reader even when ORC vectorization is enabled.
  */
 public class TestSparkOrcInitialDefaultScan {
   private static final Schema TABLE_SCHEMA =
@@ -79,6 +79,29 @@ public class TestSparkOrcInitialDefaultScan {
       new Schema(
           Types.NestedField.required(1, "id", Types.LongType.get()),
           Types.NestedField.optional(3, "data", Types.StringType.get()));
+  private static final Schema NESTED_TABLE_SCHEMA =
+      new Schema(
+          Types.NestedField.required(1, "id", Types.LongType.get()),
+          Types.NestedField.optional("loc")
+              .withId(2)
+              .ofType(
+                  Types.StructType.of(
+                      Types.NestedField.optional(3, "city", Types.StringType.get()),
+                      Types.NestedField.optional("country")
+                          .withId(4)
+                          .ofType(Types.StringType.get())
+                          .withInitialDefault(Expressions.lit("US"))
+                          .build()))
+              .build());
+  private static final Schema NESTED_OLD_FILE_SCHEMA =
+      new Schema(
+          Types.NestedField.required(1, "id", Types.LongType.get()),
+          Types.NestedField.optional("loc")
+              .withId(2)
+              .ofType(
+                  Types.StructType.of(
+                      Types.NestedField.optional(3, "city", Types.StringType.get())))
+              .build());
   private static final Configuration CONF = new Configuration();
   private static SparkSession spark;
 
@@ -186,6 +209,112 @@ public class TestSparkOrcInitialDefaultScan {
     Assertions.assertThat(read().filter("id = 1 AND country = 'CA'").collectAsList()).isEmpty();
   }
 
+  @Test
+  public void testFilterDefaultedColumnAcrossMixedFiles() {
+    // Old file reads country as 'US'; new file has 'CA' and an explicit null. SARG is disabled for
+    // the omitted column so Spark filters the filled values.
+    Assertions.assertThat(
+            read().filter("country IS NOT NULL").select("id").orderBy("id").collectAsList().stream()
+                .map(row -> row.getLong(0))
+                .collect(Collectors.toList()))
+        .containsExactly(1L, 2L);
+
+    Assertions.assertThat(
+            read().filter("upper(country) = 'US'").select("id").orderBy("id").collectAsList()
+                .stream()
+                .map(row -> row.getLong(0))
+                .collect(Collectors.toList()))
+        .containsExactly(1L);
+
+    Assertions.assertThat(
+            read().filter("country = 'CA'").select("id").collectAsList().stream()
+                .map(row -> row.getLong(0))
+                .collect(Collectors.toList()))
+        .containsExactly(2L);
+  }
+
+  @Test
+  public void testFilterNestedDefaultWhenParentStructIsNull() throws IOException {
+    File nestedLocation = temp.newFolder("nested-default-files");
+    Table nestedTable =
+        new HadoopTables(CONF)
+            .create(NESTED_TABLE_SCHEMA, PartitionSpec.unpartitioned(), nestedLocation.toString());
+    nestedTable
+        .updateProperties()
+        .set(TableProperties.FORMAT_VERSION, "2")
+        .set(TableProperties.DEFAULT_FILE_FORMAT, FileFormat.ORC.name())
+        .set(TableProperties.ORC_VECTORIZATION_ENABLED, "true")
+        .commit();
+
+    Types.StructType oldLocType = NESTED_OLD_FILE_SCHEMA.findType("loc").asStructType();
+    Record locSf = GenericRecord.create(oldLocType);
+    locSf.setField("city", "San Francisco");
+    Record presentLoc = GenericRecord.create(NESTED_OLD_FILE_SCHEMA);
+    presentLoc.setField("id", 1L);
+    presentLoc.setField("loc", locSf);
+
+    Record nullLoc = GenericRecord.create(NESTED_OLD_FILE_SCHEMA);
+    nullLoc.setField("id", 2L);
+    nullLoc.setField("loc", null);
+
+    Types.StructType newLocType = NESTED_TABLE_SCHEMA.findType("loc").asStructType();
+    Record locCa = GenericRecord.create(newLocType);
+    locCa.setField("city", "Toronto");
+    locCa.setField("country", "CA");
+    Record presentCa = GenericRecord.create(NESTED_TABLE_SCHEMA);
+    presentCa.setField("id", 3L);
+    presentCa.setField("loc", locCa);
+
+    nestedTable
+        .newAppend()
+        .appendFile(
+            writeFile(
+                nestedLocation,
+                NESTED_OLD_FILE_SCHEMA,
+                Lists.newArrayList(presentLoc, nullLoc),
+                "old-nested.orc"))
+        .appendFile(
+            writeFile(
+                nestedLocation,
+                NESTED_TABLE_SCHEMA,
+                Lists.newArrayList(presentCa),
+                "new-nested.orc"))
+        .commit();
+
+    Dataset<Row> nestedRead =
+        spark
+            .read()
+            .format("iceberg")
+            .option(SparkReadOptions.VECTORIZATION_ENABLED, "true")
+            .load(nestedLocation.toString());
+
+    // Present loc fills country from initial-default; a null parent stays null.
+    Assertions.assertThat(
+            nestedRead.selectExpr("id", "loc.country as country").orderBy("id").collectAsList()
+                .stream()
+                .map(row -> tuple(row.getLong(0), row.isNullAt(1) ? null : row.getString(1)))
+                .collect(Collectors.toList()))
+        .containsExactly(tuple(1L, "US"), tuple(2L, null), tuple(3L, "CA"));
+
+    Assertions.assertThat(
+            nestedRead.filter("loc.country = 'US'").select("id").collectAsList().stream()
+                .map(row -> row.getLong(0))
+                .collect(Collectors.toList()))
+        .containsExactly(1L);
+
+    Assertions.assertThat(
+            nestedRead.filter("loc.country IS NULL").select("id").collectAsList().stream()
+                .map(row -> row.getLong(0))
+                .collect(Collectors.toList()))
+        .containsExactly(2L);
+
+    Assertions.assertThat(
+            nestedRead.filter("loc.country = 'CA'").select("id").collectAsList().stream()
+                .map(row -> row.getLong(0))
+                .collect(Collectors.toList()))
+        .containsExactly(3L);
+  }
+
   private Dataset<Row> read() {
     return spark
         .read()
@@ -208,7 +337,12 @@ public class TestSparkOrcInitialDefaultScan {
   }
 
   private DataFile writeFile(Schema schema, List<Record> records, String name) throws IOException {
-    File file = new File(new File(tableLocation, "data"), name);
+    return writeFile(tableLocation, schema, records, name);
+  }
+
+  private DataFile writeFile(File location, Schema schema, List<Record> records, String name)
+      throws IOException {
+    File file = new File(new File(location, "data"), name);
     Assertions.assertThat(file.getParentFile().mkdirs() || file.getParentFile().isDirectory())
         .isTrue();
     FileAppender<Record> appender =
