@@ -35,8 +35,8 @@ import org.apache.orc.TypeDescription;
  * Spark ORC schema visitor that injects {@code initial-default} values into {@code idToConstant}
  * for fields omitted from the per-file ORC projection.
  *
- * <p>{@link org.apache.iceberg.spark.data.SparkOrcReader} uses this inject. The batched ORC reader
- * does not opt into omission, so defaulted Spark scans stay on the row reader.
+ * <p>{@link org.apache.iceberg.spark.data.SparkOrcReader} uses this inject. Vectorized ORC does
+ * not; {@code SparkBatchScan} keeps defaulted projections on the row reader.
  */
 public abstract class OrcSchemaWithTypeVisitorSpark<T> extends OrcSchemaWithTypeVisitor<T> {
 
