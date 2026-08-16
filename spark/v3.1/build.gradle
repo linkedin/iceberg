@@ -226,6 +226,8 @@ project(':iceberg-spark:iceberg-spark-runtime-3.1_2.12') {
       exclude group: 'net.snowflake' , module: 'snowflake-jdbc'
     }
 
+    compileOnly "org.apache.orc:orc-core::nohive"
+
     integrationImplementation "org.apache.spark:spark-hive_2.12:${sparkVersion}"
     integrationImplementation 'org.junit.vintage:junit-vintage-engine'
     integrationImplementation 'org.slf4j:slf4j-simple'
@@ -243,6 +245,11 @@ project(':iceberg-spark:iceberg-spark-runtime-3.1_2.12') {
     configurations = [project.configurations.runtimeClasspath]
 
     zip64 true
+
+    filesMatching('org/apache/orc/impl/InStream*.class') {
+      // Keep the project overlay and discard the duplicate classes from orc-core.
+      duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
 
     // include the LICENSE and NOTICE files for the shaded Jar
     from(projectDir) {
@@ -273,6 +280,12 @@ project(':iceberg-spark:iceberg-spark-runtime-3.1_2.12') {
     archiveClassifier.set(null)
   }
 
+  compileIntegrationJava {
+    classpath += files(shadowJar.archiveFile.get().asFile.path)
+    inputs.file(shadowJar.archiveFile.get().asFile.path)
+  }
+  compileIntegrationJava.dependsOn shadowJar
+
   task integrationTest(type: Test) {
     description = "Test Spark3 Runtime Jar against Spark 3.1"
     group = "verification"
@@ -287,4 +300,3 @@ project(':iceberg-spark:iceberg-spark-runtime-3.1_2.12') {
     enabled = false
   }
 }
-
