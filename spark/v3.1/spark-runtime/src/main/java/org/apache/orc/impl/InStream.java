@@ -18,7 +18,6 @@
  */
 package org.apache.orc.impl;
 
-import com.google.protobuf.CodedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -31,6 +30,7 @@ import javax.crypto.ShortBufferException;
 import javax.crypto.spec.IvParameterSpec;
 import org.apache.orc.CompressionCodec;
 import org.apache.orc.EncryptionAlgorithm;
+import org.apache.orc.protobuf.CodedInputStream;
 import org.apache.orc.storage.common.io.DiskRangeList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

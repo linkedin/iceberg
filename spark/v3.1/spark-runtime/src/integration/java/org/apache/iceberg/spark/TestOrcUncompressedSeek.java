@@ -18,13 +18,47 @@
  */
 package org.apache.iceberg.spark;
 
+import java.io.File;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.iceberg.shaded.org.apache.orc.CompressionKind;
+import org.apache.iceberg.shaded.org.apache.orc.OrcFile;
+import org.apache.iceberg.shaded.org.apache.orc.Reader;
+import org.apache.iceberg.shaded.org.apache.orc.TypeDescription;
+import org.apache.iceberg.shaded.org.apache.orc.Writer;
 import org.apache.iceberg.shaded.org.apache.orc.impl.BufferChunk;
 import org.apache.iceberg.shaded.org.apache.orc.impl.InStream;
+import org.apache.iceberg.shaded.org.apache.orc.storage.ql.exec.vector.LongColumnVector;
+import org.apache.iceberg.shaded.org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class TestOrcUncompressedSeek {
+
+  @Test
+  public void readOrcFileThroughShadedRuntime() throws Exception {
+    File orcFile =
+        Files.createTempDirectory("iceberg-orc-uncompressed-seek").resolve("test.orc").toFile();
+    orcFile.deleteOnExit();
+    Configuration conf = new Configuration();
+    Path path = new Path(orcFile.toURI());
+    TypeDescription schema = TypeDescription.fromString("struct<id:bigint>");
+
+    try (Writer writer =
+        OrcFile.createWriter(
+            path, OrcFile.writerOptions(conf).setSchema(schema).compress(CompressionKind.NONE))) {
+      VectorizedRowBatch batch = schema.createRowBatch();
+      ((LongColumnVector) batch.cols[0]).vector[0] = 34;
+      batch.size = 1;
+      writer.addRowBatch(batch);
+    }
+
+    try (Reader reader = OrcFile.createReader(path, OrcFile.readerOptions(conf))) {
+      Assert.assertEquals(1, reader.getNumberOfRows());
+    }
+  }
 
   @Test
   public void seekToLogicalEndAtNonFinalRangeBoundary() throws Exception {
