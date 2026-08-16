@@ -35,9 +35,11 @@ import org.apache.orc.storage.common.io.DiskRangeList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// Local divergence: the nohive classifier relocates DiskRangeList into the ORC namespace.
 public abstract class InStream extends InputStream {
 
   // Source overlay based on Apache ORC 1.8.2 (rel/release-1.8.2).
+  // Intentional local divergences from upstream are marked inline.
   private static final Logger LOG = LoggerFactory.getLogger(InStream.class);
   public static final int PROTOBUF_MESSAGE_MAX_LIMIT = 1024 << 20; // 1GB
 
@@ -89,6 +91,7 @@ public abstract class InStream extends InputStream {
 
   public abstract void changeIv(Consumer<byte[]> modifier);
 
+  // Preserve upstream's intentional range-object identity comparison.
   @SuppressWarnings("ReferenceEquality")
   static int getRangeNumber(DiskRangeList list, DiskRangeList current) {
     int result = 0;
@@ -195,10 +198,6 @@ public abstract class InStream extends InputStream {
       if (desired == 0 && bytes == null) {
         return;
       }
-      if (desired > length) {
-        throw new IllegalArgumentException(
-            "Seek in " + name + " to " + desired + " is outside of the data");
-      }
       // compute the position of the desired point in file
       long positionFile = desired + offset;
       // If we are seeking inside of the current range, just reposition.
@@ -209,6 +208,7 @@ public abstract class InStream extends InputStream {
         position = desired;
       } else {
         for (DiskRangeList curRange = bytes; curRange != null; curRange = curRange.next) {
+          // Accept this stream's logical end even when later disk ranges belong to other streams.
           boolean isLogicalEnd = desired == length && positionFile == curRange.getEnd();
           if (curRange.getOffset() <= positionFile
               && (isLogicalEnd
@@ -581,6 +581,7 @@ public abstract class InStream extends InputStream {
     }
 
     /* slices a read only contiguous buffer of chunkLength */
+    // Preserve upstream's conditional log-message construction.
     @SuppressWarnings("Slf4jConstantLogMessage")
     private ByteBuffer slice(int chunkLength) throws IOException {
       int len = chunkLength;
