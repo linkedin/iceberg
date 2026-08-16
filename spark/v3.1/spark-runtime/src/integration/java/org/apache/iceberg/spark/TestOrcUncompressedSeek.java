@@ -7,37 +7,36 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 package org.apache.iceberg.spark;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.ByteBuffer;
 import org.apache.iceberg.shaded.org.apache.orc.impl.BufferChunk;
 import org.apache.iceberg.shaded.org.apache.orc.impl.InStream;
-import org.junit.jupiter.api.Test;
+import org.junit.Assert;
+import org.junit.Test;
 
 public class TestOrcUncompressedSeek {
 
   @Test
   public void seekToLogicalEndAtNonFinalRangeBoundary() throws Exception {
     BufferChunk streamData = new BufferChunk(ByteBuffer.allocate(24), 0);
-    streamData.next = new BufferChunk(ByteBuffer.allocate(8), 24);
+    streamData.next = new BufferChunk(ByteBuffer.allocate(8), 32);
     InStream.UncompressedStream stream =
         (InStream.UncompressedStream) InStream.create("test", streamData, 0, 24);
 
     stream.seek(24);
 
-    assertEquals(0, stream.available());
-    assertEquals(-1, stream.read());
-    assertThrows(IllegalArgumentException.class, () -> stream.seek(25));
+    Assert.assertEquals(0, stream.available());
+    Assert.assertEquals(-1, stream.read());
+    Assert.assertThrows(IllegalArgumentException.class, () -> stream.seek(25));
   }
 }

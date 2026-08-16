@@ -192,8 +192,6 @@ project(':iceberg-spark:iceberg-spark-runtime-3.1_2.12') {
   configurations {
     implementation {
       exclude group: 'org.apache.spark'
-      // included in Spark
-      exclude group: 'org.slf4j'
       exclude group: 'org.apache.commons'
       exclude group: 'commons-pool'
       exclude group: 'commons-codec'
@@ -205,6 +203,10 @@ project(':iceberg-spark:iceberg-spark-runtime-3.1_2.12') {
       exclude group: 'org.glassfish'
       exclude group: 'org.abego.treelayout'
       exclude group: 'org.antlr'
+    }
+    runtimeClasspath {
+      // included in Spark
+      exclude group: 'org.slf4j'
     }
   }
 
@@ -227,6 +229,7 @@ project(':iceberg-spark:iceberg-spark-runtime-3.1_2.12') {
     }
 
     compileOnly "org.apache.orc:orc-core::nohive"
+    compileOnly 'org.slf4j:slf4j-api'
 
     integrationImplementation "org.apache.spark:spark-hive_2.12:${sparkVersion}"
     integrationImplementation 'org.junit.vintage:junit-vintage-engine'
