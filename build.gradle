@@ -703,7 +703,19 @@ project(':iceberg-hive-metastore') {
 }
 
 project(':iceberg-orc') {
+  def patchedOrcSourceDir = file("$buildDir/generated-src/orc-patch")
+  def patchedOrcSourceFile =
+      new File(patchedOrcSourceDir, "org/apache/orc/impl/InStream.java")
+
+  configurations {
+    orcPatchSources {
+      transitive = false
+    }
+  }
+
   dependencies {
+    orcPatchSources "org.apache.orc:orc-core:1.8.2:sources"
+
     implementation project(path: ':iceberg-bundled-guava', configuration: 'shadow')
     api project(':iceberg-api')
     implementation project(':iceberg-common')
@@ -733,6 +745,47 @@ project(':iceberg-orc') {
     testImplementation project(path: ':iceberg-core', configuration: 'testArtifacts')
     testImplementation project(':iceberg-common')
     testImplementation 'org.apache.orc:orc-tools'
+  }
+
+  def generatePatchedOrcInStream = tasks.register('generatePatchedOrcInStream') {
+    inputs.files(configurations.orcPatchSources)
+    outputs.file(patchedOrcSourceFile)
+
+    doLast {
+      String source =
+          zipTree(configurations.orcPatchSources.singleFile)
+              .matching { include 'org/apache/orc/impl/InStream.java' }
+              .singleFile
+              .getText('UTF-8')
+      String originalSeek = '''          if (curRange.getOffset() <= positionFile &&
+              (curRange.next == null ? positionFile <= curRange.getEnd() :
+                   positionFile < curRange.getEnd())) {'''
+      String patchedSeek = '''          // Accept this stream's logical end when later ranges belong to other streams.
+          boolean isLogicalEnd =
+              desired == length && positionFile == curRange.getEnd();
+          if (curRange.getOffset() <= positionFile &&
+              (isLogicalEnd ||
+                  (curRange.next == null ? positionFile <= curRange.getEnd() :
+                       positionFile < curRange.getEnd()))) {'''
+
+      if (!source.contains(originalSeek)) {
+        throw new GradleException('ORC InStream seek implementation has changed')
+      }
+
+      patchedOrcSourceFile.parentFile.mkdirs()
+      patchedOrcSourceFile.setText(
+          source
+              .replace(
+                  'org.apache.hadoop.hive.common.io.DiskRangeList',
+                  'org.apache.orc.storage.common.io.DiskRangeList')
+              .replace(originalSeek, patchedSeek),
+          'UTF-8')
+    }
+  }
+
+  sourceSets.main.java.srcDir(patchedOrcSourceDir)
+  tasks.named('compileJava').configure {
+    dependsOn(generatePatchedOrcInStream)
   }
 }
 
