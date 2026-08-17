@@ -275,7 +275,6 @@ public abstract class InStream extends InputStream {
     void changeIv(Consumer<byte[]> modifier) {
       modifier.accept(iv);
       updateIv();
-      OutStream.logKeyAndIv(name, key, iv);
     }
 
     private void updateIv() {
@@ -864,13 +863,11 @@ public abstract class InStream extends InputStream {
       if (options == null || options.key == null) {
         return new UncompressedStream(name, input, offset, length);
       } else {
-        OutStream.logKeyAndIv(name, options.getKey(), options.getIv());
         return new EncryptedStream(name, input, offset, length, options);
       }
     } else if (options.key == null) {
       return new CompressedStream(name, input, offset, length, options);
     } else {
-      OutStream.logKeyAndIv(name, options.getKey(), options.getIv());
       return new EncryptedCompressedStream(name, input, offset, length, options);
     }
   }
