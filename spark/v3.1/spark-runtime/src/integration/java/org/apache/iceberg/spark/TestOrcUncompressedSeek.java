@@ -18,6 +18,7 @@
  */
 package org.apache.iceberg.spark;
 
+// CHECKSTYLE.OFF: IllegalImport
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -34,6 +35,8 @@ import org.apache.iceberg.shaded.org.apache.orc.storage.ql.exec.vector.LongColum
 import org.apache.iceberg.shaded.org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.junit.Assert;
 import org.junit.Test;
+
+// CHECKSTYLE.ON: IllegalImport
 
 public class TestOrcUncompressedSeek {
 

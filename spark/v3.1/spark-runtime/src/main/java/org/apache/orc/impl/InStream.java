@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 // Local divergence: the nohive classifier relocates DiskRangeList into the ORC namespace.
+// CHECKSTYLE.OFF: VisibilityModifier|ParameterAssignment|HiddenField|LocalVariableName|NoClone
 public abstract class InStream extends InputStream {
 
   // Source overlay based on Apache ORC 1.8.2 (rel/release-1.8.2).
@@ -898,3 +899,4 @@ public abstract class InStream extends InputStream {
     return codedInputStream;
   }
 }
+// CHECKSTYLE.ON: VisibilityModifier|ParameterAssignment|HiddenField|LocalVariableName|NoClone
