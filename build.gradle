@@ -703,19 +703,42 @@ project(':iceberg-hive-metastore') {
 }
 
 project(':iceberg-orc') {
-  def patchedOrcSourceDir = file("$buildDir/generated-src/orc-patch")
-  def orcInStreamPatch =
-      file('src/main/patches/orc-core-1.8.2-instream-logical-end.patch')
+  def orcInStreamPatchApiSources = fileTree('src/patch/java') {
+    include '**/*.java'
+  }
+  def orcInStreamPatchApiClasses = file("$buildDir/classes/java/orcInStreamPatchApi")
+  def orcInStreamPatchSource =
+      file('src/main/java/org/apache/orc/impl/InStream$UncompressedStream.java')
+  def orcInStreamPatchClasses = file("$buildDir/classes/java/orcInStreamPatch")
 
-  configurations {
-    orcPatchSources {
-      transitive = false
+  sourceSets.main.java.exclude 'org/apache/orc/impl/InStream$UncompressedStream.java'
+
+  def compileOrcInStreamPatchApi = tasks.register('compileOrcInStreamPatchApi', JavaCompile) {
+    source orcInStreamPatchApiSources
+    classpath = sourceSets.main.compileClasspath
+    destinationDirectory.set(orcInStreamPatchApiClasses)
+  }
+
+  // Error Prone 2.10 crashes on the '$' in the binary-compatible class name.
+  def compileOrcInStreamPatch = tasks.register('compileOrcInStreamPatch', JavaCompile) {
+    source orcInStreamPatchSource
+    classpath = files(orcInStreamPatchApiClasses) + sourceSets.main.compileClasspath
+    destinationDirectory.set(orcInStreamPatchClasses)
+    dependsOn compileOrcInStreamPatchApi
+  }
+
+  pluginManager.withPlugin('com.palantir.baseline-error-prone') {
+    compileOrcInStreamPatchApi.configure {
+      options.errorprone.enabled = false
+    }
+    compileOrcInStreamPatch.configure {
+      options.errorprone.enabled = false
     }
   }
 
-  dependencies {
-    orcPatchSources 'org.apache.orc:orc-core:1.8.2:sources'
+  sourceSets.main.output.dir([builtBy: compileOrcInStreamPatch], orcInStreamPatchClasses)
 
+  dependencies {
     implementation project(path: ':iceberg-bundled-guava', configuration: 'shadow')
     api project(':iceberg-api')
     implementation project(':iceberg-common')
@@ -745,27 +768,6 @@ project(':iceberg-orc') {
     testImplementation project(path: ':iceberg-core', configuration: 'testArtifacts')
     testImplementation project(':iceberg-common')
     testImplementation 'org.apache.orc:orc-tools'
-  }
-
-  def preparePatchedOrcSources = tasks.register('preparePatchedOrcSources', Sync) {
-    inputs.files(configurations.orcPatchSources)
-    inputs.file(orcInStreamPatch)
-    from({ zipTree(configurations.orcPatchSources.singleFile) }) {
-      include 'org/apache/orc/impl/InStream.java'
-    }
-    into(patchedOrcSourceDir)
-
-    doLast {
-      exec {
-        workingDir patchedOrcSourceDir
-        commandLine 'patch', '--batch', '--forward', '-p1', '-i', orcInStreamPatch
-      }
-    }
-  }
-
-  sourceSets.main.java.srcDir(patchedOrcSourceDir)
-  tasks.named('compileJava').configure {
-    dependsOn(preparePatchedOrcSources)
   }
 }
 
