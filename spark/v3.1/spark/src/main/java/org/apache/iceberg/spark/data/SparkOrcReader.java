@@ -25,6 +25,7 @@ import org.apache.iceberg.orc.OrcSchemaWithTypeVisitor;
 import org.apache.iceberg.orc.OrcValueReader;
 import org.apache.iceberg.orc.OrcValueReaders;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.spark.OrcSchemaWithTypeVisitorSpark;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
@@ -64,11 +65,10 @@ public class SparkOrcReader implements OrcRowReader<InternalRow> {
     reader.setBatchContext(batchOffsetInFile);
   }
 
-  private static class ReadBuilder extends OrcSchemaWithTypeVisitor<OrcValueReader<?>> {
-    private final Map<Integer, ?> idToConstant;
+  private static class ReadBuilder extends OrcSchemaWithTypeVisitorSpark<OrcValueReader<?>> {
 
     private ReadBuilder(Map<Integer, ?> idToConstant) {
-      this.idToConstant = idToConstant;
+      super(idToConstant);
     }
 
     @Override
@@ -77,7 +77,7 @@ public class SparkOrcReader implements OrcRowReader<InternalRow> {
         TypeDescription record,
         List<String> names,
         List<OrcValueReader<?>> fields) {
-      return SparkOrcValueReaders.struct(record, fields, expected, idToConstant);
+      return SparkOrcValueReaders.struct(record, fields, expected, getIdToConstant());
     }
 
     @Override

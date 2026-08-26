@@ -38,6 +38,7 @@ import org.apache.iceberg.spark.Spark3Util;
 import org.apache.iceberg.spark.SparkReadConf;
 import org.apache.iceberg.spark.SparkSchemaUtil;
 import org.apache.iceberg.spark.SparkUtil;
+import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.TableScanUtil;
 import org.apache.iceberg.util.Tasks;
@@ -193,7 +194,10 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
 
     boolean batchReadsEnabled = batchReadsEnabled(allParquetFileScanTasks, allOrcFileScanTasks);
 
-    boolean batchReadOrc = hasNoDeleteFiles && allOrcFileScanTasks;
+    boolean hasNoInitialDefaults = hasNoInitialDefaults(expectedSchema);
+
+    // Defaulted projections stay on the row reader; batched ORC does not fill initial-defaults.
+    boolean batchReadOrc = hasNoDeleteFiles && allOrcFileScanTasks && hasNoInitialDefaults;
 
     boolean batchReadParquet =
         hasNoEqDeleteFiles && allParquetFileScanTasks && atLeastOneColumn && onlyPrimitives;
@@ -203,6 +207,11 @@ abstract class SparkBatchScan implements Scan, Batch, SupportsReportStatistics {
     int batchSize = readUsingBatch ? batchSize(allParquetFileScanTasks, allOrcFileScanTasks) : 0;
 
     return new ReaderFactory(batchSize);
+  }
+
+  static boolean hasNoInitialDefaults(Schema schema) {
+    return TypeUtil.indexById(schema.asStruct()).values().stream()
+        .noneMatch(field -> field.initialDefault() != null);
   }
 
   private boolean batchReadsEnabled(boolean isParquetOnly, boolean isOrcOnly) {
