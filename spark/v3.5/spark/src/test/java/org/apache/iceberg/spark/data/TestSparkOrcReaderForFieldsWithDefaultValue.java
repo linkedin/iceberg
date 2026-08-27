@@ -30,6 +30,7 @@ import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.orc.ORC;
 import org.apache.iceberg.orc.ORCSchemaUtil;
+import org.apache.iceberg.relocated.com.google.common.collect.Iterators;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.OrcFile;
 import org.apache.orc.TypeDescription;
@@ -162,6 +163,66 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
       Assert.assertEquals(1, row.getInt(0));
       Assert.assertTrue(
           "unannotated physical column must not be replaced by the default", row.isNullAt(1));
+    }
+  }
+
+  @Test
+  public void testFilterOnOnlyOmittedDefaultDoesNotThrow() throws IOException {
+    // Projecting and filtering only a defaulted column yields an empty ORC schema. Convert must
+    // not throw; SARG is disabled (YES_NO_NULL). Row-level filtering is Spark's job.
+    Schema writeSchema = new Schema(Types.NestedField.required(1, "col1", Types.IntegerType.get()));
+    TypeDescription orcSchema = ORCSchemaUtil.convert(writeSchema);
+    Schema readSchema =
+        new Schema(
+            Types.NestedField.optional("col2")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("foo"))
+                .build());
+    File orcFile = writeOrcWithIntColumn(orcSchema, 10);
+
+    try (CloseableIterable<InternalRow> reader =
+        ORC.read(Files.localInput(orcFile))
+            .project(readSchema)
+            .filter(Expressions.equal("col2", "bar"))
+            .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema))
+            .supportsInitialDefaults()
+            .build()) {
+      Assert.assertEquals(10, Iterators.size(reader.iterator()));
+    }
+  }
+
+  @Test
+  public void testFilterOnOnlyOmittedNestedDefaultDoesNotThrow() throws IOException {
+    // Projecting and filtering only loc.country leaves struct<loc:struct<>>. Convert must not
+    // throw; SARG is disabled (YES_NO_NULL). Row-level filtering is Spark's job.
+    Schema writeSchema =
+        new Schema(
+            Types.NestedField.required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("loc").withId(2).ofType(Types.StructType.of()).build());
+    TypeDescription orcSchema = ORCSchemaUtil.convert(writeSchema);
+    Schema readSchema =
+        new Schema(
+            Types.NestedField.optional("loc")
+                .withId(2)
+                .ofType(
+                    Types.StructType.of(
+                        Types.NestedField.optional("country")
+                            .withId(3)
+                            .ofType(Types.StringType.get())
+                            .withInitialDefault(Expressions.lit("US"))
+                            .build()))
+                .build());
+    File orcFile = writeOrcWithIdAndEmptyLoc(orcSchema, 10);
+
+    try (CloseableIterable<InternalRow> reader =
+        ORC.read(Files.localInput(orcFile))
+            .project(readSchema)
+            .filter(Expressions.equal("loc.country", "bar"))
+            .createReaderFunc(readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema))
+            .supportsInitialDefaults()
+            .build()) {
+      Assert.assertEquals(10, Iterators.size(reader.iterator()));
     }
   }
 
