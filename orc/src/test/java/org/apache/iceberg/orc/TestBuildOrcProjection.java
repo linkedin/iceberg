@@ -20,8 +20,12 @@ package org.apache.iceberg.orc;
 
 import static org.apache.iceberg.types.Types.NestedField.optional;
 import static org.apache.iceberg.types.Types.NestedField.required;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.types.Types;
 import org.apache.orc.TypeDescription;
 import org.assertj.core.api.Assertions;
@@ -170,5 +174,164 @@ public class TestBuildOrcProjection {
             () -> ORCSchemaUtil.buildOrcProjection(evolvedSchema, baseOrcSchema))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("Field 4 of type long is required and was not found.");
+  }
+
+  @Test
+  public void testOmitsTopLevelScalarDefaultWhenReaderSupportsDefaultsAndIdsAreEmbedded() {
+    Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
+    TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
+
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("country")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("US"))
+                .build());
+
+    // The file carries embedded field IDs, so the absent field can be identified safely.
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, true);
+    assertEquals(1, projection.getChildren().size());
+    assertNotNull(projection.findSubtype("id"));
+    assertFalse(
+        "defaulted column must be omitted from the read projection",
+        projection.getFieldNames().contains("country_r2"));
+  }
+
+  @Test
+  public void testSynthesizesNullForTopLevelScalarDefaultWhenReaderDoesNotSupportDefaults() {
+    Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
+    TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("country")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("US"))
+                .build());
+
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, false);
+
+    assertEquals(2, projection.getChildren().size());
+    assertNotNull(projection.findSubtype("country_r2"));
+  }
+
+  @Test
+  public void testSynthesizesNullForTopLevelScalarDefaultWhenIdsAreNameMapped() {
+    Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
+    TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
+
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("country")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("US"))
+                .build());
+
+    // Name-mapped provenance (or the conservative public 2-arg API): an unmatched name does not
+    // prove the column is absent, so synthesize NULL rather than applying the default.
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.NAME_MAPPED, true);
+    assertEquals(2, projection.getChildren().size());
+    assertEquals(2, projection.findSubtype("country_r2").getId());
+    assertEquals(
+        TypeDescription.Category.STRING, projection.findSubtype("country_r2").getCategory());
+  }
+
+  @Test
+  public void testOmitsRequiredTopLevelScalarDefaultWhenReaderSupportsDefaults() {
+    Schema baseSchema = new Schema(required(1, "id", Types.LongType.get()));
+    TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
+
+    // A required top-level field that is absent from the file but declares a default must be
+    // omitted (then filled), not rejected by the required-missing check.
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.required("code")
+                .withId(2)
+                .ofType(Types.IntegerType.get())
+                .withInitialDefault(Expressions.lit(7))
+                .build());
+
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, true);
+    assertEquals(1, projection.getChildren().size());
+    assertFalse(
+        "required defaulted column must be omitted, not throw",
+        projection.getFieldNames().contains("code_r2"));
+  }
+
+  @Test
+  public void testOmitsNestedScalarDefaultWhenReaderSupportsDefaults() {
+    Schema baseSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            required(2, "s", Types.StructType.of(required(3, "a", Types.LongType.get()))));
+    TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
+
+    // A scalar default on a field nested inside a struct is omitted (then filled via idToConstant),
+    // at any nesting level. The present sibling "a" keeps the struct non-empty.
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            required(
+                2,
+                "s",
+                Types.StructType.of(
+                    required(3, "a", Types.LongType.get()),
+                    Types.NestedField.optional("b")
+                        .withId(4)
+                        .ofType(Types.StringType.get())
+                        .withInitialDefault(Expressions.lit("x"))
+                        .build())));
+
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, true);
+    TypeDescription nested = projection.findSubtype("s");
+    assertEquals(1, nested.getChildren().size());
+    assertFalse("nested defaulted column must be omitted", nested.getFieldNames().contains("b_r4"));
+  }
+
+  @Test
+  public void testPreservesNestedStructWhenAllProjectedFieldsAreOmitted() {
+    // Base file: s { a }. Project only a new defaulted subfield s { b default 'x' } (drop a). Every
+    // projected subfield of s is absent + defaulted, so the nested read struct is omitted down to
+    // empty; the reader fills b via idToConstant.
+    Schema baseSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            required(2, "s", Types.StructType.of(required(3, "a", Types.LongType.get()))));
+    TypeDescription baseOrcSchema = ORCSchemaUtil.convert(baseSchema);
+
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            optional(
+                2,
+                "s",
+                Types.StructType.of(
+                    Types.NestedField.optional("b")
+                        .withId(4)
+                        .ofType(Types.StringType.get())
+                        .withInitialDefault(Expressions.lit("x"))
+                        .build())));
+
+    TypeDescription projection =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema, baseOrcSchema, ORCSchemaUtil.FieldIdSource.EMBEDDED, true);
+    TypeDescription nested = projection.findSubtype("s");
+    assertEquals(0, nested.getChildren().size());
   }
 }
