@@ -117,6 +117,7 @@ abstract class BaseRowReader<T extends ScanTask> extends BaseReader<InternalRow,
         .split(start, length)
         .createReaderFunc(
             readOrcSchema -> new SparkOrcReader(readSchema, readOrcSchema, idToConstant))
+        .supportsInitialDefaults()
         .filter(residual)
         .caseSensitive(caseSensitive())
         .withNameMapping(nameMapping())
