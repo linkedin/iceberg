@@ -18,14 +18,13 @@
  */
 package org.apache.iceberg.spark.source;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.types.Types;
-import org.junit.jupiter.api.Test;
+import org.junit.Assert;
+import org.junit.Test;
 
-public class TestSparkBatchInitialDefaults {
+public class TestSparkBatchScanInitialDefaults {
 
   @Test
   public void testDisablesVectorizationWhenTopLevelDefaultIsProjected() {
@@ -38,7 +37,7 @@ public class TestSparkBatchInitialDefaults {
                 .withInitialDefault(Expressions.lit("US"))
                 .build());
 
-    assertThat(SparkBatch.hasNoInitialDefaults(schema)).isFalse();
+    Assert.assertFalse(SparkBatch.hasNoInitialDefaults(schema));
   }
 
   @Test
@@ -55,7 +54,7 @@ public class TestSparkBatchInitialDefaults {
                         .withInitialDefault(Expressions.lit("US"))
                         .build())));
 
-    assertThat(SparkBatch.hasNoInitialDefaults(schema)).isFalse();
+    Assert.assertFalse(SparkBatch.hasNoInitialDefaults(schema));
   }
 
   @Test
@@ -65,6 +64,6 @@ public class TestSparkBatchInitialDefaults {
             Types.NestedField.required(1, "id", Types.LongType.get()),
             Types.NestedField.optional(2, "country", Types.StringType.get()));
 
-    assertThat(SparkBatch.hasNoInitialDefaults(schema)).isTrue();
+    Assert.assertTrue(SparkBatch.hasNoInitialDefaults(schema));
   }
 }

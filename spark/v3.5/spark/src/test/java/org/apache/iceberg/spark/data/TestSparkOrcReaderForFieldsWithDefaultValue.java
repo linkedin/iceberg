@@ -38,8 +38,9 @@ import org.apache.orc.storage.ql.exec.vector.VectorizedRowBatch;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.unsafe.types.UTF8String;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 /**
  * Spark ORC reads of fields with {@code initial-default}. Defaulted projections use the row reader.
@@ -47,7 +48,7 @@ import org.junit.jupiter.api.io.TempDir;
  */
 public class TestSparkOrcReaderForFieldsWithDefaultValue {
 
-  @TempDir private File temp;
+  @Rule public TemporaryFolder temp = new TemporaryFolder();
 
   @Test
   public void testOrcScalarDefaultValues() throws IOException {
@@ -125,7 +126,7 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
 
   private File writeOrcWithIntColumn(TypeDescription orcSchema, int numRows) throws IOException {
     Configuration conf = new Configuration();
-    File orcFile = new File(temp, "int-col.orc");
+    File orcFile = temp.newFile();
     Path orcFilePath = new Path(orcFile.getPath());
 
     Writer writer =
@@ -153,7 +154,7 @@ public class TestSparkOrcReaderForFieldsWithDefaultValue {
   private File writeOrcWithIdAndEmptyLoc(TypeDescription orcSchema, int numRows)
       throws IOException {
     Configuration conf = new Configuration();
-    File orcFile = new File(temp, "id-empty-loc.orc");
+    File orcFile = temp.newFile();
     Path orcFilePath = new Path(orcFile.getPath());
 
     Writer writer =
