@@ -22,6 +22,8 @@ import static org.apache.iceberg.orc.ORCSchemaUtil.ICEBERG_ID_ATTRIBUTE;
 import static org.apache.iceberg.orc.ORCSchemaUtil.ICEBERG_REQUIRED_ATTRIBUTE;
 import static org.apache.iceberg.types.Types.NestedField.optional;
 import static org.apache.iceberg.types.Types.NestedField.required;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.util.Collections;
 import java.util.List;
@@ -336,6 +338,28 @@ public class TestORCSchemaUtil {
     Assertions.assertThat(ORCSchemaUtil.hasIds(orcSchema))
         .as("Should have Ids after adding one type with Id")
         .isTrue();
+  }
+
+  @Test
+  public void testHasAllIds() {
+    Schema schema =
+        new Schema(
+            required(1, "id", Types.LongType.get()), optional(2, "data", Types.StringType.get()));
+
+    TypeDescription fullyAnnotated = ORCSchemaUtil.convert(schema);
+    assertTrue(
+        "Iceberg-written schemas annotate every column", ORCSchemaUtil.hasAllIds(fullyAnnotated));
+
+    TypeDescription noneAnnotated = ORCSchemaUtil.removeIds(fullyAnnotated);
+    assertFalse(
+        "A file with no ids is not fully annotated", ORCSchemaUtil.hasAllIds(noneAnnotated));
+
+    // hasIds is true if any column is annotated; hasAllIds requires every column.
+    TypeDescription partial = ORCSchemaUtil.convert(schema);
+    TypeDescription extra = TypeDescription.createString();
+    partial.addField("unannotated", extra);
+    assertTrue("One annotated column is enough for hasIds", ORCSchemaUtil.hasIds(partial));
+    assertFalse("An unannotated sibling must fail hasAllIds", ORCSchemaUtil.hasAllIds(partial));
   }
 
   @Test
