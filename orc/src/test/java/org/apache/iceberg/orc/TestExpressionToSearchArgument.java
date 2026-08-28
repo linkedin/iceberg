@@ -49,6 +49,7 @@ import java.util.UUID;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.mapping.MappingUtil;
 import org.apache.iceberg.mapping.NameMapping;
 import org.apache.iceberg.types.Types;
@@ -474,6 +475,129 @@ public class TestExpressionToSearchArgument {
             .build();
 
     SearchArgument actual = ExpressionToSearchArgument.convert(boundFilter, readSchema);
+    Assert.assertEquals(expected.toString(), actual.toString());
+  }
+
+  @Test
+  public void testDisablesPushdownWhenDefaultedFieldIsOmitted() {
+    Schema fileSchema = new Schema(required(1, "id", Types.LongType.get()));
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("country")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("US"))
+                .build());
+    TypeDescription readSchema =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema,
+            ORCSchemaUtil.convert(fileSchema),
+            ORCSchemaUtil.FieldIdSource.EMBEDDED,
+            true);
+    Expression boundFilter = Binder.bind(evolvedSchema.asStruct(), equal("country", "US"), true);
+    SearchArgument expected =
+        SearchArgumentFactory.newBuilder().literal(TruthValue.YES_NO_NULL).build();
+
+    SearchArgument actual = ExpressionToSearchArgument.convert(boundFilter, readSchema);
+
+    Assert.assertEquals(expected.toString(), actual.toString());
+  }
+
+  @Test
+  public void testDisablesPushdownWhenReadProjectionIsEmpty() {
+    Schema fileSchema = new Schema(required(1, "id", Types.LongType.get()));
+    Schema evolvedSchema =
+        new Schema(
+            Types.NestedField.optional("country")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("US"))
+                .build());
+    TypeDescription readSchema =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema,
+            ORCSchemaUtil.convert(fileSchema),
+            ORCSchemaUtil.FieldIdSource.EMBEDDED,
+            true);
+    Assert.assertEquals(0, readSchema.getChildren().size());
+
+    Expression boundFilter = Binder.bind(evolvedSchema.asStruct(), equal("country", "bar"), true);
+    SearchArgument expected =
+        SearchArgumentFactory.newBuilder().literal(TruthValue.YES_NO_NULL).build();
+
+    SearchArgument actual = ExpressionToSearchArgument.convert(boundFilter, readSchema);
+
+    Assert.assertEquals(expected.toString(), actual.toString());
+  }
+
+  @Test
+  public void testDisablesPushdownWhenNestedReadProjectionIsEmpty() {
+    // File has loc as an empty struct. Projecting only loc.country (a new initial-default) omits
+    // that child and leaves struct<loc:struct<>>, which is non-empty at the root.
+    Schema fileSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()), optional(2, "loc", Types.StructType.of()));
+    Schema evolvedSchema =
+        new Schema(
+            optional(
+                2,
+                "loc",
+                Types.StructType.of(
+                    Types.NestedField.optional("country")
+                        .withId(3)
+                        .ofType(Types.StringType.get())
+                        .withInitialDefault(Expressions.lit("US"))
+                        .build())));
+    TypeDescription readSchema =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema,
+            ORCSchemaUtil.convert(fileSchema),
+            ORCSchemaUtil.FieldIdSource.EMBEDDED,
+            true);
+    Assert.assertEquals(1, readSchema.getChildren().size());
+    Assert.assertEquals(0, readSchema.findSubtype("loc").getChildren().size());
+
+    Expression boundFilter =
+        Binder.bind(evolvedSchema.asStruct(), equal("loc.country", "bar"), true);
+    SearchArgument expected =
+        SearchArgumentFactory.newBuilder().literal(TruthValue.YES_NO_NULL).build();
+
+    SearchArgument actual = ExpressionToSearchArgument.convert(boundFilter, readSchema);
+
+    Assert.assertEquals(expected.toString(), actual.toString());
+  }
+
+  @Test
+  public void testMixedPhysicalAndOmittedDefaultPredicates() {
+    Schema fileSchema = new Schema(required(1, "id", Types.LongType.get()));
+    Schema evolvedSchema =
+        new Schema(
+            required(1, "id", Types.LongType.get()),
+            Types.NestedField.optional("country")
+                .withId(2)
+                .ofType(Types.StringType.get())
+                .withInitialDefault(Expressions.lit("US"))
+                .build());
+    TypeDescription readSchema =
+        ORCSchemaUtil.buildOrcProjection(
+            evolvedSchema,
+            ORCSchemaUtil.convert(fileSchema),
+            ORCSchemaUtil.FieldIdSource.EMBEDDED,
+            true);
+
+    Expression boundFilter =
+        Binder.bind(evolvedSchema.asStruct(), and(equal("id", 1L), equal("country", "US")), true);
+    SearchArgument expected =
+        SearchArgumentFactory.newBuilder()
+            .startAnd()
+            .equals("`id`", Type.LONG, 1L)
+            .literal(TruthValue.YES_NO_NULL)
+            .end()
+            .build();
+
+    SearchArgument actual = ExpressionToSearchArgument.convert(boundFilter, readSchema);
+
     Assert.assertEquals(expected.toString(), actual.toString());
   }
 }

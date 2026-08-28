@@ -30,6 +30,7 @@ import org.apache.iceberg.expressions.BoundPredicate;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ExpressionVisitors;
 import org.apache.iceberg.expressions.Literal;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Type.TypeID;
@@ -45,8 +46,7 @@ class ExpressionToSearchArgument
     extends ExpressionVisitors.BoundVisitor<ExpressionToSearchArgument.Action> {
 
   static SearchArgument convert(Expression expr, TypeDescription readSchema) {
-    Map<Integer, String> idToColumnName =
-        ORCSchemaUtil.idToOrcName(ORCSchemaUtil.convert(readSchema));
+    Map<Integer, String> idToColumnName = columnNamesForPushdown(readSchema);
     SearchArgument.Builder builder = SearchArgumentFactory.newBuilder();
     ExpressionVisitors.visit(expr, new ExpressionToSearchArgument(builder, idToColumnName))
         .invoke();
@@ -66,6 +66,17 @@ class ExpressionToSearchArgument
       SearchArgument.Builder builder, Map<Integer, String> idToColumnName) {
     this.builder = builder;
     this.idToColumnName = idToColumnName;
+  }
+
+  // convert() requires at least one Iceberg field. Omitting defaulted children can leave nested
+  // empty structs (struct<loc:struct<>>) that fail convert even when the root is non-empty.
+  // Treat that as no bindable columns so predicates become YES_NO_NULL and defaults can be filled.
+  private static Map<Integer, String> columnNamesForPushdown(TypeDescription readSchema) {
+    try {
+      return ORCSchemaUtil.idToOrcName(ORCSchemaUtil.convert(readSchema));
+    } catch (IllegalArgumentException e) {
+      return ImmutableMap.of();
+    }
   }
 
   @Override
@@ -270,10 +281,12 @@ class ExpressionToSearchArgument
 
   @Override
   public <T> Action predicate(BoundPredicate<T> pred) {
-    if (UNSUPPORTED_TYPES.contains(pred.ref().type().typeId())) {
+    if (!idToColumnName.containsKey(pred.ref().fieldId())
+        || UNSUPPORTED_TYPES.contains(pred.ref().type().typeId())) {
       // Cannot push down predicates for types which cannot be represented in PredicateLeaf.Type, so
       // return
       // TruthValue.YES_NO_NULL which signifies that this predicate cannot help with filtering
+      // (including fields omitted from the read projection so defaults can be filled).
       return () -> this.builder.literal(TruthValue.YES_NO_NULL);
     } else {
       return super.predicate(pred);
