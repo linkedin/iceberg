@@ -19,17 +19,17 @@
 package org.apache.iceberg.spark;
 
 import java.nio.file.Path;
-import org.apache.iceberg.ParameterizedTestExtension;
-import org.apache.iceberg.Parameters;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
-@ExtendWith(ParameterizedTestExtension.class)
 public abstract class CatalogTestBase extends TestBaseWithCatalog {
 
-  // these parameters are broken out to avoid changes that need to modify lots of test suites
-  @Parameters(name = "catalogName = {0}, implementation = {1}, config = {2}")
-  protected static Object[][] parameters() {
+  @TempDir protected Path temp;
+
+  /**
+   * Override to include HIVE and SPARK catalogs in addition to HADOOP.
+   * External catalog providers are loaded by the parent class.
+   */
+  protected static Object[][] defaultCatalogParameters() {
     return new Object[][] {
       {
         SparkCatalogConfig.HIVE.catalogName(),
@@ -48,6 +48,4 @@ public abstract class CatalogTestBase extends TestBaseWithCatalog {
       }
     };
   }
-
-  @TempDir protected Path temp;
 }

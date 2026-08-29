@@ -149,6 +149,11 @@ public class SparkCatalog extends BaseCatalog
     Configuration conf = SparkUtil.hadoopConfCatalogOverrides(SparkSession.active(), name);
     Map<String, String> optionsMap = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
     optionsMap.putAll(options.asCaseSensitiveMap());
+    
+    if (optionsMap.containsKey(CatalogProperties.CATALOG_IMPL)) {
+      optionsMap.remove(CatalogUtil.ICEBERG_CATALOG_TYPE);
+    }
+
     optionsMap.put(CatalogProperties.APP_ID, SparkSession.active().sparkContext().applicationId());
     optionsMap.put(CatalogProperties.USER, SparkSession.active().sparkContext().sparkUser());
     return CatalogUtil.buildIcebergCatalog(name, optionsMap, conf);

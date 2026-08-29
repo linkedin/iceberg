@@ -42,7 +42,7 @@ public abstract class ExtensionsTestBase extends CatalogTestBase {
     metastore.start();
     TestBase.hiveConf = metastore.hiveConf();
 
-    TestBase.spark =
+    SparkSession.Builder builder =
         SparkSession.builder()
             .master("local[2]")
             .config("spark.testing", "true")
@@ -54,8 +54,9 @@ public abstract class ExtensionsTestBase extends CatalogTestBase {
             .config("spark.sql.legacy.respectNullabilityInTextDatasetConversion", "true")
             .config(
                 SQLConf.ADAPTIVE_EXECUTION_ENABLED().key(), String.valueOf(RANDOM.nextBoolean()))
-            .enableHiveSupport()
-            .getOrCreate();
+            .enableHiveSupport();
+
+    TestBase.spark = buildSparkSession(builder, hiveConf);
 
     TestBase.catalog =
         (HiveCatalog)

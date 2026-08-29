@@ -1,0 +1,90 @@
+// OpenHouse compatibility test configuration for Spark modules
+// Applied to spark modules that need OpenHouse integration testing
+
+configurations {
+  openhouseCompatibilityRuntime {
+    canBeConsumed = false
+    canBeResolved = true
+    description = 'Runtime dependencies for OpenHouse compatibility tests'
+  }
+}
+
+dependencies {
+  // Uber jar with transitive=false to avoid classpath conflicts
+  openhouseCompatibilityRuntime(rootProject.openHouseCompatibilityCoordinate) {
+    transitive = false
+  }
+  openhouseCompatibilityRuntime project(':iceberg-aws')
+  openhouseCompatibilityRuntime 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.13.4'
+  openhouseCompatibilityRuntime 'com.google.code.gson:gson:2.10.1'
+  openhouseCompatibilityRuntime 'com.zaxxer:HikariCP:4.0.3'
+}
+
+tasks.register('openhouseCompatibilityTest', Test) {
+  group = 'verification'
+  description = "Run Iceberg tests against OpenHouse catalog (Spark ${sparkMajorVersion})"
+
+  useJUnitPlatform()
+  maxHeapSize '2560m'
+
+  testClassesDirs = sourceSets.test.output.classesDirs
+  classpath = sourceSets.test.runtimeClasspath + configurations.openhouseCompatibilityRuntime
+
+  // Configure SPI providers
+  systemProperty 'iceberg.test.spark.session.provider',
+      'org.apache.iceberg.spark.openhouse.OpenHouseSparkITestProvider'
+  systemProperty 'iceberg.test.catalog.provider',
+      'org.apache.iceberg.spark.openhouse.OpenHouseSparkITestProvider'
+  systemProperty 'iceberg.test.catalog.skip.defaults', 'true'
+
+  // Spark configuration
+  systemProperty 'spark.sql.sources.partitionOverwriteMode', 'dynamic'
+  systemProperty 'spark.sql.legacy.respectNullabilityInTextDatasetConversion', 'true'
+  systemProperty 'spark.driver.bindAddress', '127.0.0.1'
+
+  // JVM args for Java 17+ compatibility
+  jvmArgs += [
+    '--add-opens=java.base/java.lang=ALL-UNNAMED',
+    '--add-opens=java.base/java.lang.invoke=ALL-UNNAMED',
+    '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED',
+    '--add-opens=java.base/java.io=ALL-UNNAMED',
+    '--add-opens=java.base/java.net=ALL-UNNAMED',
+    '--add-opens=java.base/java.nio=ALL-UNNAMED',
+    '--add-opens=java.base/java.util=ALL-UNNAMED',
+    '--add-opens=java.base/java.util.concurrent=ALL-UNNAMED',
+    '--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED',
+    '--add-opens=java.base/sun.nio.ch=ALL-UNNAMED',
+    '--add-opens=java.base/sun.nio.cs=ALL-UNNAMED',
+    '--add-opens=java.base/sun.security.action=ALL-UNNAMED',
+    '--add-opens=java.base/sun.util.calendar=ALL-UNNAMED',
+    '--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED'
+  ]
+
+  // Test filter - initially exclude everything, then include from list
+  filter {
+    failOnNoMatchingTests = false
+  }
+
+  // Load inclusions from the fixtures jar at execution time
+  doFirst {
+    configurations.openhouseCompatibilityRuntime.resolve().each { file ->
+      if (file.name.contains('tables-test-fixtures')) {
+        zipTree(file).matching { include 'openhouse-iceberg-compatibility-tests.txt' }.each { f ->
+          f.eachLine { line ->
+            line = line.trim()
+            if (line && !line.startsWith('#')) {
+              // Replace # with . for Gradle test filter pattern
+              line = line.replace('#', '.')
+
+              // Append wildcard to handle parameterized tests
+              if (!line.endsWith('*')) {
+                line = line + '*'
+              }
+              filter.includeTestsMatching line
+            }
+          }
+        }
+      }
+    }
+  }
+}
