@@ -87,6 +87,14 @@ public class SparkReadConf {
         .parse();
   }
 
+  public boolean columnValueLineageEnabled() {
+    return confParser
+        .booleanConf()
+        .sessionConf(SparkSQLProperties.COLUMN_VALUE_LINEAGE_ENABLED)
+        .defaultValue(SparkSQLProperties.COLUMN_VALUE_LINEAGE_ENABLED_DEFAULT)
+        .parse();
+  }
+
   public Long snapshotId() {
     return confParser.longConf().option(SparkReadOptions.SNAPSHOT_ID).parseOptional();
   }

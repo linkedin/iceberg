@@ -58,6 +58,7 @@ import org.apache.iceberg.spark.SparkV2Filters;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -86,6 +87,13 @@ public class SparkScanBuilder
 
   private static final Logger LOG = LoggerFactory.getLogger(SparkScanBuilder.class);
   private static final Predicate[] NO_PREDICATES = new Predicate[0];
+
+  // Column-Value Lineage (CVL) table properties (user-settable lineage.columnValues.* namespace)
+  private static final String LINEAGE_COLUMN_VALUES_ENABLED = "lineage.columnValues.enabled";
+  private static final boolean LINEAGE_COLUMN_VALUES_ENABLED_DEFAULT = true;
+  private static final String LINEAGE_COLUMN_VALUES_COLUMNS = "lineage.columnValues.columns";
+  private static final String LINEAGE_COLUMN_VALUES_COLUMNS_DEFAULT = "datepartition";
+
   private StructType pushedAggregateSchema;
   private Scan localScan;
 
@@ -461,6 +469,15 @@ public class SparkScanBuilder
 
     scan = configureSplitPlanning(scan);
 
+    try {
+      List<String> statsColumns = lineageStatsColumns(expectedSchema);
+      if (!statsColumns.isEmpty()) {
+        scan = scan.includeColumnStats(statsColumns);
+      }
+    } catch (RuntimeException e) {
+      LOG.warn("Skipping Column-Value Lineage column-stats retention due to an error", e);
+    }
+
     return new SparkBatchQueryScan(
         spark,
         table,
@@ -469,6 +486,49 @@ public class SparkScanBuilder
         expectedSchema,
         filterExpressions,
         metricsReporter::scanReport);
+  }
+
+  /**
+   * Resolves the columns whose file-level stats (min/max bounds) must be retained on planned tasks so
+   * downstream Column-Value Lineage (CVL) can compute value bounds. Returns an empty list when CVL is
+   * disabled by the session flag or the per-table kill switch, keeping the read path unaffected.
+   */
+  private List<String> lineageStatsColumns(Schema expectedSchema) {
+    if (!readConf.columnValueLineageEnabled()) {
+      return ImmutableList.of();
+    }
+
+    boolean tableEnabled =
+        PropertyUtil.propertyAsBoolean(
+            table.properties(),
+            LINEAGE_COLUMN_VALUES_ENABLED,
+            LINEAGE_COLUMN_VALUES_ENABLED_DEFAULT);
+    if (!tableEnabled) {
+      return ImmutableList.of();
+    }
+
+    String configured =
+        table
+            .properties()
+            .getOrDefault(LINEAGE_COLUMN_VALUES_COLUMNS, LINEAGE_COLUMN_VALUES_COLUMNS_DEFAULT);
+
+    List<String> statsColumns = Lists.newArrayList();
+    for (String column : configured.split(",")) {
+      String name = column.trim();
+      if (name.isEmpty()) {
+        continue;
+      }
+
+      Types.NestedField field =
+          caseSensitive
+              ? expectedSchema.findField(name)
+              : expectedSchema.caseInsensitiveFindField(name);
+      if (field != null) {
+        statsColumns.add(field.name());
+      }
+    }
+
+    return statsColumns;
   }
 
   private Scan buildIncrementalAppendScan(long startSnapshotId, Long endSnapshotId) {

@@ -27,6 +27,10 @@ public class SparkSQLProperties {
   // Controls whether vectorized reads are enabled
   public static final String VECTORIZATION_ENABLED = "spark.sql.iceberg.vectorization.enabled";
 
+  // Controls whether Column-Value Lineage (CVL) column-stats retention is enabled for reads
+  public static final String COLUMN_VALUE_LINEAGE_ENABLED = "spark.lineage.columnValues.enabled";
+  public static final boolean COLUMN_VALUE_LINEAGE_ENABLED_DEFAULT = true;
+
   // Controls whether to perform the nullability check during writes
   public static final String CHECK_NULLABILITY = "spark.sql.iceberg.check-nullability";
   public static final boolean CHECK_NULLABILITY_DEFAULT = true;
