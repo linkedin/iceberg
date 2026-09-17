@@ -489,9 +489,10 @@ public class SparkScanBuilder
   }
 
   /**
-   * Resolves the columns whose file-level stats (min/max bounds) must be retained on planned tasks so
-   * downstream Column-Value Lineage (CVL) can compute value bounds. Returns an empty list when CVL is
-   * disabled by the session flag or the per-table kill switch, keeping the read path unaffected.
+   * Resolves the columns whose file-level stats (min/max bounds) must be retained on planned tasks
+   * so downstream Column-Value Lineage (CVL) can compute value bounds. Returns an empty list when
+   * CVL is disabled by the session flag or the per-table kill switch, keeping the read path
+   * unaffected.
    */
   private List<String> lineageStatsColumns(Schema expectedSchema) {
     if (!readConf.columnValueLineageEnabled()) {
