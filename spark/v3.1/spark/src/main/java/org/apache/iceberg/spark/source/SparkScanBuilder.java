@@ -160,10 +160,10 @@ public class SparkScanBuilder
    * files, so a consumer can read column-value bounds off the planned tasks without a second scan.
    *
    * <p>This is the version-agnostic control API: callers pass the columns they care about so the
-   * same call site works across Iceberg versions. Iceberg 1.2 has no per-column
-   * {@code includeColumnStats(Collection)} -- it can only retain stats for <b>all</b> columns -- so
-   * this overload accepts the column list purely for API consistency with newer versions and, when
-   * the list is non-empty, enables all-column stats via the no-arg {@code
+   * same call site works across Iceberg versions. Iceberg 1.2 has no per-column {@code
+   * includeColumnStats(Collection)} -- it can only retain stats for <b>all</b> columns -- so this
+   * overload accepts the column list purely for API consistency with newer versions and, when the
+   * list is non-empty, enables all-column stats via the no-arg {@code
    * org.apache.iceberg.Scan#includeColumnStats()} at plan time. An empty or null list is a no-op.
    *
    * @param columns the columns whose stats are wanted (used only as an on/off signal on 1.2)
