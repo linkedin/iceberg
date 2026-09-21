@@ -67,7 +67,6 @@ public class SparkScanBuilder
   private List<Expression> filterExpressions = null;
   private Filter[] pushedFilters = NO_FILTERS;
   private boolean ignoreResiduals = false;
-  private boolean includeColumnStats = false;
 
   SparkScanBuilder(
       SparkSession spark, Table table, Schema schema, CaseInsensitiveStringMap options) {
@@ -156,21 +155,21 @@ public class SparkScanBuilder
   }
 
   /**
-   * Requests that per-file column statistics (lower/upper bounds) be retained on the scanned data
-   * files, so a consumer can read column-value bounds off the planned tasks without a second scan.
+   * Control API (placeholder) for retaining per-file column statistics (lower/upper bounds) on the
+   * scanned data files, so a consumer can read column-value bounds off the planned tasks without a
+   * second scan. The signature is version-agnostic: callers pass the columns they care about so the
+   * same call site works across Iceberg versions (1.2 can only retain stats for <b>all</b> columns;
+   * newer versions honor the list per-column).
    *
-   * <p>This is the version-agnostic control API: callers pass the columns they care about so the
-   * same call site works across Iceberg versions. Iceberg 1.2 has no per-column {@code
-   * includeColumnStats(Collection)} -- it can only retain stats for <b>all</b> columns -- so this
-   * overload accepts the column list purely for API consistency with newer versions and, when the
-   * list is non-empty, enables all-column stats via the no-arg {@code
-   * org.apache.iceberg.Scan#includeColumnStats()} at plan time. An empty or null list is a no-op.
+   * <p>TODO: wire this up to enable stats retention at plan time once the performance benchmark is
+   * complete. Retaining all-column stats on 1.2 has an unmeasured memory / planning-time cost, so
+   * for now this only defines the API surface and is a no-op.
    *
-   * @param columns the columns whose stats are wanted (used only as an on/off signal on 1.2)
+   * @param columns the columns whose stats are wanted
    * @return this builder
    */
   public SparkScanBuilder includeColumnStats(Collection<String> columns) {
-    this.includeColumnStats = columns != null && !columns.isEmpty();
+    // TODO: retain stats at plan time pending the performance benchmark (see method javadoc).
     return this;
   }
 
@@ -190,7 +189,7 @@ public class SparkScanBuilder
   @Override
   public Scan build() {
     return new SparkBatchQueryScan(
-        spark, table, readConf, schemaWithMetadataColumns(), filterExpressions, includeColumnStats);
+        spark, table, readConf, schemaWithMetadataColumns(), filterExpressions);
   }
 
   public Scan buildMergeScan() {
