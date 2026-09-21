@@ -20,15 +20,14 @@ package org.apache.iceberg.spark.source;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionScanTask;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
-import org.apache.iceberg.spark.SparkReadOptions;
-import org.apache.iceberg.spark.SparkSQLProperties;
 import org.apache.iceberg.spark.TestBaseWithCatalog;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.junit.jupiter.api.AfterEach;
@@ -45,7 +44,6 @@ public class TestReportColumnStats extends TestBaseWithCatalog {
   @AfterEach
   public void cleanup() {
     sql("DROP TABLE IF EXISTS %s", tableName);
-    spark.conf().unset(SparkSQLProperties.REPORT_COLUMN_STATS);
     spark.conf().unset("spark.sql.caseSensitive");
   }
 
@@ -60,9 +58,13 @@ public class TestReportColumnStats extends TestBaseWithCatalog {
     return validationCatalog.loadTable(tableIdent);
   }
 
-  private Set<Integer> boundedColumnIds(CaseInsensitiveStringMap options) {
+  private Set<Integer> boundedColumnIds(Collection<String> requestedColumns) {
     Table table = table();
-    SparkScanBuilder scanBuilder = new SparkScanBuilder(spark, table, options);
+    SparkScanBuilder scanBuilder =
+        new SparkScanBuilder(spark, table, CaseInsensitiveStringMap.empty());
+    if (requestedColumns != null) {
+      scanBuilder.includeColumnStats(requestedColumns);
+    }
     SparkBatchQueryScan scan = (SparkBatchQueryScan) scanBuilder.build();
 
     Set<Integer> columnIds = Sets.newHashSet();
@@ -77,11 +79,6 @@ public class TestReportColumnStats extends TestBaseWithCatalog {
     return columnIds;
   }
 
-  private CaseInsensitiveStringMap reportOption(String columns) {
-    return new CaseInsensitiveStringMap(
-        ImmutableMap.of(SparkReadOptions.REPORT_COLUMN_STATS, columns));
-  }
-
   private int fieldId(String column) {
     return table().schema().findField(column).fieldId();
   }
@@ -89,44 +86,42 @@ public class TestReportColumnStats extends TestBaseWithCatalog {
   @TestTemplate
   public void testNoColumnsRequestedRetainsNoStats() {
     createTable();
-    assertThat(boundedColumnIds(CaseInsensitiveStringMap.empty()))
-        .doesNotContain(fieldId("datepartition"));
+    assertThat(boundedColumnIds(null)).doesNotContain(fieldId("datepartition"));
+  }
+
+  @TestTemplate
+  public void testEmptyRequestRetainsNoStats() {
+    createTable();
+    assertThat(boundedColumnIds(ImmutableList.of())).doesNotContain(fieldId("datepartition"));
   }
 
   @TestTemplate
   public void testRequestedColumnStatsRetained() {
     createTable();
-    Set<Integer> boundedIds = boundedColumnIds(reportOption("datepartition"));
+    Set<Integer> boundedIds = boundedColumnIds(ImmutableList.of("datepartition"));
     assertThat(boundedIds).contains(fieldId("datepartition"));
     assertThat(boundedIds).doesNotContain(fieldId("id"));
   }
 
   @TestTemplate
-  public void testRequestedViaSessionConf() {
-    createTable();
-    spark.conf().set(SparkSQLProperties.REPORT_COLUMN_STATS, "datepartition");
-    assertThat(boundedColumnIds(CaseInsensitiveStringMap.empty()))
-        .contains(fieldId("datepartition"));
-  }
-
-  @TestTemplate
   public void testUnknownColumnIsIgnored() {
     createTable();
-    assertThat(boundedColumnIds(reportOption("datepartition,does_not_exist")))
+    assertThat(boundedColumnIds(ImmutableList.of("datepartition", "does_not_exist")))
         .contains(fieldId("datepartition"));
   }
 
   @TestTemplate
   public void testColumnResolvesCaseInsensitivelyByDefault() {
     createTable();
-    assertThat(boundedColumnIds(reportOption("Datepartition"))).contains(fieldId("datepartition"));
+    assertThat(boundedColumnIds(ImmutableList.of("Datepartition")))
+        .contains(fieldId("datepartition"));
   }
 
   @TestTemplate
   public void testCaseSensitiveModeSkipsMismatchedCase() {
     createTable();
     spark.conf().set("spark.sql.caseSensitive", "true");
-    assertThat(boundedColumnIds(reportOption("Datepartition")))
+    assertThat(boundedColumnIds(ImmutableList.of("Datepartition")))
         .doesNotContain(fieldId("datepartition"));
   }
 }

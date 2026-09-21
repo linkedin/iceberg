@@ -20,15 +20,12 @@ package org.apache.iceberg.spark;
 
 import static org.apache.iceberg.PlanningMode.LOCAL;
 
-import java.util.List;
 import java.util.Map;
 import org.apache.iceberg.PlanningMode;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.hadoop.Util;
-import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
-import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.spark.SparkConf;
 import org.apache.spark.sql.SparkSession;
@@ -88,30 +85,6 @@ public class SparkReadConf {
         .sessionConf(SparkSQLProperties.LOCALITY)
         .defaultValue(defaultValue)
         .parse();
-  }
-
-  public List<String> reportColumnStatsColumns() {
-    String value =
-        confParser
-            .stringConf()
-            .option(SparkReadOptions.REPORT_COLUMN_STATS)
-            .sessionConf(SparkSQLProperties.REPORT_COLUMN_STATS)
-            .defaultValue("")
-            .parse();
-
-    if (value.isEmpty()) {
-      return ImmutableList.of();
-    }
-
-    List<String> columns = Lists.newArrayList();
-    for (String column : value.split(",")) {
-      String name = column.trim();
-      if (!name.isEmpty()) {
-        columns.add(name);
-      }
-    }
-
-    return columns;
   }
 
   public Long snapshotId() {

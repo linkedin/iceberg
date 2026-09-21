@@ -95,8 +95,4 @@ public class SparkReadOptions {
   public static final String TIMESTAMP_AS_OF = "timestampAsOf";
 
   public static final String AGGREGATE_PUSH_DOWN_ENABLED = "aggregate-push-down-enabled";
-
-  // Columns for which per-file column stats (min/max bounds) are retained on planned scan tasks.
-  // Comma-separated list of column names.
-  public static final String REPORT_COLUMN_STATS = "report-column-stats";
 }

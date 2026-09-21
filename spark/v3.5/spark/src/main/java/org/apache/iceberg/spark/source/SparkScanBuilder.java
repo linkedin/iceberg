@@ -19,6 +19,7 @@
 package org.apache.iceberg.spark.source;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -86,7 +87,6 @@ public class SparkScanBuilder
 
   private static final Logger LOG = LoggerFactory.getLogger(SparkScanBuilder.class);
   private static final Predicate[] NO_PREDICATES = new Predicate[0];
-
   private StructType pushedAggregateSchema;
   private Scan localScan;
 
@@ -101,6 +101,7 @@ public class SparkScanBuilder
   private boolean caseSensitive;
   private List<Expression> filterExpressions = null;
   private Predicate[] pushedPredicates = NO_PREDICATES;
+  private Collection<String> columnStatsColumns = ImmutableList.of();
 
   SparkScanBuilder(
       SparkSession spark,
@@ -140,6 +141,25 @@ public class SparkScanBuilder
 
   public SparkScanBuilder caseSensitive(boolean isCaseSensitive) {
     this.caseSensitive = isCaseSensitive;
+    return this;
+  }
+
+  /**
+   * Requests that per-file column statistics (lower/upper bounds) be retained on the scanned data
+   * files for the given columns, so a consumer can read column-value bounds off the planned tasks
+   * without a second scan.
+   *
+   * <p>This is the version-agnostic control API: callers pass the columns they care about so the
+   * same call site works across Iceberg versions. On Iceberg 1.5 the columns map to the per-column
+   * {@code org.apache.iceberg.Scan#includeColumnStats(Collection)}; column names are resolved
+   * against the scan schema honoring case sensitivity, and unknown columns are ignored. An empty or
+   * null list is a no-op.
+   *
+   * @param columns the columns whose stats should be retained
+   * @return this builder
+   */
+  public SparkScanBuilder includeColumnStats(Collection<String> columns) {
+    this.columnStatsColumns = columns == null ? ImmutableList.of() : columns;
     return this;
   }
 
@@ -463,7 +483,7 @@ public class SparkScanBuilder
     scan = configureSplitPlanning(scan);
 
     try {
-      List<String> statsColumns = reportColumnStatsColumns(expectedSchema);
+      List<String> statsColumns = resolveColumnStatsColumns(expectedSchema);
       if (!statsColumns.isEmpty()) {
         scan = scan.includeColumnStats(statsColumns);
       }
@@ -482,19 +502,17 @@ public class SparkScanBuilder
   }
 
   /**
-   * Resolves the columns whose file-level stats (min/max bounds) must be retained on planned tasks,
-   * as requested by the {@code report-column-stats} read option / session config. Configured names
-   * are resolved against the scan schema honoring case sensitivity and returned as canonical schema
-   * names; unknown columns are ignored. Returns an empty list when nothing is requested.
+   * Resolves the columns requested via {@link #includeColumnStats(Collection)} against the scan
+   * schema, honoring case sensitivity and returning canonical schema names. Unknown columns are
+   * ignored. Returns an empty list when nothing was requested.
    */
-  private List<String> reportColumnStatsColumns(Schema expectedSchema) {
-    List<String> requested = readConf.reportColumnStatsColumns();
-    if (requested.isEmpty()) {
+  private List<String> resolveColumnStatsColumns(Schema expectedSchema) {
+    if (columnStatsColumns.isEmpty()) {
       return ImmutableList.of();
     }
 
     List<String> statsColumns = Lists.newArrayList();
-    for (String name : requested) {
+    for (String name : columnStatsColumns) {
       Types.NestedField field =
           caseSensitive
               ? expectedSchema.findField(name)
