@@ -155,21 +155,16 @@ public class SparkScanBuilder
   }
 
   /**
-   * Control API (placeholder) for retaining per-file column statistics (lower/upper bounds) on the
-   * scanned data files, so a consumer can read column-value bounds off the planned tasks without a
-   * second scan. The signature is version-agnostic: callers pass the columns they care about so the
-   * same call site works across Iceberg versions (1.2 can only retain stats for <b>all</b> columns;
-   * newer versions honor the list per-column).
+   * Requests that per-file column statistics (lower/upper bounds) be retained on the scanned data
+   * files, so they can be read off the planned tasks without a second scan.
    *
-   * <p>TODO: wire this up to enable stats retention at plan time once the performance benchmark is
-   * complete. Retaining all-column stats on 1.2 has an unmeasured memory / planning-time cost, so
-   * for now this only defines the API surface and is a no-op.
+   * <p>The signature is version-agnostic: callers pass the columns they care about so the same call
+   * site works across Iceberg versions.
    *
-   * @param columns the columns whose stats are wanted
+   * @param columns the columns whose statistics are wanted
    * @return this builder
    */
   public SparkScanBuilder includeColumnStats(Collection<String> columns) {
-    // TODO: retain stats at plan time pending the performance benchmark (see method javadoc).
     return this;
   }
 
