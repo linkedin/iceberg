@@ -43,6 +43,7 @@ class SparkBatchQueryScan extends SparkBatchScan {
   private final Long splitSize;
   private final Integer splitLookback;
   private final Long splitOpenFileCost;
+  private final boolean includeColumnStats;
 
   private List<CombinedScanTask> tasks = null; // lazy cache of tasks
 
@@ -51,9 +52,12 @@ class SparkBatchQueryScan extends SparkBatchScan {
       Table table,
       SparkReadConf readConf,
       Schema expectedSchema,
-      List<Expression> filters) {
+      List<Expression> filters,
+      boolean includeColumnStats) {
 
     super(spark, table, readConf, expectedSchema, filters);
+
+    this.includeColumnStats = includeColumnStats;
 
     this.snapshotId = readConf.snapshotId();
     this.asOfTimestamp = readConf.asOfTimestamp();
@@ -119,6 +123,12 @@ class SparkBatchQueryScan extends SparkBatchScan {
 
       for (Expression filter : filterExpressions()) {
         scan = scan.filter(filter);
+      }
+
+      if (includeColumnStats) {
+        // Iceberg 1.2 only supports all-column stats (no per-column overload); retain bounds on the
+        // planned data files so a consumer can read column-value bounds without a second scan.
+        scan = scan.includeColumnStats();
       }
 
       try (CloseableIterable<CombinedScanTask> tasksIterable = scan.planTasks()) {

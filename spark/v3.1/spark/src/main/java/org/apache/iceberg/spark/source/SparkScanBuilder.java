@@ -18,6 +18,7 @@
  */
 package org.apache.iceberg.spark.source;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -66,6 +67,7 @@ public class SparkScanBuilder
   private List<Expression> filterExpressions = null;
   private Filter[] pushedFilters = NO_FILTERS;
   private boolean ignoreResiduals = false;
+  private boolean includeColumnStats = false;
 
   SparkScanBuilder(
       SparkSession spark, Table table, Schema schema, CaseInsensitiveStringMap options) {
@@ -153,6 +155,25 @@ public class SparkScanBuilder
     return this;
   }
 
+  /**
+   * Requests that per-file column statistics (lower/upper bounds) be retained on the scanned data
+   * files, so a consumer can read column-value bounds off the planned tasks without a second scan.
+   *
+   * <p>This is the version-agnostic control API: callers pass the columns they care about so the
+   * same call site works across Iceberg versions. Iceberg 1.2 has no per-column
+   * {@code includeColumnStats(Collection)} -- it can only retain stats for <b>all</b> columns -- so
+   * this overload accepts the column list purely for API consistency with newer versions and, when
+   * the list is non-empty, enables all-column stats via the no-arg {@code
+   * org.apache.iceberg.Scan#includeColumnStats()} at plan time. An empty or null list is a no-op.
+   *
+   * @param columns the columns whose stats are wanted (used only as an on/off signal on 1.2)
+   * @return this builder
+   */
+  public SparkScanBuilder includeColumnStats(Collection<String> columns) {
+    this.includeColumnStats = columns != null && !columns.isEmpty();
+    return this;
+  }
+
   private Schema schemaWithMetadataColumns() {
     // metadata columns
     List<Types.NestedField> fields =
@@ -169,7 +190,7 @@ public class SparkScanBuilder
   @Override
   public Scan build() {
     return new SparkBatchQueryScan(
-        spark, table, readConf, schemaWithMetadataColumns(), filterExpressions);
+        spark, table, readConf, schemaWithMetadataColumns(), filterExpressions, includeColumnStats);
   }
 
   public Scan buildMergeScan() {
