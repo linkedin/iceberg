@@ -126,9 +126,12 @@ class SparkBatchQueryScan extends SparkBatchScan {
       }
 
       if (includeColumnStats) {
-        // Iceberg 1.2 only supports all-column stats (no per-column overload); retain bounds on the
-        // planned data files so a consumer can read column-value bounds without a second scan.
-        scan = scan.includeColumnStats();
+        // Iceberg 1.2 only supports all-column stats (no per-column overload); retaining bounds on
+        // the planned data files lets a consumer read column-value bounds without a second scan.
+        // TODO: enable once the performance benchmark is complete. Retaining all-column stats has a
+        // memory / planning-time cost on 1.2 that has not been measured yet, so the opt-in is
+        // plumbed through the builder but the actual call is disabled pending that benchmark.
+        // scan = scan.includeColumnStats();
       }
 
       try (CloseableIterable<CombinedScanTask> tasksIterable = scan.planTasks()) {
