@@ -24,9 +24,8 @@ if (jdkVersion == '8' && sparkVersions.contains("2.4")) {
   apply from: file("$projectDir/v2.4/build.gradle")
 }
 
-if (sparkVersions.contains("3.1")) {
-  apply from: file("$projectDir/v3.1/build.gradle")
-}
+// Spark 3.1 is always included for this backport branch.
+apply from: file("$projectDir/v3.1/build.gradle")
 
 if (sparkVersions.contains("3.2")) {
   apply from: file("$projectDir/v3.2/build.gradle")
