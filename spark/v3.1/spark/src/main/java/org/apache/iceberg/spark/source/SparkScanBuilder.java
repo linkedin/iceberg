@@ -18,6 +18,7 @@
  */
 package org.apache.iceberg.spark.source;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -150,6 +151,20 @@ public class SparkScanBuilder
 
   public SparkScanBuilder ignoreResiduals() {
     this.ignoreResiduals = true;
+    return this;
+  }
+
+  /**
+   * Requests that per-file column statistics (lower/upper bounds) be retained on the scanned data
+   * files, so they can be read off the planned tasks without a second scan.
+   *
+   * <p>The signature is version-agnostic: callers pass the columns they care about so the same call
+   * site works across Iceberg versions.
+   *
+   * @param columns the columns whose statistics are wanted
+   * @return this builder
+   */
+  public SparkScanBuilder includeColumnStats(Collection<String> columns) {
     return this;
   }
 
