@@ -85,6 +85,25 @@ public class TestTypeUtil {
   }
 
   @Test
+  public void testAssignIdsPreservesDefaults() {
+    Types.NestedField field =
+        Types.NestedField.optional("country")
+            .withId(10)
+            .ofType(Types.StringType.get())
+            .withInitialDefault(Expressions.lit("US"))
+            .withWriteDefault(Expressions.lit("CA"))
+            .build();
+
+    Types.StructType reassigned =
+        TypeUtil.assignIds(Types.StructType.of(field), id -> id + 1).asStructType();
+    Types.NestedField reassignedField = reassigned.field(11);
+
+    assertThat(reassignedField.fieldId()).isEqualTo(11);
+    assertThat(reassignedField.initialDefault()).isEqualTo("US");
+    assertThat(reassignedField.writeDefault()).isEqualTo("CA");
+  }
+
+  @Test
   public void testAssignIncreasingFreshIdWithIdentifier() {
     Schema schema =
         new Schema(
