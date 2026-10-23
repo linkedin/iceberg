@@ -129,9 +129,8 @@ public class PartitionSpec implements Serializable {
           List<Types.NestedField> structFields = Lists.newArrayListWithExpectedSize(fields.length);
 
           for (PartitionField field : fields) {
-            Type sourceType = schema.findType(field.sourceId());
-            Type resultType = field.transform().getResultType(sourceType);
-            structFields.add(Types.NestedField.optional(field.fieldId(), field.name(), resultType));
+            structFields.add(
+                Types.NestedField.optional(field.fieldId(), field.name(), resultType(field)));
           }
 
           this.lazyPartitionType = Types.StructType.of(structFields);
@@ -176,9 +175,7 @@ public class PartitionSpec implements Serializable {
             if (field.transform() instanceof UnknownTransform) {
               classes[i] = Object.class;
             } else {
-              Type sourceType = schema.findType(field.sourceId());
-              Type result = field.transform().getResultType(sourceType);
-              classes[i] = result.typeId().javaClass();
+              classes[i] = resultType(field).typeId().javaClass();
             }
           }
 
@@ -188,6 +185,15 @@ public class PartitionSpec implements Serializable {
     }
 
     return lazyJavaClasses;
+  }
+
+  private Type resultType(PartitionField field) {
+    Type sourceType = schema.findType(field.sourceId());
+    if (sourceType == null) {
+      // Fixed-result transforms still resolve when their source column has been dropped.
+      sourceType = Types.UnknownType.get();
+    }
+    return field.transform().getResultType(sourceType);
   }
 
   @SuppressWarnings("unchecked")
@@ -565,8 +571,12 @@ public class PartitionSpec implements Serializable {
     }
 
     public PartitionSpec build() {
+      return build(false);
+    }
+
+    public PartitionSpec build(boolean allowMissingFields) {
       PartitionSpec spec = buildUnchecked();
-      checkCompatibility(spec, schema);
+      checkCompatibility(spec, schema, allowMissingFields);
       return spec;
     }
 
@@ -576,9 +586,16 @@ public class PartitionSpec implements Serializable {
   }
 
   static void checkCompatibility(PartitionSpec spec, Schema schema) {
+    checkCompatibility(spec, schema, false);
+  }
+
+  static void checkCompatibility(PartitionSpec spec, Schema schema, boolean allowMissingFields) {
     for (PartitionField field : spec.fields) {
       Type sourceType = schema.findType(field.sourceId());
       Transform<?, ?> transform = field.transform();
+      if (allowMissingFields && sourceType == null) {
+        continue;
+      }
       // In the case of a Version 1 partition-spec field gets deleted,
       // it is replaced with a void transform, see:
       // https://iceberg.apache.org/spec/#partition-transforms

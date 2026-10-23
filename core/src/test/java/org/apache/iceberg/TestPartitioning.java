@@ -19,6 +19,7 @@
 package org.apache.iceberg;
 
 import static org.apache.iceberg.types.Types.NestedField.required;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
 import java.io.IOException;
@@ -36,6 +37,26 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 public class TestPartitioning {
+
+  @Test
+  public void testDroppedSourceTypesFromUpstreamBackport() {
+    Schema schema =
+        new Schema(
+            Types.NestedField.optional(1, "id", Types.LongType.get()),
+            Types.NestedField.optional(2, "data", Types.StringType.get()));
+    for (PartitionSpec spec :
+        java.util.Arrays.asList(
+            PartitionSpec.builderFor(schema).identity("id").build(),
+            PartitionSpec.builderFor(schema).bucket("id", 8).build(),
+            PartitionSpec.builderFor(schema).truncate("id", 10).build())) {
+      PartitionSpec restored =
+          PartitionSpecParser.fromJson(schema.select("data"), PartitionSpecParser.toJson(spec));
+      boolean bucket = spec.fields().get(0).transform().toString().startsWith("bucket");
+      assertThat(restored.partitionType().fields().get(0).type())
+          .isEqualTo(bucket ? Types.IntegerType.get() : Types.UnknownType.get());
+      assertThat(restored.javaClasses()[0]).isEqualTo(bucket ? Integer.class : Object.class);
+    }
+  }
 
   private static final int V1_FORMAT_VERSION = 1;
   private static final int V2_FORMAT_VERSION = 2;

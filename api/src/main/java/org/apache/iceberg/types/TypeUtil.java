@@ -509,6 +509,8 @@ public class TypeUtil {
         return ((Types.FixedType) type).length();
       case BINARY:
         return 80;
+      case UNKNOWN:
+        return 0;
       case DECIMAL:
         // 12 (header) + (12 + 12 + 4) (BigInteger) + 4 (scale) = 44 bytes
         return 44;

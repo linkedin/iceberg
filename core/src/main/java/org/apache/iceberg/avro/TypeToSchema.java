@@ -191,6 +191,9 @@ abstract class TypeToSchema extends TypeUtil.SchemaVisitor<Schema> {
   public Schema primitive(Type.PrimitiveType primitive) {
     Schema primitiveSchema;
     switch (primitive.typeId()) {
+      case UNKNOWN:
+        primitiveSchema = Schema.create(Schema.Type.NULL);
+        break;
       case BOOLEAN:
         primitiveSchema = BOOLEAN_SCHEMA;
         break;

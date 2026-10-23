@@ -239,7 +239,8 @@ public class Partitioning {
    */
   public static StructType partitionType(Table table) {
     Collection<PartitionSpec> specs = table.specs().values();
-    return buildPartitionProjectionType("table partition", specs, allFieldIds(specs));
+    return buildPartitionProjectionType(
+        "table partition", specs, allActiveFieldIds(table.schema(), specs));
   }
 
   private static StructType buildPartitionProjectionType(
@@ -337,9 +338,10 @@ public class Partitioning {
   }
 
   // collects IDs of all partition field used across specs
-  private static Set<Integer> allFieldIds(Collection<PartitionSpec> specs) {
+  private static Set<Integer> allActiveFieldIds(Schema schema, Collection<PartitionSpec> specs) {
     return FluentIterable.from(specs)
         .transformAndConcat(PartitionSpec::fields)
+        .filter(field -> schema.findField(field.sourceId()) != null)
         .transform(PartitionField::fieldId)
         .toSet();
   }

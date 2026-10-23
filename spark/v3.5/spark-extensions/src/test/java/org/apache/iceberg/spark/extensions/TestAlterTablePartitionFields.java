@@ -66,6 +66,29 @@ public class TestAlterTablePartitionFields extends ExtensionsTestBase {
   }
 
   @TestTemplate
+  public void testDropPartitionSourceAndDelete() {
+    for (String partitioning : new String[] {"id", "bucket(8, id)", "truncate(10, id)"}) {
+      sql("DROP TABLE IF EXISTS %s", tableName);
+      sql(
+          "CREATE TABLE %s (id BIGINT, data STRING) USING iceberg PARTITIONED BY (%s) "
+              + "TBLPROPERTIES ('format-version'='%s')",
+          tableName, partitioning, formatVersion);
+      sql("INSERT INTO %s VALUES (1, 'a'), (2, 'b')", tableName);
+      sql("ALTER TABLE %s DROP PARTITION FIELD %s", tableName, partitioning);
+      sql("ALTER TABLE %s DROP COLUMN id", tableName);
+      assertEquals(
+          "Dropping the source column preserves current data",
+          sql("SELECT 'a' UNION ALL SELECT 'b' ORDER BY 1"),
+          sql("SELECT data FROM %s ORDER BY data", tableName));
+      sql("DELETE FROM %s WHERE data = 'a'", tableName);
+      assertEquals(
+          "Deletes work with historical partition specs",
+          sql("SELECT 'b'"),
+          sql("SELECT data FROM %s", tableName));
+    }
+  }
+
+  @TestTemplate
   public void testAddIdentityPartition() {
     createTable("id bigint NOT NULL, category string, ts timestamp, data string");
     Table table = validationCatalog.loadTable(tableIdent);

@@ -28,6 +28,12 @@ import org.junit.jupiter.api.Test;
 
 public class TestSerializableTypes {
   @Test
+  public void testUnknownType() throws Exception {
+    assertThat(TestHelpers.roundTripSerialize(Types.UnknownType.get()))
+        .isEqualTo(Types.UnknownType.get());
+  }
+
+  @Test
   public void testIdentityTypes() throws Exception {
     // these types make a strong guarantee than equality, instances are identical
     Type[] identityPrimitives =

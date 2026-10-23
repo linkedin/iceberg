@@ -41,7 +41,7 @@ public class TestTypes {
         .isEqualTo(Types.DecimalType.of(2, 3));
 
     Assertions.assertThatExceptionOfType(IllegalArgumentException.class)
-        .isThrownBy(() -> Types.fromPrimitiveString("Unknown"))
-        .withMessageContaining("Unknown");
+        .isThrownBy(() -> Types.fromPrimitiveString("abcdefghij"))
+        .withMessageContaining("abcdefghij");
   }
 }

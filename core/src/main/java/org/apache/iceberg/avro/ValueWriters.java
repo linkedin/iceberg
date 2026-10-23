@@ -126,13 +126,14 @@ public class ValueWriters {
     return new RecordWriter(writers);
   }
 
-  private static class NullWriter implements ValueWriter<Void> {
-    private static final NullWriter INSTANCE = new NullWriter();
+  private static class NullWriter implements ValueWriter<Object> {
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static final ValueWriter<Void> INSTANCE = (ValueWriter) new NullWriter();
 
     private NullWriter() {}
 
     @Override
-    public void write(Void ignored, Encoder encoder) throws IOException {
+    public void write(Object ignored, Encoder encoder) throws IOException {
       encoder.writeNull();
     }
   }

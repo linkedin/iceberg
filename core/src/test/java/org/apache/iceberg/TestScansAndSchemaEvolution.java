@@ -29,6 +29,7 @@ import org.apache.iceberg.avro.Avro;
 import org.apache.iceberg.avro.RandomAvroData;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.inmemory.InMemoryOutputFile;
+import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileAppender;
 import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
@@ -103,6 +104,7 @@ public class TestScansAndSchemaEvolution {
     DataFile fileTwo = createDataFile("two");
 
     table.newAppend().appendFile(fileOne).appendFile(fileTwo).commit();
+    long firstSnapshotId = table.currentSnapshot().snapshotId();
 
     List<FileScanTask> tasks =
         Lists.newArrayList(table.newScan().filter(Expressions.equal("part", "one")).planFiles());
@@ -115,5 +117,48 @@ public class TestScansAndSchemaEvolution {
     tasks = Lists.newArrayList(table.newScan().filter(Expressions.equal("p", "one")).planFiles());
 
     Assert.assertEquals("Should produce 1 matching file task", 1, tasks.size());
+    table.newAppend().appendFile(createDataFile("three")).commit();
+    try (CloseableIterable<FileScanTask> historical =
+        table
+            .newScan()
+            .useSnapshot(firstSnapshotId)
+            .filter(Expressions.equal("part", "one"))
+            .planFiles()) {
+      Assert.assertEquals(1, Lists.newArrayList(historical).size());
+    }
+  }
+
+  @Test
+  public void testPartitionSourceDropTimeTravel() throws IOException {
+    File location = temp.newFolder();
+    Assert.assertTrue(location.delete());
+    Table table = TestTables.create(location, "test", SCHEMA, SPEC, formatVersion);
+    DataFile fileOne = createDataFile("one");
+    table.newAppend().appendFile(fileOne).appendFile(createDataFile("two")).commit();
+    long snapshotId = table.currentSnapshot().snapshotId();
+    table.updateSpec().removeField("part").commit();
+    table.updateSchema().deleteColumn("part").commit();
+    table
+        .newAppend()
+        .appendFile(
+            DataFiles.builder(table.spec())
+                .withPath("/new.avro")
+                .withPartition(new PartitionData(table.spec().partitionType()))
+                .withFileSizeInBytes(10)
+                .withRecordCount(1)
+                .build())
+        .commit();
+
+    try (CloseableIterable<FileScanTask> tasks =
+        table
+            .newScan()
+            .useSnapshot(snapshotId)
+            .filter(Expressions.equal("part", "one"))
+            .planFiles()) {
+      List<FileScanTask> planned = Lists.newArrayList(tasks);
+      Assert.assertEquals(
+          "Historical partition filter should prune the other file", 1, planned.size());
+      Assert.assertEquals(fileOne.path().toString(), planned.get(0).file().path().toString());
+    }
   }
 }
