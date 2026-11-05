@@ -59,6 +59,31 @@ public enum SparkCatalogConfig {
   private final String implementation;
   private final Map<String, String> properties;
 
+  private static final Object[] DYNAMIC_CONFIG = loadDynamicConfig();
+
+  private static Object[] loadDynamicConfig() {
+    String providerClass = System.getProperty("iceberg.test.catalog.provider");
+    if (providerClass != null && !providerClass.isEmpty()) {
+      try {
+        TestCatalogProvider provider =
+            (TestCatalogProvider)
+                Class.forName(providerClass).getDeclaredConstructor().newInstance();
+        Object[][] configs = provider.getCatalogConfigurations();
+        if (configs != null && configs.length > 0) {
+          for (Object[] config : configs) {
+            if ("spark_catalog".equals(config[0])) {
+              return config;
+            }
+          }
+          return configs[0];
+        }
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to load catalog provider: " + providerClass, e);
+      }
+    }
+    return null;
+  }
+
   SparkCatalogConfig(String catalogName, String implementation, Map<String, String> properties) {
     this.catalogName = catalogName;
     this.implementation = implementation;
@@ -70,10 +95,16 @@ public enum SparkCatalogConfig {
   }
 
   public String implementation() {
+    if (this == SPARK && DYNAMIC_CONFIG != null) {
+      return (String) DYNAMIC_CONFIG[1];
+    }
     return implementation;
   }
 
   public Map<String, String> properties() {
+    if (this == SPARK && DYNAMIC_CONFIG != null) {
+      return (Map<String, String>) DYNAMIC_CONFIG[2];
+    }
     return properties;
   }
 }

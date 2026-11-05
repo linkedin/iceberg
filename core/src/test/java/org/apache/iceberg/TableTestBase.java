@@ -43,6 +43,7 @@ import org.apache.iceberg.relocated.com.google.common.io.Files;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -171,6 +172,10 @@ public class TableTestBase {
   protected File metadataDir = null;
   public TestTables.TestTable table = null;
 
+  // External table provider loaded via reflection to avoid compile-time dependency
+  private static final Object EXTERNAL_TABLE_PROVIDER = initializeExternalTableProvider();
+  private static final java.lang.reflect.Method CREATE_TABLE_METHOD = getCreateTableMethod();
+
   protected final int formatVersion;
 
   @SuppressWarnings("checkstyle:MemberName")
@@ -199,26 +204,50 @@ public class TableTestBase {
     TestTables.clearTables();
   }
 
+  @AfterClass
+  public static void shutdownExternalTableProvider() {
+    if (EXTERNAL_TABLE_PROVIDER != null) {
+      try {
+        java.lang.reflect.Method afterAll =
+            EXTERNAL_TABLE_PROVIDER.getClass().getMethod("afterAll");
+        afterAll.invoke(EXTERNAL_TABLE_PROVIDER);
+      } catch (Exception e) {
+        throw new RuntimeException(
+            "Failed to shutdown external table provider: "
+                + EXTERNAL_TABLE_PROVIDER.getClass().getName(),
+            e);
+      }
+    }
+  }
+
   List<File> listManifestFiles() {
     return listManifestFiles(tableDir);
   }
 
   List<File> listManifestFiles(File tableDirToList) {
-    return Lists.newArrayList(
+    File[] files =
         new File(tableDirToList, "metadata")
             .listFiles(
                 (dir, name) ->
                     !name.startsWith("snap")
-                        && Files.getFileExtension(name).equalsIgnoreCase("avro")));
+                        && Files.getFileExtension(name).equalsIgnoreCase("avro"));
+    if (files == null) {
+      return Lists.newArrayList();
+    }
+    return Lists.newArrayList(files);
   }
 
   List<File> listManifestLists(String tableDirToList) {
-    return Lists.newArrayList(
+    File[] files =
         new File(tableDirToList, "metadata")
             .listFiles(
                 (dir, name) ->
                     name.startsWith("snap")
-                        && Files.getFileExtension(name).equalsIgnoreCase("avro")));
+                        && Files.getFileExtension(name).equalsIgnoreCase("avro"));
+    if (files == null) {
+      return Lists.newArrayList();
+    }
+    return Lists.newArrayList(files);
   }
 
   public static long countAllMetadataFiles(File tableDir) {
@@ -228,19 +257,60 @@ public class TableTestBase {
   }
 
   protected TestTables.TestTable create(Schema schema, PartitionSpec spec) {
+    if (EXTERNAL_TABLE_PROVIDER != null && CREATE_TABLE_METHOD != null) {
+      try {
+        Object result =
+            CREATE_TABLE_METHOD.invoke(
+                EXTERNAL_TABLE_PROVIDER, tableDir, "test", schema, spec, formatVersion);
+        return (TestTables.TestTable) result;
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to create table via external provider", e);
+      }
+    }
     return TestTables.create(tableDir, "test", schema, spec, formatVersion);
   }
 
+  private static Object initializeExternalTableProvider() {
+    String providerClass = System.getProperty("iceberg.test.table.provider");
+    if (providerClass == null || providerClass.isEmpty()) {
+      return null;
+    }
+
+    try {
+      Object provider = Class.forName(providerClass).getDeclaredConstructor().newInstance();
+      // Call beforeAll() via reflection
+      java.lang.reflect.Method beforeAll = provider.getClass().getMethod("beforeAll");
+      beforeAll.invoke(provider);
+      return provider;
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to initialize " + providerClass, e);
+    }
+  }
+
+  private static java.lang.reflect.Method getCreateTableMethod() {
+    if (EXTERNAL_TABLE_PROVIDER == null) {
+      return null;
+    }
+    try {
+      return EXTERNAL_TABLE_PROVIDER
+          .getClass()
+          .getMethod("createTable", File.class, String.class, Schema.class, PartitionSpec.class, int.class);
+    } catch (NoSuchMethodException e) {
+      throw new RuntimeException(
+          "External table provider must have createTable(File, String, Schema, PartitionSpec, int) method", e);
+    }
+  }
+
   TestTables.TestTable load() {
-    return TestTables.load(tableDir, "test");
+    return TestTables.load(tableDir, table.name());
   }
 
   Integer version() {
-    return TestTables.metadataVersion("test");
+    return TestTables.metadataVersion(table.name());
   }
 
   public TableMetadata readMetadata() {
-    return TestTables.readMetadata("test");
+    return TestTables.readMetadata(table.name());
   }
 
   ManifestFile writeManifest(DataFile... files) throws IOException {

@@ -57,6 +57,12 @@ apply plugin: "org.shipkit.shipkit-github-release"
 String scalaVersion = System.getProperty("scalaVersion") != null ? System.getProperty("scalaVersion") : System.getProperty("defaultScalaVersion")
 String sparkVersionsString = System.getProperty("sparkVersions") != null ? System.getProperty("sparkVersions") : System.getProperty("defaultSparkVersions")
 List<String> sparkVersions = sparkVersionsString != null && !sparkVersionsString.isEmpty() ? sparkVersionsString.split(",") : []
+// OpenHouse compatibility testing configuration
+String openHouseCompatibilitySparkMajorVersion = findProperty("openhouseCompatibilitySparkMajorVersion") ?: '3.5'
+ext {
+  openHouseCompatibilityCoordinate = findProperty("openhouseCompatibilityCoordinate") ?:
+      'com.linkedin.openhouse:tables-test-fixtures-iceberg-1.5_2.12:0.0.+:uber'
+}
 
 try {
   // apply these plugins in a try-catch block so that we can handle cases without .git directory
@@ -137,6 +143,10 @@ allprojects {
   repositories {
     mavenCentral()
     mavenLocal()
+    // LinkedIn OpenHouse artifacts for compatibility testing
+    maven {
+      url "https://linkedin.jfrog.io/artifactory/openhouse"
+    }
   }
 }
 
@@ -324,9 +334,17 @@ project(':iceberg-common') {
 }
 
 project(':iceberg-core') {
+  configurations {
+    openhouseCompatibilityRuntime {
+      canBeConsumed = false
+      canBeResolved = true
+    }
+  }
+
   test {
     useJUnitPlatform()
   }
+
   dependencies {
     api project(':iceberg-api')
     implementation project(':iceberg-common')
@@ -359,6 +377,63 @@ project(':iceberg-core') {
     testImplementation libs.esotericsoftware.kryo
     testImplementation libs.guava.testlib
     testImplementation libs.awaitility
+
+    openhouseCompatibilityRuntime(rootProject.openHouseCompatibilityCoordinate) {
+      transitive = false
+    }
+    openhouseCompatibilityRuntime project(':iceberg-aws')
+    openhouseCompatibilityRuntime 'com.google.code.gson:gson:2.10.1'
+    openhouseCompatibilityRuntime 'com.zaxxer:HikariCP:4.0.3'
+  }
+
+  tasks.register('openhouseCompatibilityTest', Test) {
+    useJUnitPlatform()
+    group = 'verification'
+    description = 'Runs OpenHouse compatibility tests for iceberg-core'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath + configurations.openhouseCompatibilityRuntime
+
+    systemProperty 'iceberg.test.table.provider',
+        'org.apache.iceberg.openhouse.OpenHouseTestTableProvider'
+
+    // Test filter - initially exclude everything, then include from list
+    filter {
+      failOnNoMatchingTests = false
+    }
+
+    // Load inclusions from the fixtures jar at execution time
+    doFirst {
+      println "DEBUG: Resolving openhouseCompatibilityRuntime..."
+      configurations.openhouseCompatibilityRuntime.resolve().each { file ->
+        if (file.name.contains('tables-test-fixtures')) {
+          println "DEBUG: Found fixtures jar: ${file.name}"
+          zipTree(file).matching { include 'openhouse-iceberg-compatibility-tests.txt' }.each { f ->
+            println "DEBUG: Found inclusions file: ${f}"
+            f.eachLine { line ->
+              line = line.trim()
+              if (line && !line.startsWith('#')) {
+                // Replace # with . for Gradle test filter pattern
+                line = line.replace('#', '.')
+
+                // Append wildcard to handle parameterized tests
+                if (!line.endsWith('*')) {
+                  line = line + '*'
+                }
+                println "DEBUG: Including ${line}"
+                filter.includeTestsMatching line
+              }
+            }
+          }
+        }
+      }
+    }
+
+
+    testLogging {
+      events "passed", "skipped", "failed", "standardOut", "standardError"
+      showStandardStreams = true
+      exceptionFormat = 'full'
+    }
   }
 }
 
@@ -1027,6 +1102,14 @@ apply from: 'baseline.gradle'
 apply from: 'deploy.gradle'
 apply from: 'tasks.gradle'
 apply from: 'shipkit.gradle'
+
+tasks.register('openhouseCompatibility') {
+  group = "verification"
+  description = "Runs all OpenHouse compatibility tests"
+  dependsOn project(':iceberg-core').tasks.openhouseCompatibilityTest
+  dependsOn project(":iceberg-spark:iceberg-spark-${openHouseCompatibilitySparkMajorVersion}_${scalaVersion}").tasks.openhouseCompatibilityTest
+  dependsOn project(":iceberg-spark:iceberg-spark-extensions-${openHouseCompatibilitySparkMajorVersion}_${scalaVersion}").tasks.openhouseCompatibilityTest
+}
 
 project(':iceberg-bom') {
   apply plugin: 'java-platform'

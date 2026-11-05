@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +68,7 @@ import org.apache.iceberg.parquet.Parquet;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.spark.SparkCatalog;
 import org.apache.iceberg.spark.SparkSessionCatalog;
+import org.apache.iceberg.spark.TestCatalogProvider;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoder;
 import org.apache.spark.sql.Encoders;
@@ -104,63 +106,95 @@ public abstract class SparkRowLevelOperationsTestBase extends ExtensionsTestBase
               + " format = {3}, vectorized = {4}, distributionMode = {5},"
               + " fanout = {6}, branch = {7}, planningMode = {8}")
   public static Object[][] parameters() {
-    return new Object[][] {
-      {
-        "testhive",
-        SparkCatalog.class.getName(),
-        ImmutableMap.of(
-            "type", "hive",
-            "default-namespace", "default"),
-        FileFormat.ORC,
-        true,
-        WRITE_DISTRIBUTION_MODE_NONE,
-        true,
-        SnapshotRef.MAIN_BRANCH,
-        LOCAL
-      },
-      {
-        "testhive",
-        SparkCatalog.class.getName(),
-        ImmutableMap.of(
-            "type", "hive",
-            "default-namespace", "default"),
-        FileFormat.PARQUET,
-        true,
-        WRITE_DISTRIBUTION_MODE_NONE,
-        false,
-        "test",
-        DISTRIBUTED
-      },
-      {
-        "testhadoop",
-        SparkCatalog.class.getName(),
-        ImmutableMap.of("type", "hadoop"),
-        FileFormat.PARQUET,
-        RANDOM.nextBoolean(),
-        WRITE_DISTRIBUTION_MODE_HASH,
-        true,
-        null,
-        LOCAL
-      },
-      {
-        "spark_catalog",
-        SparkSessionCatalog.class.getName(),
-        ImmutableMap.of(
-            "type", "hive",
-            "default-namespace", "default",
-            "clients", "1",
-            "parquet-enabled", "false",
-            "cache-enabled",
+    List<Object[]> params = new ArrayList<>();
+
+    if (!Boolean.getBoolean("iceberg.test.catalog.skip.defaults")) {
+      params.add(
+          new Object[] {
+            "testhive",
+            SparkCatalog.class.getName(),
+            ImmutableMap.of("type", "hive", "default-namespace", "default"),
+            FileFormat.ORC,
+            true,
+            WRITE_DISTRIBUTION_MODE_NONE,
+            true,
+            SnapshotRef.MAIN_BRANCH,
+            LOCAL
+          });
+      params.add(
+          new Object[] {
+            "testhive",
+            SparkCatalog.class.getName(),
+            ImmutableMap.of("type", "hive", "default-namespace", "default"),
+            FileFormat.PARQUET,
+            true,
+            WRITE_DISTRIBUTION_MODE_NONE,
+            false,
+            "test",
+            DISTRIBUTED
+          });
+      params.add(
+          new Object[] {
+            "testhadoop",
+            SparkCatalog.class.getName(),
+            ImmutableMap.of("type", "hadoop"),
+            FileFormat.PARQUET,
+            RANDOM.nextBoolean(),
+            WRITE_DISTRIBUTION_MODE_HASH,
+            true,
+            null,
+            LOCAL
+          });
+      params.add(
+          new Object[] {
+            "spark_catalog",
+            SparkSessionCatalog.class.getName(),
+            ImmutableMap.of(
+                "type",
+                "hive",
+                "default-namespace",
+                "default",
+                "clients",
+                "1",
+                "parquet-enabled",
+                "false",
+                "cache-enabled",
                 "false" // Spark will delete tables using v1, leaving the cache out of sync
-            ),
-        FileFormat.AVRO,
-        false,
-        WRITE_DISTRIBUTION_MODE_RANGE,
-        false,
-        "test",
-        DISTRIBUTED
-      }
-    };
+                ),
+            FileFormat.AVRO,
+            false,
+            WRITE_DISTRIBUTION_MODE_RANGE,
+            false,
+            "test",
+            DISTRIBUTED
+          });
+    }
+
+    loadExternalCatalogProviders()
+        .forEach(
+            provider -> {
+              Object[][] configs = provider.getCatalogConfigurations();
+              for (Object[] config : configs) {
+                String name = (String) config[0];
+                String impl = (String) config[1];
+                Map<String, String> props = (Map<String, String>) config[2];
+
+                params.add(
+                    new Object[] {
+                      name,
+                      impl,
+                      props,
+                      FileFormat.PARQUET,
+                      true,
+                      WRITE_DISTRIBUTION_MODE_HASH,
+                      true,
+                      null,
+                      LOCAL
+                    });
+              }
+            });
+
+    return params.toArray(new Object[0][]);
   }
 
   protected abstract Map<String, String> extraTableProperties();

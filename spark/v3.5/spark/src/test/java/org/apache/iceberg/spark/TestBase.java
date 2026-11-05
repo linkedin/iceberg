@@ -27,8 +27,10 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.TimeZone;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -59,11 +61,15 @@ import org.junit.jupiter.api.BeforeAll;
 
 public abstract class TestBase extends SparkTestHelperBase {
 
+  private static final String SPARK_SESSION_PROVIDER_PROPERTY =
+      "iceberg.test.spark.session.provider";
+
   protected static TestHiveMetastore metastore = null;
   protected static HiveConf hiveConf = null;
   protected static SparkSession spark = null;
   protected static JavaSparkContext sparkContext = null;
   protected static HiveCatalog catalog = null;
+  private static TestSparkSessionProvider sparkSessionProvider = null;
 
   @BeforeAll
   public static void startMetastoreAndSpark() {
@@ -71,14 +77,8 @@ public abstract class TestBase extends SparkTestHelperBase {
     metastore.start();
     TestBase.hiveConf = metastore.hiveConf();
 
-    TestBase.spark =
-        SparkSession.builder()
-            .master("local[2]")
-            .config(SQLConf.PARTITION_OVERWRITE_MODE().key(), "dynamic")
-            .config("spark.hadoop." + METASTOREURIS.varname, hiveConf.get(METASTOREURIS.varname))
-            .config("spark.sql.legacy.respectNullabilityInTextDatasetConversion", "true")
-            .enableHiveSupport()
-            .getOrCreate();
+    SparkSession.Builder defaultBuilder = createDefaultSparkBuilder(hiveConf);
+    TestBase.spark = buildSparkSession(defaultBuilder, hiveConf);
 
     TestBase.sparkContext = JavaSparkContext.fromSparkContext(spark.sparkContext());
 
@@ -106,6 +106,57 @@ public abstract class TestBase extends SparkTestHelperBase {
       TestBase.spark = null;
       TestBase.sparkContext = null;
     }
+    if (sparkSessionProvider != null) {
+      try {
+        sparkSessionProvider.afterAll();
+      } catch (Exception e) {
+        throw new RuntimeException("Failed to shutdown custom Spark session provider", e);
+      } finally {
+        sparkSessionProvider = null;
+      }
+    }
+  }
+
+  protected static SparkSession.Builder createDefaultSparkBuilder(HiveConf conf) {
+    return SparkSession.builder()
+        .master("local[2]")
+        .config(SQLConf.PARTITION_OVERWRITE_MODE().key(), "dynamic")
+        .config("spark.hadoop." + METASTOREURIS.varname, conf.get(METASTOREURIS.varname))
+        .config("spark.sql.legacy.respectNullabilityInTextDatasetConversion", "true")
+        .enableHiveSupport();
+  }
+
+  protected static SparkSession buildSparkSession(SparkSession.Builder builder, HiveConf conf) {
+    sparkSessionProvider = loadSparkSessionProvider();
+    if (sparkSessionProvider == null) {
+      return builder.getOrCreate();
+    }
+
+    try {
+      sparkSessionProvider.beforeAll();
+      SparkSession session = sparkSessionProvider.createSparkSession(builder, conf);
+      return session != null ? session : builder.getOrCreate();
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to initialize custom Spark session provider", e);
+    }
+  }
+
+  private static TestSparkSessionProvider loadSparkSessionProvider() {
+    // Check system property first for explicit override
+    String providerClass = System.getProperty(SPARK_SESSION_PROVIDER_PROPERTY);
+    if (providerClass != null && !providerClass.isEmpty()) {
+      try {
+        return (TestSparkSessionProvider)
+            Class.forName(providerClass).getDeclaredConstructor().newInstance();
+      } catch (ReflectiveOperationException e) {
+        throw new RuntimeException("Failed to instantiate " + providerClass, e);
+      }
+    }
+
+    // Fall back to SPI discovery
+    Iterator<TestSparkSessionProvider> iterator =
+        ServiceLoader.load(TestSparkSessionProvider.class).iterator();
+    return iterator.hasNext() ? iterator.next() : null;
   }
 
   protected long waitUntilAfter(long timestampMillis) {

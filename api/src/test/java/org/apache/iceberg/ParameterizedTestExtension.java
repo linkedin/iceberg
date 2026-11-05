@@ -20,7 +20,9 @@ package org.apache.iceberg;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -70,18 +72,16 @@ public class ParameterizedTestExtension implements TestTemplateInvocationContext
   public Stream<TestTemplateInvocationContext> provideTestTemplateInvocationContexts(
       ExtensionContext context) {
 
-    // Search method annotated with @Parameters
+    // Search for methods annotated with @Parameters, preferring the most specific class
     final List<Method> parameterProviders =
         AnnotationSupport.findAnnotatedMethods(
             context.getRequiredTestClass(), Parameters.class, HierarchyTraversalMode.TOP_DOWN);
-    if (parameterProviders.isEmpty()) {
+    Method parameterProvider =
+        resolveParameterProvider(context.getRequiredTestClass(), parameterProviders);
+    if (parameterProvider == null) {
       throw new IllegalStateException("Cannot find any parameter provider");
     }
-    if (parameterProviders.size() > 1) {
-      throw new IllegalStateException("Multiple parameter providers are found");
-    }
 
-    Method parameterProvider = parameterProviders.get(0);
     // Get potential test name
     String testNameTemplate = parameterProvider.getAnnotation(Parameters.class).name();
 
@@ -97,18 +97,30 @@ public class ParameterizedTestExtension implements TestTemplateInvocationContext
 
     Preconditions.checkState(parameterValues != null, "Parameter values cannot be null");
 
-    // Parameter values could be Object[][]
-    if (parameterValues instanceof Object[][]) {
-      Object[][] typedParameterValues = (Object[][]) parameterValues;
-      return createContextForParameters(
-          Arrays.stream(typedParameterValues), testNameTemplate, context);
+    List<Object[]> allParameters = new ArrayList<>();
+    normalizeParameters(parameterValues).forEach(allParameters::add);
+
+    try {
+      Method extraMethod = context.getRequiredTestClass().getMethod("getExtraParameters");
+      if (Modifier.isStatic(extraMethod.getModifiers())) {
+        Object extra = extraMethod.invoke(null);
+        normalizeParameters(extra).forEach(allParameters::add);
+      }
+    } catch (NoSuchMethodException e) {
+      // ignore
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to invoke getExtraParameters", e);
     }
 
-    // or a Collection
-    if (parameterValues instanceof Collection) {
-      final Collection<?> typedParameterValues = (Collection<?>) parameterValues;
-      final Stream<Object[]> parameterValueStream =
-          typedParameterValues.stream()
+    return createContextForParameters(allParameters.stream(), testNameTemplate, context);
+  }
+
+  private Stream<Object[]> normalizeParameters(Object parameters) {
+    if (parameters instanceof Object[][]) {
+      return Arrays.stream((Object[][]) parameters);
+    } else if (parameters instanceof Collection) {
+      return ((Collection<?>) parameters)
+          .stream()
               .map(
                   (Function<Object, Object[]>)
                       parameterValue -> {
@@ -118,13 +130,36 @@ public class ParameterizedTestExtension implements TestTemplateInvocationContext
                           return new Object[] {parameterValue};
                         }
                       });
-      return createContextForParameters(parameterValueStream, testNameTemplate, context);
     }
-
     throw new IllegalStateException(
         String.format(
-            "Return type of @Parameters annotated method \"%s\" should be either Object[][] or Collection",
-            parameterProvider));
+            "Return type of @Parameters annotated method should be either Object[][] or Collection, but was %s",
+            parameters.getClass().getName()));
+  }
+
+  /**
+   * Resolves the parameter provider method, preferring the most specific (child) class when multiple
+   * @Parameters methods exist in the hierarchy.
+   */
+  private static Method resolveParameterProvider(
+      Class<?> testClass, List<Method> parameterProviders) {
+    if (parameterProviders.isEmpty()) {
+      return null;
+    }
+    if (parameterProviders.size() == 1) {
+      return parameterProviders.get(0);
+    }
+
+    // Walk up the hierarchy, return the first match (most specific class)
+    for (Class<?> current = testClass; current != null; current = current.getSuperclass()) {
+      for (Method candidate : parameterProviders) {
+        if (candidate.getDeclaringClass().equals(current)) {
+          return candidate;
+        }
+      }
+    }
+
+    return parameterProviders.get(0);
   }
 
   private static class FieldInjectingInvocationContext implements TestTemplateInvocationContext {
