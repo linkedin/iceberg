@@ -92,7 +92,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       Type fieldType = fieldTypes.get(i);
       int fieldId = getId(field);
 
-      if (AvroSchemaUtil.isOptionSchema(field.schema())) {
+      if (AvroSchemaUtil.isOptional(field.schema())) {
         newFields.add(Types.NestedField.optional(fieldId, field.name(), fieldType, field.doc()));
       } else {
         newFields.add(Types.NestedField.required(fieldId, field.name(), fieldType, field.doc()));
@@ -105,7 +105,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
   @Override
   public Type union(Schema union, List<Type> options) {
     if (AvroSchemaUtil.isOptionSchema(union)) {
-      if (options.get(0) == null) {
+      if (union.getTypes().get(0).getType() == Schema.Type.NULL) {
         return options.get(1);
       } else {
         return options.get(0);
@@ -116,7 +116,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       int tagIndex = 0;
       fields.add(Types.NestedField.required(allocateId(), "tag", Types.IntegerType.get()));
       for (Type option : options) {
-        if (option != null) {
+        if (option != null && !option.equals(Types.UnknownType.get())) {
           fields.add(Types.NestedField.optional(allocateId(), "field" + tagIndex, option));
           tagIndex++;
         }
@@ -151,7 +151,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       // normal array
       Schema elementSchema = array.getElementType();
       int id = getElementId(array);
-      if (AvroSchemaUtil.isOptionSchema(elementSchema)) {
+      if (AvroSchemaUtil.isOptional(elementSchema)) {
         return Types.ListType.ofOptional(id, elementType);
       } else {
         return Types.ListType.ofRequired(id, elementType);
@@ -165,7 +165,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
     int keyId = getKeyId(map);
     int valueId = getValueId(map);
 
-    if (AvroSchemaUtil.isOptionSchema(valueSchema)) {
+    if (AvroSchemaUtil.isOptional(valueSchema)) {
       return Types.MapType.ofOptional(keyId, valueId, Types.StringType.get(), valueType);
     } else {
       return Types.MapType.ofRequired(keyId, valueId, Types.StringType.get(), valueType);
@@ -222,7 +222,7 @@ class SchemaToType extends AvroSchemaVisitor<Type> {
       case BYTES:
         return Types.BinaryType.get();
       case NULL:
-        return null;
+        return Types.UnknownType.get();
     }
 
     throw new UnsupportedOperationException("Unsupported primitive type: " + primitive);

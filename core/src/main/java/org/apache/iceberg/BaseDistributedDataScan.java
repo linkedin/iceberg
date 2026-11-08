@@ -300,7 +300,7 @@ abstract class BaseDistributedDataScan
     }
 
     return builder
-        .specsById(table().specs())
+        .specsById(specs())
         .filterData(filter())
         .caseSensitive(isCaseSensitive())
         .scanMetrics(scanMetrics())
@@ -392,7 +392,7 @@ abstract class BaseDistributedDataScan
 
   private <R> Map<Integer, R> specCache(Function<PartitionSpec, R> load) {
     Map<Integer, R> cache = Maps.newHashMap();
-    table().specs().forEach((specId, spec) -> cache.put(specId, load.apply(spec)));
+    specs().forEach((specId, spec) -> cache.put(specId, load.apply(spec)));
     return cache;
   }
 

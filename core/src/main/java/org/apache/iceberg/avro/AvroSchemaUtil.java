@@ -171,6 +171,10 @@ public class AvroSchemaUtil {
     return false;
   }
 
+  public static boolean isOptional(Schema schema) {
+    return isOptionSchema(schema) || schema.getType() == Schema.Type.NULL;
+  }
+
   public static boolean isOptionSchema(Schema schema) {
     if (schema.getType() == UNION && schema.getTypes().size() == 2) {
       if (schema.getTypes().get(0).getType() == Schema.Type.NULL) {
@@ -183,6 +187,9 @@ public class AvroSchemaUtil {
   }
 
   static Schema toOption(Schema schema) {
+    if (schema.getType() == Schema.Type.NULL) {
+      return schema;
+    }
     if (schema.getType() == UNION) {
       Preconditions.checkArgument(
           isOptionSchema(schema), "Union schemas are not supported: %s", schema);

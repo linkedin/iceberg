@@ -517,6 +517,8 @@ public class ExpressionUtil {
         return sanitizeTimestamp((long) value, now);
       case STRING:
         return sanitizeString((CharSequence) value, now, today);
+      case UNKNOWN:
+        return "(unknown)";
       case BOOLEAN:
       case UUID:
       case DECIMAL:

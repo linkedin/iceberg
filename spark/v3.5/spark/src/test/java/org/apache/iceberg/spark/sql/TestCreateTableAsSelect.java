@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.apache.iceberg.Parameter;
 import org.apache.iceberg.Parameters;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.PlanningMode;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.spark.CatalogTestBase;
@@ -76,6 +77,86 @@ public class TestCreateTableAsSelect extends CatalogTestBase {
   @AfterEach
   public void removeTables() {
     sql("DROP TABLE IF EXISTS %s", tableName);
+  }
+
+  @TestTemplate
+  public void testRTASDropPartitionSourceV1() {
+    checkRTASDropPartitionSource(1);
+  }
+
+  @TestTemplate
+  public void testRTASDropPartitionSourceV2() {
+    checkRTASDropPartitionSource(2);
+  }
+
+  private void checkRTASDropPartitionSource(int formatVersion) {
+    sql(
+        "CREATE TABLE %s (id BIGINT, data STRING) USING iceberg PARTITIONED BY (id) "
+            + "TBLPROPERTIES ('format-version'='%s')",
+        tableName, formatVersion);
+    sql("INSERT INTO %s VALUES (1, 'a'), (2, 'b')", tableName);
+    sql("CREATE OR REPLACE TABLE %s USING iceberg AS SELECT data FROM %s", tableName, tableName);
+    Table replacement = validationCatalog.loadTable(tableIdent);
+    assertThat(replacement.schema().findField("id")).isNull();
+    assertThat(replacement.spec().isUnpartitioned()).isTrue();
+    assertEquals(
+        "RTAS must preserve selected data",
+        sql("SELECT 'a' UNION ALL SELECT 'b' ORDER BY 1"),
+        sql("SELECT data FROM %s ORDER BY data", tableName));
+    sql("INSERT INTO %s VALUES ('c')", tableName);
+    assertEquals(
+        "Replacement supports further writes",
+        sql("SELECT 'a' UNION ALL SELECT 'b' UNION ALL SELECT 'c' ORDER BY 1"),
+        sql("SELECT data FROM %s ORDER BY data", tableName));
+  }
+
+  @TestTemplate
+  public void testRTASDropPartitionSourceTimeTravelV1() {
+    checkRTASDropPartitionSourceTimeTravel(1);
+  }
+
+  @TestTemplate
+  public void testRTASDropPartitionSourceTimeTravelV2() {
+    checkRTASDropPartitionSourceTimeTravel(2);
+  }
+
+  private void checkRTASDropPartitionSourceTimeTravel(int formatVersion) {
+    for (PlanningMode mode : new PlanningMode[] {PlanningMode.LOCAL, PlanningMode.DISTRIBUTED}) {
+      try {
+        checkRTASDropPartitionSourceTimeTravel(formatVersion, mode);
+      } finally {
+        sql("DROP TABLE IF EXISTS %s", tableName);
+      }
+    }
+  }
+
+  private void checkRTASDropPartitionSourceTimeTravel(int formatVersion, PlanningMode mode) {
+    sql(
+        "CREATE TABLE %s (id BIGINT, data STRING) USING iceberg PARTITIONED BY (id) "
+            + "TBLPROPERTIES ('format-version'='%s')",
+        tableName, formatVersion);
+    sql("INSERT INTO %s VALUES (1, 'a'), (2, 'b')", tableName);
+    long snapshotId = validationCatalog.loadTable(tableIdent).currentSnapshot().snapshotId();
+    sql("CREATE OR REPLACE TABLE %s USING iceberg AS SELECT data FROM %s", tableName, tableName);
+    configurePlanningMode(mode);
+    spark
+        .read()
+        .format("iceberg")
+        .option("snapshot-id", snapshotId)
+        .load(tableName)
+        .createOrReplaceTempView("rtas_backport_history");
+    try {
+      assertEquals(
+          "Historical snapshot preserves dropped source values",
+          sql("SELECT 1L, 'a' UNION ALL SELECT 2L, 'b' ORDER BY 1"),
+          sql("SELECT id, data FROM rtas_backport_history ORDER BY id"));
+      assertEquals(
+          "Historical source predicates work",
+          sql("SELECT 1L, 'a'"),
+          sql("SELECT id, data FROM rtas_backport_history WHERE id = 1"));
+    } finally {
+      spark.catalog().dropTempView("rtas_backport_history");
+    }
   }
 
   @TestTemplate
