@@ -57,8 +57,8 @@ public class IcebergDecoder<D> extends MessageDecoder.BaseDecoder<D> {
    * Creates a new decoder that constructs datum instances described by an {@link
    * org.apache.iceberg.Schema Iceberg schema}.
    *
-   * <p>The {@code readSchema} is as used the expected schema (read schema). Datum instances created
-   * by this class will are described by the expected schema.
+   * <p>The {@code readSchema} is used as the expected schema (read schema). Datum instances created
+   * by this class will be described by the expected schema.
    *
    * <p>The schema used to decode incoming buffers is determined by the schema fingerprint encoded
    * in the message header. This class can decode messages that were encoded using the {@code
@@ -75,8 +75,8 @@ public class IcebergDecoder<D> extends MessageDecoder.BaseDecoder<D> {
    * Creates a new decoder that constructs datum instances described by an {@link
    * org.apache.iceberg.Schema Iceberg schema}.
    *
-   * <p>The {@code readSchema} is as used the expected schema (read schema). Datum instances created
-   * by this class will are described by the expected schema.
+   * <p>The {@code readSchema} is used as the expected schema (read schema). Datum instances created
+   * by this class will be described by the expected schema.
    *
    * <p>The schema used to decode incoming buffers is determined by the schema fingerprint encoded
    * in the message header. This class can decode messages that were encoded using the {@code
