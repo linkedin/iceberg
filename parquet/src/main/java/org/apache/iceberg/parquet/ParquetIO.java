@@ -20,15 +20,12 @@ package org.apache.iceberg.parquet;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
 import org.apache.iceberg.io.DelegatingInputStream;
-import org.apache.iceberg.io.DelegatingOutputStream;
 import org.apache.parquet.hadoop.util.HadoopStreams;
 import org.apache.parquet.io.DelegatingPositionOutputStream;
 import org.apache.parquet.io.DelegatingSeekableInputStream;
@@ -59,11 +56,15 @@ class ParquetIO {
   static OutputFile file(org.apache.iceberg.io.OutputFile file) {
     if (file instanceof HadoopOutputFile) {
       HadoopOutputFile hfile = (HadoopOutputFile) file;
-      try {
-        return org.apache.parquet.hadoop.util.HadoopOutputFile.fromPath(
-            hfile.getPath(), hfile.getConf());
-      } catch (IOException e) {
-        throw new RuntimeIOException(e, "Failed to create Parquet output file for %s", file);
+      // the Parquet Hadoop output file opens its own stream with the filesystem default
+      // replication, so it cannot be used when a custom replication factor is configured
+      if (hfile.replication() <= 0) {
+        try {
+          return org.apache.parquet.hadoop.util.HadoopOutputFile.fromPath(
+              hfile.getPath(), hfile.getConf());
+        } catch (IOException e) {
+          throw new RuntimeIOException(e, "Failed to create Parquet output file for %s", file);
+        }
       }
     }
     return new ParquetOutputFile(file);
@@ -72,10 +73,14 @@ class ParquetIO {
   static OutputFile file(org.apache.iceberg.io.OutputFile file, Configuration conf) {
     if (file instanceof HadoopOutputFile) {
       HadoopOutputFile hfile = (HadoopOutputFile) file;
-      try {
-        return org.apache.parquet.hadoop.util.HadoopOutputFile.fromPath(hfile.getPath(), conf);
-      } catch (IOException e) {
-        throw new RuntimeIOException(e, "Failed to create Parquet output file for %s", file);
+      // the Parquet Hadoop output file opens its own stream with the filesystem default
+      // replication, so it cannot be used when a custom replication factor is configured
+      if (hfile.replication() <= 0) {
+        try {
+          return org.apache.parquet.hadoop.util.HadoopOutputFile.fromPath(hfile.getPath(), conf);
+        } catch (IOException e) {
+          throw new RuntimeIOException(e, "Failed to create Parquet output file for %s", file);
+        }
       }
     }
     return new ParquetOutputFile(file);
@@ -92,12 +97,8 @@ class ParquetIO {
   }
 
   static PositionOutputStream stream(org.apache.iceberg.io.PositionOutputStream stream) {
-    if (stream instanceof DelegatingOutputStream) {
-      OutputStream wrapped = ((DelegatingOutputStream) stream).getDelegate();
-      if (wrapped instanceof FSDataOutputStream) {
-        return HadoopStreams.wrap((FSDataOutputStream) wrapped);
-      }
-    }
+    // do not unwrap to the underlying FSDataOutputStream: abandoning the Iceberg wrapper lets
+    // HadoopStreams' finalizer close the stream while Parquet is still writing to it
     return new ParquetOutputStreamAdapter(stream);
   }
 
