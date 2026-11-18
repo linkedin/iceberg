@@ -33,8 +33,11 @@ import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipException;
 import org.apache.iceberg.TableMetadataParser.Codec;
+import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.io.PositionOutputStream;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Types.BooleanType;
 import org.junit.After;
@@ -76,6 +79,21 @@ public class TableMetadataParserTest {
     verifyMetadata(metadata, actualMetadata);
   }
 
+  @Test
+  public void testCloseFailureIsNotSelfSuppressed() {
+    Codec codec = Codec.fromName(codecName);
+    CloseFailureOutputFile outputFile = new CloseFailureOutputFile("v3" + getFileExtension(codec));
+    TableMetadata metadata =
+        newTableMetadata(SCHEMA, unpartitioned(), "file://tmp/db/table", Maps.newHashMap());
+
+    RuntimeIOException exception =
+        Assert.assertThrows(
+            RuntimeIOException.class, () -> TableMetadataParser.write(metadata, outputFile));
+
+    Assert.assertSame(outputFile.closeFailure(), exception.getCause());
+    Assert.assertEquals(1, outputFile.closeCount());
+  }
+
   @After
   public void cleanup() throws IOException {
     Codec codec = Codec.fromName(codecName);
@@ -99,6 +117,65 @@ public class TableMetadataParserTest {
       } else {
         throw e;
       }
+    }
+  }
+
+  private static class CloseFailureOutputFile implements OutputFile {
+    private final String location;
+    private final CloseFailureOutputStream stream = new CloseFailureOutputStream();
+
+    private CloseFailureOutputFile(String location) {
+      this.location = location;
+    }
+
+    @Override
+    public PositionOutputStream create() {
+      return stream;
+    }
+
+    @Override
+    public PositionOutputStream createOrOverwrite() {
+      return stream;
+    }
+
+    @Override
+    public String location() {
+      return location;
+    }
+
+    @Override
+    public InputFile toInputFile() {
+      throw new UnsupportedOperationException();
+    }
+
+    private IOException closeFailure() {
+      return stream.closeFailure;
+    }
+
+    private int closeCount() {
+      return stream.closeCount;
+    }
+  }
+
+  private static class CloseFailureOutputStream extends PositionOutputStream {
+    private final IOException closeFailure = new IOException("close failed");
+    private long position = 0;
+    private int closeCount = 0;
+
+    @Override
+    public long getPos() {
+      return position;
+    }
+
+    @Override
+    public void write(int value) {
+      position += 1;
+    }
+
+    @Override
+    public void close() throws IOException {
+      closeCount += 1;
+      throw closeFailure;
     }
   }
 }
